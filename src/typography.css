@@ -1,0 +1,82 @@
+/* Unified Časovač typography. Loaded after style.css. */
+:root {
+  --font-display: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
+  --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
+}
+body, button, input, select, textarea { font-family: var(--font-ui); }
+.topbar h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(34px, 7vw, 42px);
+  letter-spacing: .7px;
+  line-height: 1;
+}
+.compactIdentity .routeTile {
+  font-family: var(--font-display);
+  font-size: clamp(35px, 8.8vw, 42px);
+  font-weight: 400;
+  font-synthesis: none;
+  letter-spacing: .2px;
+}
+.orderTile {
+  font-family: var(--font-ui);
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.routeDirection {
+  font-size: clamp(15px, 4vw, 17px);
+  font-weight: 600;
+}
+.vehicleNumber {
+  font-size: 13px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.activeStopName, .departingStop .activeStopName {
+  font-family: var(--font-ui);
+  font-size: clamp(18px, 4.5vw, 22px);
+  font-weight: 600;
+  line-height: 1.18;
+}
+.liveOffset {
+  font-family: var(--font-ui);
+  font-size: clamp(25px, 6vw, 34px);
+  font-weight: 700;
+  letter-spacing: -.65px;
+  font-variant-numeric: tabular-nums;
+}
+.scheduledTime, .departingStop .scheduledTime {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.upcomingName {
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.32;
+}
+.upcomingTime {
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.moreStops, .chooserVehicle, .chooserStop, .hint { font-weight: 400; }
+.chooserId { font-weight: 400; }
+.chooserId strong { font-weight: 700; }
+.chooserHeading h2, .modal h2, .emptyWelcome h2 { font-weight: 600; }
+.chooserCaption, .primary { font-weight: 600; }
+.headButton span { font-weight: 500; }
+@media (max-width: 490px) {
+  .compactIdentity .routeTile { font-size: 37px; }
+  .orderTile { font-size: 24px; }
+  .routeDirection { font-size: 15px; }
+  .activeStopName, .departingStop .activeStopName { font-size: 19px; }
+  .liveOffset { font-size: clamp(23px, 6vw, 30px); }
+}
+@media (max-width: 360px) {
+  .compactIdentity .routeTile { font-size: 34px; }
+  .orderTile { font-size: 22px; }
+  .liveOffset { font-size: 22px; }
+}
