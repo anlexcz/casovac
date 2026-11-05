@@ -1,4 +1,4 @@
-# Časovač 0.8
+# Časovač 0.9
 
 Mobilní webová pomůcka pro sledování tramvajového pořadí PID. React, TypeScript, Vite a GitHub Pages.
 
@@ -168,3 +168,16 @@ Nová logika `src/onboard.ts` zohledňuje, že polohy vozidla z Golemia mohou b�
 - **Diagnostika:** ukazuje výsledek párování GPS, vzdálenosti telefonu od vozidla a trasy, zdroj dotazu, seznam kandidátů i stav čekání na konečné. Záznamový režim navíc exportuje samostatné události `decision` při změnách zastávky, režimu GPS nebo detekce odjezdu; neukládá tyto události každou sekundu.
 
 **Co zůstává k ověření:** konkrétní Golemio odpověď pro vůz na konečné a přesnost propojení mezi navazujícími tripy; web zůstává orientační pomůckou. Nejde o bezpečnostní pokyn pro řidiče.
+
+## Časovač 0.9: neztrácet vůz po skončení tripu (5. 11. 2026)
+
+**Reprodukce:** ve 12:34 aplikace po zadání `25/5` zobrazila, že pořadí není nalezeno. Předchozí testovaný trip `25_17947_260831` měl konec na Výstavišti ve 12:26, tedy 8 minut před screenshotem. Chybějící nový aktivní trip nevypovídá sám o sobě o fyzickém zmizení vozu z provozu; původní kód ale bez aktuální shody neukazoval ani poslední potvrzený vůz.
+
+Změny:
+- `src/lastSeen.ts` uchovává v místním `localStorage` poslední potvrzenou identitu vozidla, trip, konečný čas přijetí a poslední hlášené zastávky pro konkrétní `linka/pořadí` (nejvýše 6 h). Neuchovává klíč Golemia. Pokud dosud není vlastní cache, může načíst poslední odpovídající vozidlo ze záznamu diagnostiky.
+- Pokud pořadí zmizí z aktivního i rozšířeného dotazu `includeNotTracking`, UI nadále ukáže **poslední potvrzený vůz a čas posledního hlášení**, nikoli prázdné identifikační údaje. Zároveň výslovně uvede, že momentální stání na konečné není potvrzené.
+- Pokud je známé číslo vozidla, aplikace nanejvýš jednou za minutu zkusí širší dotaz na živá vozidla bez filtru linky (s `includeNotTracking=true`). Hledá přesně tentýž vůz, nikoli shodné pořadí jiné linky. Pokud má stále danou linku i pořadí, znovu jej připojí. Pokud má jiný trip, jen oznámí kde se objevil; nepředstírá kontinuitu stejného pořadí.
+- Diagnostika zobrazuje poslední známý vůz, čas posledního výskytu, režim dotazu a případné nalezení vozidla na jiné lince/tripu.
+- Matchování pořadí má doplňkový fallback na `trip.gtfs.run_number` (pouze pokud se nedá použít žádný běžnější identifikátor).
+
+**Limity:** Záložní širší dotaz je dostupný jen při existenci předchozí bezpečně spárované identity. Pokud se pořadí poprvé hledá až po zmizení z dat a neexistuje historie či diagnostický záznam, není možné garantovat identifikaci fyzického vozu. Stejně tak poslední známá poloha neprokazuje, že tramvaj stále stojí právě na konečné. Pro definitivní model návazných tripů bude potřebná další empirická diagnostika.
