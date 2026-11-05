@@ -1,3 +1,5 @@
+import {useMemo,useState} from 'react';
+import {auditStopIds,stopAuditReport} from './stopAudit';
 import type {Stop,TripData} from './tripData';
 import {formatStopTime} from './tripData';
 import type {GpsFix} from './position';
@@ -15,6 +17,13 @@ const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
 export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId}:Props){
  const stops:Stop[]=trip.stops;
+ const [copyState,setCopyState]=useState('');
+ const coordinates=chosen?.geometry?.coordinates;
+ const vehicle:[number,number]|null=Array.isArray(coordinates)&&coordinates.length>=2&&Number.isFinite(Number(coordinates[0]))&&Number.isFinite(Number(coordinates[1]))?[Number(coordinates[0]),Number(coordinates[1])]:null;
+ const stopAudit=useMemo(()=>auditStopIds(stops,nextStopId,vehicle),[stops,nextStopId,vehicle?.[0],vehicle?.[1]]);
+ const report=()=>stopAuditReport(stopAudit,trip.tripId)+'\n'+stops.map(s=>s.sequence+' | '+s.name+' | '+(s.id||'(bez ID)')).join('\n');
+ async function copyAudit(){try{await navigator.clipboard.writeText(report());setCopyState('Zkopírováno – bez tokenu a GPS telefonu.');}catch{setCopyState('Prohlížeč nepovolil kopírování. Otevři textový výpis níže.');}}
+
  return <section className="diagnosticStack" aria-label="Provozní diagnostika">
  <div className="panel"><div className="row"><h2>Živá data {active?.join('/')??'—'}</h2><span className={'status '+(age!==null&&age<50?'good':'')}>{age===null?'Bez dat':age<50?'Online':'Zastaralá data'}</span></div>
  <p className="hint">Aktualizace: {lastFetch?new Date(lastFetch).toLocaleTimeString('cs-CZ'):'—'} · stáří {age??'—'} s · obnova 20 s</p>
@@ -43,6 +52,26 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
  <div><small>GPS / VOZIDLO</small><strong>{vehicleDistance??'—'} m</strong></div>
  <div><small>AKTUÁLNÍ INDEX</small><strong>{position===null?'—':position+1}</strong></div>
  </div>
+ <section className="stopAudit" aria-label="Audit párování identifikátorů">
+ <div className="row"><h3>Audit ID zastávek</h3><span className={'status '+(['exact','normalized'].includes(stopAudit.status)?'good':stopAudit.status==='missing'?'':'bad')}>{stopAudit.status}</span></div>
+ <p className="hint">{stopAudit.message}</p>
+ <div className="details">
+ <div><small>ŽIVÉ ID</small><strong>{stopAudit.liveId}</strong></div>
+ <div><small>ZÁKLAD KÓDU</small><strong>{stopAudit.liveBase??'—'}</strong></div>
+ <div><small>GTFS ID / UNIKÁTNÍ</small><strong>{stopAudit.stopCount} / {stopAudit.uniqueGtfsIds}</strong></div>
+ <div><small>CHYBĚJÍCÍ ID / DUPLICITNÍ VÝSKYTY</small><strong>{stopAudit.missingGtfsIds} / {stopAudit.duplicateGtfsIds}</strong></div>
+ </div>
+ <h4>Stejný identifikátor</h4>
+ {stopAudit.exact.length?stopAudit.exact.map(s=><p className="auditRow" key={s.index}>{s.sequence}. {s.name} · <code>{s.id}</code></p>):<p className="hint">Žádná přesná ani normalizovaná shoda.</p>}
+ <h4>Stejný základ kódu – pouze kandidáti</h4>
+ {stopAudit.sameBase.length?stopAudit.sameBase.map(s=><p className="auditRow" key={s.index}>{s.sequence}. {s.name} · <code>{s.id}</code></p>):<p className="hint">Žádná shoda.</p>}
+ <h4>Nejbližší k poloze vozidla</h4>
+ {stopAudit.nearest.length?stopAudit.nearest.map(s=><p className="auditRow" key={s.index}>{s.sequence}. {s.name} · <code>{s.id||'bez ID'}</code> · {s.meters} m</p>):<p className="hint">Chybí souřadnice zastávek či vozidla.</p>}
+ <p className="hint">Poloha slouží k diagnostice. Kandidát se automaticky nepovažuje za shodu ID.</p>
+ <button className="quiet" onClick={()=>void copyAudit()}>Kopírovat anonymizovaný audit</button>
+ {copyState&&<p className="hint" role="status">{copyState}</p>}
+ <details><summary>Celý audit v textu</summary><pre>{report()}</pre></details>
+ </section>
  <label htmlFor="debugStop">RUČNÍ KOREKCE ZASTÁVKY</label>
  <select id="debugStop" value={manual??''} onChange={e=>setManual(e.target.value===''?null:Number(e.target.value))}>
  <option value="">Automaticky GPS + Golemio</option>
