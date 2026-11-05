@@ -217,7 +217,7 @@
 .boardStack>.upcomingStop>.upcomingButton:focus-visible{outline:2px solid #a7b6c5;outline-offset:-2px}
 .boardStack>.activeDeparture{position:relative;z-index:1}
 .boardStack>.departingStop{position:absolute;left:0;right:0;z-index:2;box-sizing:border-box;
- display:grid;grid-template-columns:minmax(0,1fr) var(--time-column);align-items:center;
+ display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;
  gap:8px;padding:14px var(--time-edge);border-radius:11px;pointer-events:none;overflow:hidden}
 .departingStop.clockEarly{background:#ae2926;color:#fff}
 .departingStop.clockReady{background:#1d7651;color:#fff}
