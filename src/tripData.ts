@@ -37,46 +37,65 @@ export function parseStops(data:unknown):Stop[]{
   }).sort((a,b)=>a.sequence-b.sequence);
 }
 export type TripData={tripId:string;stops:Stop[];headsign:string;route:string;raw:unknown;error:string;loading:boolean;source:string};
+type TripContent=Omit<TripData,'tripId'>;
+const EMPTY:TripContent={stops:[],headsign:'',route:'',raw:null,error:'',loading:false,source:''};
+// Only public timetable content is cached, never access tokens or personal locations.
+const tripCache=new Map<string,{data:TripContent;at:number}>();
+const getCached=(id:string):TripContent|null=>{
+ const item=tripCache.get(id);
+ return item&&Date.now()-item.at<6*3600000?item.data:null;
+};
+const remember=(id:string,data:TripContent)=>{
+ if(!data.stops.length)return;
+ tripCache.set(id,{data,at:Date.now()});
+ if(tripCache.size>60)tripCache.delete(tripCache.keys().next().value!);
+};
 export function useTripData(tripId:string,token:string):TripData{
-  const [result,setResult]=useState<Omit<TripData,'tripId'>>({stops:[],headsign:'',route:'',raw:null,error:'',loading:false,source:''});
-  useEffect(()=>{
-    if(!tripId||tripId==='—'||!token){
-      setResult({stops:[],headsign:'',route:'',raw:null,error:'',loading:false,source:''});return;
+ const [state,setState]=useState<{id:string;data:TripContent}>({id:'',data:EMPTY});
+ useEffect(()=>{
+  if(!tripId||tripId==='—'||!token){setState({id:tripId,data:EMPTY});return;}
+  const cached=getCached(tripId);
+  if(cached){setState({id:tripId,data:cached});return;}
+  const abort=new AbortController();
+  setState({id:tripId,data:{...EMPTY,loading:true}});
+  (async()=>{
+   try{
+    const url=new URL('https://api.golemio.cz/v2/public/gtfs/trips/'+encodeURIComponent(tripId));
+    url.searchParams.append('scopes[]','info');
+    url.searchParams.append('scopes[]','stop_times');
+    url.searchParams.append('scopes[]','shapes');
+    const headers={'X-Access-Token':token};
+    const response=await fetch(url,{headers,cache:'no-store',signal:abort.signal});
+    if(!response.ok)throw new Error('Detail tripu: HTTP '+response.status);
+    const data:unknown=await response.json();
+    if(abort.signal.aborted)return;
+    const obj=data as RecordValue;
+    let stops=parseStops(data);
+    let source='GTFS Lookup / trip';
+    let fallbackError='';
+    if(!stops.length){
+     const fallback=await fetch('https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(tripId),{headers,cache:'no-store',signal:abort.signal});
+     if(fallback.ok){const item:unknown=await fallback.json();stops=parseStops(item);source='GTFS stop_times';}
+     else fallbackError='Záložní stop_times HTTP '+fallback.status;
     }
-    const abort=new AbortController();
-    setResult({stops:[],headsign:'',route:'',raw:null,error:'',loading:true,source:''});
-    (async()=>{
-      try{
-        const url=new URL('https://api.golemio.cz/v2/public/gtfs/trips/'+encodeURIComponent(tripId));
-        url.searchParams.append('scopes[]','info');
-        url.searchParams.append('scopes[]','stop_times');
-        // Directional departure detection uses the full ordered shape geometry.
-        url.searchParams.append('scopes[]','shapes');
-        const headers={'X-Access-Token':token};
-        const response=await fetch(url,{headers,cache:'no-store',signal:abort.signal});
-        if(!response.ok)throw new Error('Detail tripu: HTTP '+response.status);
-        const data:unknown=await response.json();
-        if(abort.signal.aborted)return;
-        const obj=data as RecordValue;
-        let stops=parseStops(data);
-        let source='GTFS Lookup / trip';
-        let fallbackError='';
-        if(!stops.length){
-          const fallback=await fetch('https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(tripId),{headers,cache:'no-store',signal:abort.signal});
-          if(fallback.ok){const item:unknown=await fallback.json();stops=parseStops(item);source='GTFS stop_times';}
-          else fallbackError='Záložní stop_times HTTP '+fallback.status;
-        }
-        if(!abort.signal.aborted)setResult({
-          stops,headsign:txt(obj.trip_headsign),route:txt(obj.route_short_name),raw:data,
-          source,loading:false,error:stops.length?'':(fallbackError||'Jízdní řád neobsahuje rozpoznané zastávky')
-        });
-      }catch(e){
-        if(!abort.signal.aborted)setResult({stops:[],headsign:'',route:'',raw:null,source:'',loading:false,error:e instanceof Error?e.message:String(e)});
-      }
-    })();
-    return()=>abort.abort();
-  },[tripId,token]);
-  return useMemo(()=>({...result,tripId}),[result,tripId]);
+    if(!abort.signal.aborted){
+     const content:TripContent={
+      stops,headsign:txt(obj.trip_headsign),route:txt(obj.route_short_name),raw:data,
+      source,loading:false,error:stops.length?'':(fallbackError||'Jízdní řád neobsahuje rozpoznané zastávky')
+     };
+     remember(tripId,content);
+     setState({id:tripId,data:content});
+    }
+   }catch(e){
+    if(!abort.signal.aborted)setState({id:tripId,data:{
+     ...EMPTY,error:e instanceof Error?e.message:String(e)
+    }});
+   }
+  })();
+  return()=>abort.abort();
+ },[tripId,token]);
+ const result=getCached(tripId)??(state.id===tripId?state.data:EMPTY);
+ return useMemo(()=>({...result,tripId}),[result,tripId]);
 }
 export function formatStopTime(value:string):string{
   const match=/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value);
