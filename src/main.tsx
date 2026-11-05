@@ -8,6 +8,7 @@ import {useChooserStops,chooserStop} from './chooserStops';
 import type {ChooserTarget} from './chooserStops';
 import {golemioJson} from './golemioClient';
 import {useChainDiagnostics} from './chainDiagnostics';
+import {findPlannedHandoff,verifyHandoffStops,departureForHandoff} from './chainHandoff';
 import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
 import {useRecorder} from './recorder';
@@ -69,6 +70,7 @@ function App(){
  const [queryMode,setQueryMode]=useState('active');
  const [lastSeen,setLastSeen]=useState<LastSeen|null>(null);
  const [relatedVehicle,setRelatedVehicle]=useState<{vehicle:string;route:string;order:string;state:string;time:number}|null>(null);
+ const [lastHandoff,setLastHandoff]=useState<{from:string;to:string;vehicle:string;tripId:string;reason:string;time:number}|null>(null);
  const previousScanRef=useRef(0);
  const [terminalCandidates,setTerminalCandidates]=useState<unknown[]>([]);
  const [loading,setLoading]=useState(false);
@@ -284,11 +286,19 @@ function App(){
  const chainDiagnostic=useChainDiagnostics({
   active,knownVehicle:chosen?vehicleId(chosen):lastSeen?.vehicle??'',
   token:token.trim(),
-  enabled:diagnostics||recorder.session?.state==='recording',
+  enabled:!!active&&['5','6','9','10'].includes(active[0]),
   primaryFeatures:features,record:chainRecord
  });
  const tripId=chosen?selectedTripId(chosen):'';
  const trip=useTripData(tripId,token.trim());
+ const plannedHandoff=active&&chosen&&selectedTrip===''?
+  findPlannedHandoff(chainDiagnostic,{
+   line:active[0],order:active[1],tripId,vehicle:vehicleId(chosen),
+   start:path(chosen,'properties.trip.start_timestamp')
+  },now):null;
+ const nextTrip=useTripData(plannedHandoff?.next.tripId??'',token.trim());
+ const continuity=plannedHandoff?verifyHandoffStops(trip.stops,nextTrip.stops):
+  {ok:false,reason:'Navazující trip zatím nebyl nalezen.'};
  const age=lastFetch===null?null:Math.max(0,Math.floor((now-lastFetch)/1000));
  const gpsAge=gps?Math.max(0,Math.floor((now-gps.timestamp)/1000)):null;
  const coords=chosen?.geometry?.coordinates;
@@ -345,6 +355,45 @@ function App(){
   !!firstStop&& (isBeforeTrip(chosen!)||lifecycle==='at_stop');
  const remoteProgress=useRemoteProgress({tripId,stops:trip.stops,remote,vehicle:chosen,now,terminalWaiting});
  const terminalName=terminalWaiting?firstStop?.name??null:null;
+ const departureEvidence=departureForHandoff({
+  remote,progress:remoteProgress,gpsDeparture:departureDetection,
+  stopsCount:trip.stops.length,apiAge:age,now,sourceTripState:lifecycle
+ });
+ const handoffReady=!!active&&!!chosen&&!!plannedHandoff&&
+  continuity.ok&&departureEvidence.ok&&
+  nextTrip.tripId===plannedHandoff.next.tripId&&!nextTrip.loading&&
+  trip.tripId===tripId&&trip.stops.length>1&&manual===null;
+ useEffect(()=>{
+  if(!handoffReady||!active||!chosen||!plannedHandoff)return;
+  const next=plannedHandoff.next;
+  const currentVehicle=vehicleId(chosen);
+  if(currentVehicle!==next.vehicle||!next.line||!next.order||!next.tripId)return;
+  const target:[string,string]=[next.line,next.order];
+  const from=active.join('/');
+  const reason=departureEvidence.reason+' '+continuity.reason;
+  // Prepared trip comes from the other line's live vehicle snapshot.
+  const synthetic:Feature={
+   properties:{trip:next.rawTrip as Obj,
+    last_position:{state_position:next.state,last_stop:next.lastStop,next_stop:next.nextStop}}
+  };
+  const previous=readLastSeen(active[0],active[1]);
+  const remembered:LastSeen={
+   line:next.line,order:next.order,vehicle:currentVehicle,tripId:next.tripId,
+   lastSeenAt:Date.now(),lastPositionAt:previous?.lastPositionAt??null,
+   lon:previous?.lon??null,lat:previous?.lat??null,
+   lastStop:'',nextStop:'',state:next.state,route:next.line
+  };
+  saveLastSeen(remembered);
+  setLastHandoff({from,to:target.join('/'),vehicle:currentVehicle,tripId:next.tripId,reason,time:Date.now()});
+  recorder.follow(next.line,next.order,next.tripId,reason);
+  setSelectedTrip('');setManual(null);setExpanded(false);
+  setFeatures([synthetic]);setLastSeen(remembered);setLastFetch(Date.now());
+  setQuery(target.join('/'));
+  save(ACTIVE_KEY,JSON.stringify({line:next.line,order:next.order,expires:Date.now()+ACTIVE_TTL}));
+  setActive(target);
+ // A different active route context supersedes this effect.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[handoffReady,active?.[0],active?.[1],tripId,plannedHandoff?.next.tripId]);
  const terminalCountdown=terminalWaiting?firstDeparture:null;
  const displayedIndex=terminalWaiting?0:manual??(compatible?position:remoteProgress.index);
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
@@ -387,7 +436,7 @@ function App(){
   const parsed=parseOrder(value);if(!parsed){setError('Zadej linku a pořadí, například 25/5.');return;}
   if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v Nastavení.');return;}
   setQuery(parsed[0]+'/'+parsed[1]);
-  setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);
+  setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);setLastHandoff(null);
   // Reuse the already retrieved line snapshot immediately on selection.
   // The running timer shares its Golemio URL and its 20-second cache.
   if(lookup.line===parsed[0]&&lookup.items.length){
@@ -400,7 +449,7 @@ function App(){
   setActive(parsed);
  }
  function forget(){
-  setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setSettings(false);
+  setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);setSettings(false);
  }
  function chooseTrip(id:string){setSelectedTrip(id);setManual(null);}
  function toggleGPS(){setGpsWanted(v=>!v);}
@@ -466,7 +515,7 @@ function App(){
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
   <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
-   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} remoteProgress={remoteProgress} lastSeen={lastSeen} relatedVehicle={relatedVehicle} chainDiagnostic={chainDiagnostic} recorder={recorder}/>
+   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} remoteProgress={remoteProgress} lastSeen={lastSeen} relatedVehicle={relatedVehicle} chainDiagnostic={chainDiagnostic} lastHandoff={lastHandoff} plannedHandoff={plannedHandoff?.next??null} handoffContinuity={continuity.reason} handoffDeparture={departureEvidence.reason} recorder={recorder}/>
   </div>
 
   <button className="debugFab" onClick={()=>setDiagnostics(v=>!v)} aria-label={diagnostics?'Zavřít diagnostiku':'Otevřít diagnostiku'} title="Diagnostika">{diagnostics?'×':'⌘'}</button>
