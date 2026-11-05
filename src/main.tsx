@@ -4,6 +4,10 @@ import Diagnostics from './Diagnostics';
 import {useTripData,formatStopTime,countdownSeconds,formatCountdown} from './tripData';
 import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
+import {useRecorder} from './recorder';
+import {remoteEstimate} from './remoteTracking';
+import type {RemoteHistory} from './remoteTracking';
+import {distanceMeters} from './position';
 import type {GpsFix} from './position';
 import './style.css';
 
@@ -45,6 +49,13 @@ function App(){
  const [gps,setGps]=useState<GpsFix|null>(null);
  const [gpsError,setGpsError]=useState('');
  const requestRef=useRef(0);
+ const recorder=useRecorder();
+ const gpsRef=useRef<GpsFix|null>(null);
+ gpsRef.current=gps;
+ const recordApiRef=useRef(recorder.api);recordApiRef.current=recorder.api;
+ const recordErrorRef=useRef(recorder.apiError);recordErrorRef.current=recorder.apiError;
+ const recordGpsRef=useRef(recorder.gps);recordGpsRef.current=recorder.gps;
+ const historyRef=useRef<{previous:RemoteHistory|null;current:RemoteHistory|null}>({previous:null,current:null});
 
  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
  useEffect(()=>{save(ROUTE_KEY,query.trim());},[query]);
@@ -55,7 +66,7 @@ function App(){
   if(!navigator.geolocation){setGpsError('Geolokace není v prohlížeči dostupná.');return;}
   let alive=true;
   const watch=navigator.geolocation.watchPosition(
-   p=>{if(alive){setGps({lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy,speed:p.coords.speed,timestamp:p.timestamp});setGpsError('');}},
+   p=>{if(alive){const fix={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy,speed:p.coords.speed,timestamp:p.timestamp};setGps(fix);recordGpsRef.current(fix);setGpsError('');}},
    e=>{if(alive){setGps(null);setGpsError(e.message);}},
    {enableHighAccuracy:true,maximumAge:5000,timeout:20000}
   );
@@ -68,6 +79,7 @@ function App(){
   const generation=++requestRef.current;
   async function refresh(){
    if(busy||!alive)return;busy=true;setLoading(true);
+   const requestStartedAt=Date.now();
    try{
     const url=new URL(API);url.searchParams.set('routeShortName',active![0]);url.searchParams.set('limit','1000');
     const response=await fetch(url,{headers:{'X-Access-Token':token.trim()},signal:controller.signal,cache:'no-store'});
@@ -75,9 +87,18 @@ function App(){
     const data:unknown=await response.json();
     if(!data||typeof data!=='object'||!Array.isArray((data as Obj).features))throw Error('Neplatná odpověď živých poloh');
     if(alive&&generation===requestRef.current){
-     setFeatures((data as {features:Feature[]}).features);setLastFetch(Date.now());setError('');
+     const fetched=(data as {features:Feature[]}).features;
+     const matching=fetched.filter(feature=>{
+      const candidateLine=path(feature,'properties.trip.gtfs.route_short_name')??path(feature,'properties.trip.route_short_name');
+      return normalize(orderOf(feature))===normalize(active![1])&&(candidateLine===undefined||String(candidateLine)===active![0]);
+     });
+     const selected=matching.length===1?matching[0]:null;
+     recordApiRef.current({line:active![0],order:active![1],responseStatus:response.status,
+      requestStartedAt,responseAt:Date.now(),matchingCount:matching.length,vehicle:selected,gps:gpsRef.current,
+      source:selected?'unique_order':'ambiguous_or_missing'});
+     setFeatures(fetched);setLastFetch(Date.now());setError('');
     }
-   }catch(e){if(alive&&!controller.signal.aborted)setError(e instanceof Error?e.message:String(e));}
+   }catch(e){if(alive&&!controller.signal.aborted){const message=e instanceof Error?e.message:String(e);setError(message);recordErrorRef.current(active![0],active![1],'fetch_error',message);}}
    finally{busy=false;if(alive)setLoading(false);}
   }
   void refresh();const timer=setInterval(()=>void refresh(),20000);
@@ -97,16 +118,37 @@ function App(){
  const vehicleCoords:[number,number]|null=Array.isArray(coords)&&coords.length>=2&&Number.isFinite(Number(coords[0]))&&Number.isFinite(Number(coords[1]))?[Number(coords[0]),Number(coords[1])]:null;
  const nextStopId=text(path(chosen,'properties.last_position.next_stop.id')??path(chosen,'properties.last_position.next_stop'));
  const pos=usePosition(trip.stops,tripId,nextStopId,gps,vehicleCoords,age,now);
- const departureDetection=useDepartureDetection({tripId,stops:trip.stops,raw:trip.raw,gps,vehicle:vehicleCoords,vehicleAge:age,now,baseIndex:pos.baseIndex,manualIndex:manual});
- const position=manual??departureDetection.displayIndex??pos.confirmedIndex??pos.baseIndex;
+ const sourceAge=remoteEstimate({feature:chosen??null,stops:trip.stops,raw:trip.raw,tripId,fetchedAt:lastFetch,now,history:null}).sourceAge;
+ const compatible=!!gpsWanted&&!!gps&&gpsAge!==null&&gpsAge<=15&&gps.accuracy<=35&&!!vehicleCoords&&
+  distanceMeters(gps.lat,gps.lon,vehicleCoords[1],vehicleCoords[0])<=250&&age!==null&&age<=45&&
+  (sourceAge===null||sourceAge<=60);
+ const remote=remoteEstimate({feature:chosen??null,stops:trip.stops,raw:trip.raw,tripId,fetchedAt:lastFetch,now,history:historyRef.current.previous});
+ useEffect(()=>{
+  const timestamp=remote.sourceTimestamp,metres=remote.vehicleProgress;
+  if(!tripId||timestamp===null||metres===null||!vehicleCoords)return;
+  const current=historyRef.current.current;
+  if(current&&current.tripId===tripId&&current.time===timestamp)return;
+  historyRef.current={
+   previous:current?.tripId===tripId?current:null,
+   current:{tripId,time:timestamp,metres,lon:vehicleCoords[0],lat:vehicleCoords[1]}
+  };
+ },[tripId,remote.sourceTimestamp,remote.vehicleProgress,vehicleCoords?.[0],vehicleCoords?.[1]]);
+ const departureDetection=useDepartureDetection({tripId,stops:trip.stops,raw:trip.raw,gps:compatible?gps:null,
+  vehicle:vehicleCoords,vehicleAge:age,now,baseIndex:pos.baseIndex,manualIndex:manual});
+ useEffect(()=>{
+  if(trip.tripId&&trip.stops.length&&trip.raw)recorder.trip(trip.tripId,trip.stops,trip.raw);
+ // Record GTFS once per trip, not once per render.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[trip.tripId,trip.raw,trip.stops.length,recorder.session?.id]);
+ const position=manual??(compatible?(departureDetection.phase==='waiting'?pos.confirmedIndex??pos.baseIndex:departureDetection.displayIndex):remote.index);
  const current=position!==null?trip.stops[position]:undefined;
  const next=position!==null?trip.stops[position+1]:undefined;
  const departure=current?.departure||current?.arrival||'';
- const seconds=age!==null&&age<50&&position!==null?countdownSeconds(departure,now):null;
+ const seconds=age!==null&&age<50&&position!==null&& (compatible||remote.status!=='stale'&&remote.status!=='off-route')?countdownSeconds(departure,now):null;
  const delay=Number(path(chosen,'properties.last_position.delay.actual'));
  const validDelay=chosen&&Number.isFinite(delay)&&path(chosen,'properties.last_position.delay.actual')!==null&&path(chosen,'properties.last_position.delay.actual')!==undefined;
  const destination=trip.headsign||'Směr nezjištěn';
- const stopMode=manual!==null?'RUČNÍ VÝBĚR':departureDetection.phase==='left'?'ODJEZD POTVRZEN GPS':departureDetection.phase==='verifying'?'OVĚŘUJI ODJEZD':departureDetection.phase==='at-stop'?'V ZASTÁVCE':pos.confirmedIndex!==null?'OVĚŘENO GPS':pos.source==='id'?'PODLE GOLEMIA':pos.source==='vehicle'?'ODHAD PODLE VOZIDLA':pos.source==='gps'?'ODHAD PODLE GPS':'POLOHA NEURČENA';
+ const stopMode=manual!==null?'RUČNÍ VÝBĚR':!compatible?(remote.status==='confirmed'?'GOLEMIO · POTVRZENO':remote.status==='estimated'?'VZDÁLENÝ ODHAD':remote.status==='off-route'?'MIMO TRASU':remote.status==='stale'?'NEAKTUÁLNÍ DATA':'VZDÁLENÉ SLEDOVÁNÍ'):departureDetection.phase==='left'?'ODJEZD POTVRZEN GPS':departureDetection.phase==='verifying'?'OVĚŘUJI ODJEZD':departureDetection.phase==='at-stop'?'V ZASTÁVCE':pos.confirmedIndex!==null?'OVĚŘENO GPS':'GPS · ČEKÁM NA ZASTÁVKU';
  const state=active?(error?'Chyba připojení':age===null?'Připojování':age>=50?'Zastaralá data':chosen?'Sledování aktivní':'Pořadí nenalezeno'):'Připraveno';
  const nearby=useMemo(()=>{
   if(!current)return [];
@@ -159,7 +201,7 @@ function App(){
      <div className="timerNumbers">{formatCountdown(seconds)}</div>
      <div className="timerFooter"><span>Odjezd JŘ <b>{formatStopTime(departure)}</b></span><span>Zpoždění <b>{validDelay?(delay>=0?'+':'')+Math.round(delay/60)+' min':'—'}</b></span></div>
     </div>
-    <p className="safetyLine">{departureDetection.phase==='verifying'?'Sleduji rozjezd a zvětšování vzdálenosti. ':''}{pos.source!=='id'&&manual===null&&departureDetection.phase==='waiting'?'Zastávka je odhadnuta podle polohy. ':''}Orientační časový údaj. Není pokynem k odjezdu.</p>
+    <p className="safetyLine">{!compatible?remote.reason:departureDetection.reason} Orientační časový údaj, nikoli pokyn k odjezdu.</p>
    </>:<div className="emptyState">{trip.loading||loading?'Načítám údaje spoje…':chosen?(trip.error||'Čekám na zastávky tripu.'):'Pořadí nelze jednoznačně přiřadit. Otevři diagnostiku.'}</div>}
   </section>}
 
@@ -177,9 +219,9 @@ function App(){
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
   <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
-   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection}/>
+   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} recorder={recorder}/>
   </div>
-  <footer>ČASOVAČ 0.5 · Provozní pomůcka, nikoli oprávnění k odjezdu.</footer>
+  <footer>ČASOVAČ 0.6 · Provozní pomůcka, nikoli oprávnění k odjezdu.</footer>
   <button className="debugFab" onClick={()=>setDiagnostics(v=>!v)} aria-label={diagnostics?'Zavřít diagnostiku':'Otevřít diagnostiku'} title="Diagnostika">{diagnostics?'×':'⌘'}</button>
 
   {settings&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSettings(false);}}>
