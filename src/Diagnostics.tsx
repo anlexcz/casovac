@@ -1,3 +1,5 @@
+import type {RemoteState} from './remoteTracking';
+import type {useRecorder} from './recorder';
 import type {DepartureTelemetry} from './departure';
 import {useMemo,useState} from 'react';
 import {auditStopIds,stopAuditReport} from './stopAudit';
@@ -13,12 +15,15 @@ type Props={
  manual:number|null;setManual:(index:number|null)=>void;
  selectedTrip:string;setSelectedTrip:(id:string)=>void;
  startGps:()=>void;stopGps:()=>void;nextStopId:string;departure:DepartureTelemetry;
+ remote:RemoteState;onboard:boolean;recorder:ReturnType<typeof useRecorder>;
 };
 const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
-export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure}:Props){
+export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,onboard,recorder}:Props){
  const stops:Stop[]=trip.stops;
  const [copyState,setCopyState]=useState('');
+ const [includePhone,setIncludePhone]=useState(false);
+ const [note,setNote]=useState('');
  const coordinates=chosen?.geometry?.coordinates;
  const vehicle:[number,number]|null=Array.isArray(coordinates)&&coordinates.length>=2&&Number.isFinite(Number(coordinates[0]))&&Number.isFinite(Number(coordinates[1]))?[Number(coordinates[0]),Number(coordinates[1])]:null;
  const stopAudit=useMemo(()=>auditStopIds(stops,nextStopId,vehicle),[stops,nextStopId,vehicle?.[0],vehicle?.[1]]);
@@ -26,6 +31,43 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
  async function copyAudit(){try{await navigator.clipboard.writeText(report());setCopyState('Zkopírováno – bez tokenu a GPS telefonu.');}catch{setCopyState('Prohlížeč nepovolil kopírování. Otevři textový výpis níže.');}}
 
  return <section className="diagnosticStack" aria-label="Provozní diagnostika">
+ <section className="panel recorderPanel" aria-label="Záznam diagnostiky">
+  <div className="row"><h2>Záznam testovací jízdy</h2><span className={'status '+(recorder.session?.state==='recording'?'good':'')}>{recorder.session?.state==='recording'?'Zaznamenávám':recorder.session?'Ukončeno':'Připraveno'}</span></div>
+  <p className="hint">Ukládá každou odpověď Golemia pro sledované pořadí, včetně opakovaných identických hlášení, času požadavku a případných chyb. Interval 20 s. Zůstává pouze v tomto prohlížeči.</p>
+  {recorder.session?<div className="details">
+    <div><small>SLEDOVANÉ POŘADÍ</small><strong>{recorder.session.target.line}/{recorder.session.target.order}</strong></div>
+    <div><small>ZÁZNAMŮ</small><strong>{recorder.session.events.length} / {recorder.session.limits.maxEvents}</strong></div>
+    <div><small>ZAČÁTEK</small><strong>{new Date(recorder.session.startedAt).toLocaleString('cs-CZ')}</strong></div>
+    <div><small>POSLEDNÍ VZOREK</small><strong>{recorder.session.events.length?new Date(recorder.session.events[recorder.session.events.length-1].receivedAt).toLocaleTimeString('cs-CZ'):'—'}</strong></div>
+   </div>:<label className="rememberOption"><input type="checkbox" checked={includePhone} onChange={e=>setIncludePhone(e.target.checked)}/><span>Do JSON zahrnout i souřadnice GPS telefonu (volitelné; může prozradit soukromá místa). Bez zaškrtnutí se ukládá pouze stav GPS a vzdálenost od tramvaje.</span></label>}
+  {recorder.session?.state==='recording'&&<>
+   <p className="hint">Při obnovení stránky záznam zůstane uložený. Pro další sběr musí být aktivní sledování stejného pořadí. Při zablokování prohlížeče na pozadí mohou jednotlivé vzorky chybět.</p>
+   <div className="search"><input aria-label="Poznámka do záznamu" placeholder="Poznámka: konečná, semafor, odklon…" value={note} onChange={e=>setNote(e.target.value)}/><button className="quiet" disabled={!note.trim()} onClick={()=>{recorder.note(note);setNote('');}}>Přidat</button></div>
+  </>}
+  <div className="recorderActions">
+   {!recorder.session&&<button className="primary" disabled={!recorder.ready||!active} onClick={()=>{if(active)recorder.start(active[0],active[1],includePhone);}}>● Spustit záznam</button>}
+   {recorder.session?.state==='recording'&&<button className="primary" onClick={recorder.stop}>■ Ukončit záznam</button>}
+   {recorder.session&&<button className="quiet" onClick={recorder.download}>↓ Stáhnout JSON ({recorder.session.events.length})</button>}
+   {recorder.session?.state==='stopped'&&<button className="quiet" onClick={()=>{if(window.confirm('Smazat uložený záznam? Nejprve jej stáhni.'))recorder.discard();}}>Smazat záznam</button>}
+  </div>
+  {recorder.error&&<p className="warn" role="alert">{recorder.error}</p>}
+  {recorder.session&&<p className="hint">Export JSON neobsahuje API token. {recorder.session.options.includePhoneCoordinates?'Souřadnice telefonu jsou součástí exportu.':'Souřadnice telefonu nejsou součástí exportu.'} Po stažení lze soubor rovnou nahrát do chatu.</p>}
+ </section>
+ <section className="panel remotePanel" aria-label="Vzdálené sledování">
+  <div className="row"><h2>Sledování vozidla</h2><span className={'status '+(onboard?'good':'')}>{onboard?'GPS na palubě':'Vzdálený režim'}</span></div>
+  <p className="hint">{onboard?'GPS telefonu odpovídá poloze tramvaje, lze použít detekci skutečného rozjezdu.':'GPS telefonu je vypnutá, neaktuální nebo mimo sledovanou tramvaj. Používám výhradně údaje Golemia.'}</p>
+  <div className="details">
+   <div><small>STAV PREDIKCE</small><strong>{remote.status}</strong></div>
+   <div><small>ODHADOVANÁ ZASTÁVKA</small><strong>{remote.index===null?'—':(stops[remote.index]?.name??'—')}</strong></div>
+   <div><small>STÁŘÍ POLOHY VOZIDLA</small><strong>{remote.sourceAge===null?'Čas měření není k dispozici':remote.sourceAge+' s'}</strong></div>
+   <div><small>STÁŘÍ API ODPOVĚDI</small><strong>{remote.apiAge===null?'—':remote.apiAge+' s'}</strong></div>
+   <div><small>POLOHA NA TRASE</small><strong>{remote.vehicleProgress===null?'—':Math.round(remote.vehicleProgress)+' m'}</strong></div>
+   <div><small>ODCHYLKA OD TRASY</small><strong>{remote.crossTrack===null?'—':Math.round(remote.crossTrack)+' m'}</strong></div>
+   <div><small>PREDIKOVANÁ POLOHA</small><strong>{remote.predictedProgress===null?'—':Math.round(remote.predictedProgress)+' m'}</strong></div>
+   <div><small>ODHAD RYCHLOSTI</small><strong>{remote.estimatedSpeed===null?'—':remote.estimatedSpeed.toFixed(1)+' km/h'}</strong></div>
+  </div>
+  <p className="hint">{remote.reason}</p>
+ </section>
  <div className="panel"><div className="row"><h2>Živá data {active?.join('/')??'—'}</h2><span className={'status '+(age!==null&&age<50?'good':'')}>{age===null?'Bez dat':age<50?'Online':'Zastaralá data'}</span></div>
  <p className="hint">Aktualizace: {lastFetch?new Date(lastFetch).toLocaleTimeString('cs-CZ'):'—'} · stáří {age??'—'} s · obnova 20 s</p>
  <p>Na lince nalezeno {features.length} vozidel. Shody pořadí: {matchingCount}.</p>
