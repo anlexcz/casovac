@@ -80,7 +80,7 @@ export function useOnboardMode(input:{
   }
  // Evaluate only on new GPS samples or new vehicle fixes, not each clock tick.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[tripId,wanted,gps?.timestamp,vehicle?.[0],vehicle?.[1],sourceAge,apiAge]);
+ },[tripId,wanted,gps?.timestamp,vehicle?.[0],vehicle?.[1]]);
  return {mode:decision.mode,paired:decision.mode==='onboard'&&valid,gap,routeGap,
   sourceAge,lastPairedAt:decision.lastNear,reason:decision.reason};
 }
