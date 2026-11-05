@@ -94,3 +94,50 @@
 .recorderPanel .search input{font-size:13px}
 .remotePanel{background:#172027}
 .remotePanel .details strong{font-variant-numeric:tabular-nums}
+
+/* 1.0 — compact timetable dashboard. Diagnostics retain their own styles. */
+.appShell{max-width:680px;padding-top:18px}
+.topbar{margin-bottom:15px}
+.topbar h1{font-size:clamp(30px,6.5vw,42px);margin:0}
+.compactSearch{padding:12px;margin-bottom:12px}
+.compactJourney{padding:14px 14px 9px;overflow:hidden}
+.compactIdentity{display:flex;align-items:center;gap:12px;min-width:0;padding-bottom:14px}
+.compactIdentity .routeTile{width:65px;height:65px;flex:0 0 65px;border-radius:10px;font-size:36px}
+.orderTile{font-size:clamp(34px,8vw,48px);font-weight:850;font-variant-numeric:tabular-nums;letter-spacing:-1.5px;line-height:1;min-width:0}
+.identityDetails{min-width:0;flex:1;display:flex;flex-direction:column;gap:5px}
+.routeDirection{font-size:clamp(15px,4vw,20px);font-weight:700;line-height:1.2;overflow-wrap:anywhere}
+.vehicleNumber{color:#9ba7b3;font-size:15px;font-weight:650;font-variant-numeric:tabular-nums}
+.editOrder{border:0;background:transparent;color:#9ea8b4;font-size:22px;padding:8px 4px;align-self:flex-start}
+.activeDeparture{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;min-height:92px;padding:16px 14px;margin:0 -1px;border-radius:11px;background:#31363d;color:#fff}
+.activeDeparture.clockEarly{background:#ae2926}
+.activeDeparture.clockReady{background:#1d7651}
+.activeDeparture.clockUnknown{background:#303640}
+.activeStopName{font-size:clamp(18px,4.3vw,25px);line-height:1.16;font-weight:800;overflow-wrap:anywhere}
+.departureNumbers{display:flex;align-items:center;gap:12px;justify-content:flex-end;white-space:nowrap;font-variant-numeric:tabular-nums}
+.liveOffset{font-size:clamp(25px,6vw,37px);font-weight:850;letter-spacing:-1px}
+.scheduledTime{font-size:clamp(14px,3.5vw,18px);color:#c7cbd0;font-weight:650}
+.activeDeparture.clockEarly .scheduledTime,.activeDeparture.clockReady .scheduledTime{color:#e4e4e4}
+.upcomingStops{margin-top:8px}
+.upcomingStop{width:100%;display:grid;grid-template-columns:minmax(0,1fr) 64px;align-items:center;column-gap:12px;padding:11px 12px;border:0;border-radius:0;border-bottom:1px solid #303740;background:transparent;text-align:left}
+.upcomingStop:last-child{border-bottom:0}
+.upcomingName{font-size:15px;font-weight:580;line-height:1.25;overflow-wrap:anywhere}
+.upcomingTime{text-align:right;color:#a7b0bb;font-variant-numeric:tabular-nums;font-size:14px;font-weight:600}
+.moreStops{display:block;margin:7px auto 0;padding:9px 15px;background:transparent;border:0;color:#aeb9c5;font-size:13px}
+.compactEmpty{padding:18px 10px;font-size:15px;color:#aeb8c5}
+.compactJourney .compactEmpty p{margin:6px 0}
+@media(max-width:490px){
+ .compactJourney{padding:12px 10px 6px}
+ .compactIdentity{gap:10px;padding:3px 3px 14px}
+ .compactIdentity .routeTile{height:57px;width:57px;flex-basis:57px;font-size:33px}
+ .orderTile{font-size:36px}
+ .editOrder{font-size:18px;padding:5px}
+ .activeDeparture{grid-template-columns:minmax(0,1fr) auto;gap:7px;padding:14px 10px;min-height:86px}
+ .departureNumbers{gap:8px}
+ .liveOffset{font-size:clamp(23px,6vw,30px)}
+ .scheduledTime{font-size:13px}
+ .upcomingStop{padding:10px 10px}
+}
+@media(max-width:360px){
+ .activeDeparture{grid-template-columns:1fr;gap:8px}
+ .departureNumbers{justify-content:space-between}
+}
