@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {golemioJson} from './golemioClient';
 
 type Obj=Record<string,unknown>;
@@ -42,7 +42,8 @@ export function useChainDiagnostics(args:{
  const record=args.record;
  const enabled=args.enabled;
  // Keep the newest primary-line observations, including prepared trips on that line.
- const primaryFeatures=args.primaryFeatures;
+ const primaryFeaturesRef=useRef(args.primaryFeatures);
+ primaryFeaturesRef.current=args.primaryFeatures;
  useEffect(()=>{
   if(!enabled||!paired||!known||known==='—'||!token){
    setSnapshot(null);
@@ -69,7 +70,7 @@ export function useChainDiagnostics(args:{
     }
     if(!alive)return;
     const all=(response as {features:Feature[]}).features;
-    const primary=primaryFeatures.filter(f=>normalize(vehicle(f))===normalize(known))
+    const primary=primaryFeaturesRef.current.filter(f=>normalize(vehicle(f))===normalize(known))
      .map(f=>summarize(f,'původní linka'));
     const related=all.filter(f=>normalize(vehicle(f))===normalize(known))
      .map(f=>summarize(f,'návazná linka'));
