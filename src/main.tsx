@@ -70,7 +70,13 @@ function App(){
  const [queryMode,setQueryMode]=useState('active');
  const [lastSeen,setLastSeen]=useState<LastSeen|null>(null);
  const [relatedVehicle,setRelatedVehicle]=useState<{vehicle:string;route:string;order:string;state:string;time:number}|null>(null);
- const [lastHandoff,setLastHandoff]=useState<{from:string;to:string;vehicle:string;tripId:string;reason:string;time:number}|null>(null);
+ const [lastHandoff,setLastHandoff]=useState<{from:string;to:string;vehicle:string;tripId:string;reason:string;time:number}|null>(()=>{
+  try{
+   const saved=JSON.parse(stored(ACTIVE_KEY)) as {line?:string;order?:string;expires?:number;handoff?:{from:string;to:string;vehicle:string;tripId:string;reason:string;time:number}};
+   const handoff=saved.handoff;
+   return saved.expires&&saved.expires>Date.now()&&handoff&&handoff.to===saved.line+'/'+saved.order?handoff:null;
+  }catch{return null;}
+ });
  const previousScanRef=useRef(0);
  const [terminalCandidates,setTerminalCandidates]=useState<unknown[]>([]);
  const [loading,setLoading]=useState(false);
@@ -401,7 +407,8 @@ function App(){
   setSelectedTrip('');setManual(null);setExpanded(false);
   setFeatures([synthetic]);setLastSeen(remembered);setLastFetch(Date.now());
   setQuery(target.join('/'));
-  save(ACTIVE_KEY,JSON.stringify({line:next.line,order:next.order,expires:Date.now()+ACTIVE_TTL}));
+  save(ACTIVE_KEY,JSON.stringify({line:next.line,order:next.order,expires:Date.now()+ACTIVE_TTL,
+   handoff:{from,to:target.join('/'),vehicle:currentVehicle,tripId:next.tripId,reason,time:Date.now()}}));
   setActive(target);
  // A different active route context supersedes this effect.
  // eslint-disable-next-line react-hooks/exhaustive-deps
