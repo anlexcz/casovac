@@ -85,8 +85,8 @@ body, button, input, select, textarea { font-family: var(--font-ui); }
    1–2 digit orders without borrowing width from the destination. */
 .compactIdentity .serviceBadge {
   position: relative;
-  flex: 0 0 74px;
-  width: 74px;
+  flex: 0 0 92px;
+  width: 92px;
   height: 66px;
   align-self: center;
   isolation: isolate;
@@ -109,8 +109,9 @@ body, button, input, select, textarea { font-family: var(--font-ui); }
 .compactIdentity .serviceBadge .orderTile {
   position: absolute;
   z-index: 1;
-  right: 0;
-  bottom: 0;
+  left: 54px;
+  right: auto;
+  bottom: -2px;
   min-width: 29px;
   height: 28px;
   padding: 0 5px;
@@ -135,8 +136,8 @@ body, button, input, select, textarea { font-family: var(--font-ui); }
 }
 @media (max-width: 490px) {
   .compactIdentity .serviceBadge {
-    width: 66px;
-    flex-basis: 66px;
+    width: 84px;
+    flex-basis: 84px;
     height: 60px;
   }
   .compactIdentity .serviceBadge .routeTile {
@@ -148,6 +149,7 @@ body, button, input, select, textarea { font-family: var(--font-ui); }
     font-size: 29px;
   }
   .compactIdentity .serviceBadge .orderTile {
+    left: 49px;
     height: 26px;
     min-width: 27px;
     font-size: 17px;
@@ -159,8 +161,8 @@ body, button, input, select, textarea { font-family: var(--font-ui); }
 }
 @media (max-width: 360px) {
   .compactIdentity .serviceBadge {
-    width: 61px;
-    flex-basis: 61px;
+    width: 80px;
+    flex-basis: 80px;
     height: 56px;
   }
   .compactIdentity .serviceBadge .routeTile {
@@ -171,4 +173,5 @@ body, button, input, select, textarea { font-family: var(--font-ui); }
   .compactIdentity .serviceBadgeThree .routeTile {
     font-size: 27px;
   }
+  .compactIdentity .serviceBadge .orderTile { left: 45px; }
 }
