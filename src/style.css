@@ -249,3 +249,18 @@
 .chooserMissing .full{margin-top:10px;white-space:normal}
 .chooserModal .alert{margin:0}
 @media(max-width:420px){.chooserModal{padding:16px}.chooserRow{gap:7px;padding:10px}.chooserStop{font-size:11px}.chooserVehicle{font-size:12px}}
+
+/* 1.1: denser line/order chooser, one divider per row */
+.chooserModal{gap:10px;padding:18px}
+.chooserHeading .hint{display:none}
+.chooserCaption{font-size:11px;letter-spacing:.5px;text-transform:uppercase;margin:6px 0 8px}
+.chooserRow{border:0;border-bottom:1px solid #343a42;border-radius:0;background:transparent;margin:0;padding:8px 4px;min-height:46px;gap:8px}
+.chooserRow:last-of-type{border-bottom:0}
+.chooserRow:hover,.chooserRow:focus-visible{background:#272c34;border-color:#ff3636;border-radius:5px}
+.chooserId{font-size:16px}
+.chooserId strong{font-size:18px}
+.chooserVehicle{font-size:12px}
+.chooserStop{display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:12px;line-height:1.2}
+.chooserStopIcon{flex:0 0 15px;color:#8b9aa9}
+.chooserStop>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:420px){.chooserRow{min-height:46px;padding:8px 3px}.chooserStop{font-size:11px}}
