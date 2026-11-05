@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {findPlannedHandoff,verifyHandoffStops,departureForHandoff} from '../src/chainHandoff.ts';
 import {continuousStops} from '../src/chainStops.ts';
+import {selectTrip} from '../src/tripSelection.ts';
 
 const now=Date.parse('2026-11-05T16:23:00+01:00');
 const next={line:'9',order:'21',tripId:'9_30458_261012',vehicle:'9383',
@@ -73,4 +74,27 @@ test('does not append unverified trip stops',()=>{
  const after=[stop('X','16:28:00'),stop('B','16:30:00',2)];
  assert.equal(continuousStops(before,after,false).length,2);
  assert.equal(continuousStops(before,[{...after[0],id:'OTHER'},after[1]],true).length,2);
+});
+
+const vehicleFeature=(car,state,timestamp)=>({
+ properties:{trip:{gtfs:{route_short_name:'6',trip_id:'6_30255_261019'},
+  sequence_id:1,vehicle_registration_number:car,start_timestamp:'2026-11-05T15:55:00+01:00'},
+  last_position:{state_position:state,origin_timestamp:new Date(timestamp).toISOString()}}
+});
+test('follows a replacement active tram for the same operating order',()=>{
+ const old=vehicleFeature(9233,'after_track',now-40000);
+ const replacement=vehicleFeature(9147,'on_track',now-5000);
+ assert.equal(selectTrip([old,replacement],'6','1',now,'9233').vehicle,'9147');
+});
+test('prefers an unambiguously fresher car during overlapping active reports',()=>{
+ const old=vehicleFeature(9233,'at_stop',now-65000);
+ const replacement=vehicleFeature(9147,'on_track',now-5000);
+ assert.equal(selectTrip([old,replacement],'6','1',now,'9233').vehicle,'9147');
+});
+test('declines ambiguous simultaneous vehicle reports for one order',()=>{
+ const first=vehicleFeature(9233,'at_stop',now-15000);
+ const second=vehicleFeature(9147,'on_track',now-5000);
+ const result=selectTrip([first,second],'6','1',now,'9233');
+ assert.equal(result.ambiguous,true);
+ assert.equal(result.feature,null);
 });
