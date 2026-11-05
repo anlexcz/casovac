@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import Diagnostics from './Diagnostics';
-import {useTripData,formatStopTime,countdownSeconds,formatCountdown} from './tripData';
+import {useTripData,formatStopTime,countdownSeconds} from './tripData';
 import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
 import {useRecorder} from './recorder';
@@ -29,6 +29,13 @@ const selectedTripId=(f:Feature)=>text(path(f,'properties.trip.gtfs.trip_id')??p
 const vehicleId=(f:Feature)=>text(path(f,'properties.trip.vehicle_registration_number')??path(f,'properties.trip.vehicle.id')??path(f,'properties.trip.vehicle_id'));
 const orderOf=(f:Feature)=>path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??path(f,'properties.trip.order')??path(f,'properties.trip.gtfs.run_number');
 const normalize=(v:unknown)=>String(v??'').replace(/^0+/,'')||'0';
+// Negative = before scheduled departure, zero and positive = at/after it.
+const signedTime=(remaining:number|null)=>{
+ if(remaining===null)return '—';
+ const elapsed=-remaining;
+ const magnitude=Math.abs(elapsed);
+ return (elapsed<0?'−':'+')+String(Math.floor(magnitude/60)).padStart(2,'0')+':'+String(magnitude%60).padStart(2,'0');
+};
 const parseOrder=(q:string):[string,string]|null=>{
  const match=/^(\d{1,3})\s*\/\s*(\d{1,4})$/.exec(q.trim());
  return match?[match[1],match[2]]:null;
@@ -44,6 +51,7 @@ function App(){
  const [selectedTrip,setSelectedTrip]=useState('');
  const [manual,setManual]=useState<number|null>(null);
  const [expanded,setExpanded]=useState(false);
+ const [editing,setEditing]=useState(false);
  const [features,setFeatures]=useState<Feature[]>([]);
  const [lastFetch,setLastFetch]=useState<number|null>(null);
  const [queryMode,setQueryMode]=useState('active');
@@ -243,11 +251,8 @@ function App(){
  },[trip.tripId,trip.raw,trip.stops.length,recorder.session?.id]);
  const position=manual??(compatible?(departureDetection.phase==='waiting'?remote.index??pos.confirmedIndex??pos.baseIndex:departureDetection.displayIndex):remote.index);
  const current=position!==null?trip.stops[position]:undefined;
- const next=position!==null?trip.stops[position+1]:undefined;
  const departure=current?.departure||current?.arrival||'';
  const seconds=age!==null&&age<50&&position!==null&& (compatible||remote.status!=='stale'&&remote.status!=='off-route')?countdownSeconds(departure,now):null;
- const delay=Number(path(chosen,'properties.last_position.delay.actual'));
- const validDelay=chosen&&Number.isFinite(delay)&&path(chosen,'properties.last_position.delay.actual')!==null&&path(chosen,'properties.last_position.delay.actual')!==undefined;
  const destination=trip.headsign||'Směr nezjištěn';
  const firstStop=trip.stops[0];
  const firstStopDistance=firstStop&&vehicleCoords&&firstStop.lat!==null&&firstStop.lon!==null?
@@ -258,8 +263,12 @@ function App(){
   (queryMode==='includeNotTracking'||remote.vehicleState==='at_stop');
  const terminalName=terminalWaiting?firstStop?.name??null:null;
  const terminalCountdown=terminalWaiting?firstDeparture:null;
- const stopMode=manual!==null?'RUČNÍ VÝBĚR':terminalWaiting?'ČEKÁ NA ODJEZD Z KONEČNÉ':!compatible?(remote.vehicleState==='at_stop'&&remote.index!==null?'V ZASTÁVCE · GOLEMIO':remote.status==='confirmed'?'GOLEMIO · POTVRZENO':remote.status==='estimated'?'VZDÁLENÝ ODHAD':remote.status==='off-route'?'MIMO TRASU':remote.status==='stale'?'NEAKTUÁLNÍ DATA':'VZDÁLENÉ SLEDOVÁNÍ'):departureDetection.phase==='left'?'ODJEZD POTVRZEN GPS':departureDetection.phase==='verifying'?'OVĚŘUJI ODJEZD':departureDetection.phase==='at-stop'?'V ZASTÁVCE':pos.confirmedIndex!==null?'OVĚŘENO GPS':'GPS · ČEKÁM NA ZASTÁVKU';
- const state=active?(error?'Chyba připojení':age===null?'Připojování':age>=50?'Zastaralá data':chosen?'Sledování aktivní':lastSeen?'Vůz dočasně mimo aktuální trip':'Pořadí nenalezeno'):'Připraveno';
+ const displayedIndex=terminalWaiting?0:position;
+ const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
+ const highlightedTime=terminalWaiting?(firstStop?.departure||firstStop?.arrival||''):departure;
+ const highlightedRemaining=terminalWaiting?terminalCountdown:seconds;
+ const clockState=highlightedRemaining===null?'clockUnknown':highlightedRemaining>0?'clockEarly':'clockReady';
+ const futureStops=displayedIndex===null?[]:trip.stops.slice(displayedIndex+1);
  useEffect(()=>{
   const recordActive=recorder.session?.state==='recording'&&active&&
    recorder.session.target.line===active[0]&&recorder.session.target.order===active[1];
@@ -281,15 +290,10 @@ function App(){
  },[recorder.session?.id,recorder.session?.state,tripId,chosen,queryMode,onboard.mode,
     compatible,remote.source,remote.status,remote.vehicleState,remote.previousIndex,
     remote.nextIndex,position,departureDetection.phase,departureDetection.lastSwitch,terminalWaiting]);
- const nearby=useMemo(()=>{
-  if(!current)return [];
-  const index=position??0;
-  return trip.stops.slice(Math.max(0,index-2),Math.min(trip.stops.length,index+4)).map((s,i)=>({stop:s,index:Math.max(0,index-2)+i}));
- },[trip.stops,current,position]);
  function start(){
   const parsed=parseOrder(query);if(!parsed){setError('Zadej linku a pořadí, například 25/5.');return;}
   if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v Nastavení.');return;}
-  setSelectedTrip('');setManual(null);setExpanded(false);
+  setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);
   setFeatures([]);setLastFetch(null);setError('');
   setActive(parsed);
  }
@@ -301,67 +305,54 @@ function App(){
  const showStops=expanded?trip.stops.map((stop,index)=>({stop,index})):nearby;
  return <main className="appShell">
   <header className="topbar">
-   <div><span className="eyebrow">PID / ODJEZDOVÝ HLÍDAČ</span><h1>ČASOVAČ<span className="dot">.</span></h1></div>
+   <div><h1>ČASOVAČ<span className="dot">.</span></h1></div>
    <div className="headActions">
     <button className={'headButton '+(gpsWanted&&!gpsError&&gpsAge!==null&&gpsAge<=20?'gpsActive':'')} onClick={toggleGPS} aria-pressed={gpsWanted} aria-label={gpsWanted?'Vypnout GPS':'Zapnout GPS'} title={gpsError||pos.status}>⌖ <span>GPS</span></button>
     <button className="headButton" onClick={()=>setSettings(true)} aria-label="Nastavení">⚙</button>
    </div>
   </header>
 
-  <section className="panel searchPanel">
-   <label htmlFor="orderInput">LINKA / POŘADÍ</label>
-   <div className="search"><input id="orderInput" inputMode="text" placeholder="25/5" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')start();}}/><button className="primary" onClick={start}>Sledovat</button></div>
-   <p className="hint">{active?'Sleduješ '+active.join('/')+' · '+state:'Poslední zadané pořadí si prohlížeč pamatuje. Spuštění je ruční.'}</p>
-  </section>
-  {error&&<div className="alert" role="status">{error}</div>}
-  {gpsError&&<p className="warn topWarning">GPS: {gpsError}</p>}
-
-  {active&&<section className="panel journeyPanel">
-   <div className="journeyHeader">
-    <div className="routeTile">{active[0]}</div>
-    <div className="journeyIdentity"><div className="journeyTitle">Pořadí {active[1]}</div><div className="journeySubtitle">{destination}</div><div className="journeySubtitle">Vůz {chosen?vehicleId(chosen):lastSeen?.vehicle??'—'}</div></div>
-    <span className={'liveDot '+(age!==null&&age<50&&chosen?'on':'')} title={state}></span>
-   </div>
-   {chosen&&trip.stops.length?<>
-    <div className="focusArea">
-     <div className="eyebrow">ZASTÁVKA · {stopMode}</div>
-     <div className="focusName">{terminalName??current?.name??'Neznámá zastávka'}</div>
-     <div className="focusSubtitle">{terminalWaiting?'Před začátkem tripu · následuje ': 'Následující: '}{terminalWaiting?trip.stops[1]?.name??'—':next?.name??'Neznámá zastávka'}</div>
-    </div>
-    <div className="timerPanel"><div className="eyebrow">{terminalWaiting?'DO PLÁNOVANÉHO ODJEZDU Z KONEČNÉ':seconds===null?'ČAS NENÍ OVĚŘENÝ':seconds<0?'OD PLÁNOVANÉHO ODJEZDU UPLYNULO':'DO PLÁNOVANÉHO ODJEZDU'}</div>
-     <div className="timerNumbers">{formatCountdown(terminalWaiting?terminalCountdown:seconds)}</div>
-     <div className="timerFooter"><span>Odjezd JŘ <b>{formatStopTime(departure)}</b></span><span>Zpoždění <b>{validDelay?(delay>=0?'+':'')+Math.round(delay/60)+' min':'—'}</b></span></div>
-    </div>
-    <p className="safetyLine">{!compatible?remote.reason:departureDetection.reason} Orientační časový údaj, nikoli pokyn k odjezdu.</p>
-   </>:<div className="emptyState">
-    {trip.loading||loading?'Načítám údaje spoje…':chosen?(trip.error||'Vůz nalezen, ale jízdní řád tripu není dostupný.'):
-     lastSeen?<><strong>Vůz {lastSeen.vehicle} · poslední potvrzený stav</strong>
-      <p>Poslední hlášení Časovače: {new Date(lastSeen.lastSeenAt).toLocaleTimeString('cs-CZ')}
-      {lastSeen.lastStop?' · '+lastSeen.lastStop:''}{lastSeen.nextStop?' → '+lastSeen.nextStop:''}.</p>
-      <p>{relatedVehicle?'Vůz se objevil u linky '+(relatedVehicle.route||'neznámé')+
-       ', pořadí '+(relatedVehicle.order||'neznámé')+'.':'V aktuálním výpisu Golemia není potvrzené pokračování pořadí.'}
-       {' '}Nelze potvrdit, že stále stojí na konečné.</p></>:
-       'Pořadí zatím nenalezeno ani mezi čekajícími vozy. Diagnostika ukáže kandidáty.'}
-   </div>}
+  {(!active||editing)&&<section className="panel searchPanel compactSearch">
+   <div className="search"><input id="orderInput" aria-label="Linka / pořadí" inputMode="text" placeholder="25/5" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')start();}}/><button className="primary" onClick={start}>Sledovat</button></div>
   </section>}
-
-  {active&&trip.stops.length>0&&<section className="panel timelinePanel"><div className="row"><h2>Zastávky</h2><span className="status">{trip.stops.length} zastávek</span></div>
-   <div className="publicStops">{showStops.map(({stop,index})=><button className={'publicStop '+(index===position?'activeStop':'')} key={index} onClick={()=>setManual(index)} title="Ruční výběr zastávky">
-    <span className="stopMarker">{index< (position??0)?'✓':index===(position??-1)?'●':'○'}</span>
-    <span className="publicStopName">{stop.name}</span><span className="publicStopTime">{formatStopTime(stop.departure||stop.arrival)}</span>
-   </button>)}</div>
-   <div className="timelineActions">
-    <button className="quiet" onClick={()=>setExpanded(v=>!v)}>{expanded?'Zobrazit okolní':'Zobrazit všechny zastávky'}</button>
-    {manual!==null&&<button className="quiet" onClick={()=>setManual(null)}>Zpět na automatiku</button>}
-   </div>
-   <p className="hint">Klepnutím na zastávku ji lze ručně vybrat. GPS a Golemio pokračují ve sledování.</p>
+  {error&&<div className="alert" role="status">{error}</div>}
+  {active&&<section className="panel journeyPanel compactJourney">
+    <div className="compactIdentity">
+      <div className="routeTile" aria-label={'Linka '+active[0]}>{active[0]}</div>
+      <div className="orderTile" aria-label={'Pořadí '+active[1]}>{active[1]}</div>
+      <div className="identityDetails">
+       <div className="routeDirection">{destination}</div>
+       <div className="vehicleNumber">#{chosen?vehicleId(chosen):lastSeen?.vehicle??'—'}</div>
+      </div>
+      <button type="button" className="editOrder" onClick={()=>setEditing(v=>!v)} aria-label={editing?'Skrýt zadání':'Změnit linku nebo pořadí'} title="Změnit linku/pořadí">✎</button>
+    </div>
+    {highlightedStop?
+     <div className={'activeDeparture '+clockState}>
+       <div className="activeStopName">{highlightedStop.name}</div>
+       <div className="departureNumbers">
+        <span className="liveOffset" aria-label="Rozdíl od plánovaného odjezdu">{signedTime(highlightedRemaining)}</span>
+        <time className="scheduledTime" aria-label="Odjezd podle jízdního řádu">{formatStopTime(highlightedTime)}</time>
+       </div>
+     </div>
+     :<div className="compactEmpty">
+       {loading||trip.loading?'Načítání…':chosen?trip.error||'Jízdní řád nedostupný':lastSeen?
+       'Poslední vůz #'+lastSeen.vehicle+' · '+new Date(lastSeen.lastSeenAt).toLocaleTimeString('cs-CZ'):'Pořadí nenalezeno'}
+      </div>}
+    {futureStops.length>0&&<div className="upcomingStops">
+      {(expanded?futureStops:futureStops.slice(0,6)).map((stop,i)=>
+       <button type="button" className="upcomingStop" key={stop.sequence+'-'+i} onClick={()=>setManual((displayedIndex??0)+i+1)} title="Vybrat zastávku">
+        <span className="upcomingName">{stop.name}</span>
+        <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
+       </button>)}
+      {futureStops.length>6&&<button type="button" className="moreStops" onClick={()=>setExpanded(v=>!v)}>{expanded?'Méně':'Další zastávky ('+(futureStops.length-6)+')'}</button>}
+    </div>}
   </section>}
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
   <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
    <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} lastSeen={lastSeen} relatedVehicle={relatedVehicle} recorder={recorder}/>
   </div>
-  <footer>ČASOVAČ 0.9 · Provozní pomůcka, nikoli oprávnění k odjezdu.</footer>
+
   <button className="debugFab" onClick={()=>setDiagnostics(v=>!v)} aria-label={diagnostics?'Zavřít diagnostiku':'Otevřít diagnostiku'} title="Diagnostika">{diagnostics?'×':'⌘'}</button>
 
   {settings&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSettings(false);}}>
