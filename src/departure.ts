@@ -67,9 +67,9 @@ function getNearestStop(gps:GpsFix,stops:Stop[],reference:number|null){
 }
 export function useDepartureDetection(args:{
  tripId:string;stops:Stop[];raw:unknown;gps:GpsFix|null;vehicle:[number,number]|null;
- vehicleAge:number|null;now:number;baseIndex:number|null;manualIndex:number|null;
+ vehicleAge:number|null;paired:boolean;now:number;baseIndex:number|null;manualIndex:number|null;
 }):DepartureTelemetry{
- const {tripId,stops,raw,gps,vehicle,vehicleAge,now,baseIndex,manualIndex}=args;
+ const {tripId,stops,raw,gps,vehicle,vehicleAge,paired,now,baseIndex,manualIndex}=args;
  const route=useMemo(()=>decodeRoute(raw),[raw]);
  const stopProgress=useMemo(()=>buildStopProgress(stops,route),[stops,route]);
  const [state,setState]=useState<State>(INIT);
@@ -92,9 +92,8 @@ export function useDepartureDetection(args:{
   if(age< -10000||age>LIMITS.maxGpsAge||gps.accuracy>LIMITS.maxAccuracy){
    remember({...previous,lastTimestamp:gps.timestamp,samples:[],phase:previous.phase==='left'?'left':'waiting',reason:'GPS je zastaralá nebo nepřesná.'});return;
   }
-  const vehicleGap=vehicle?distanceMeters(gps.lat,gps.lon,vehicle[1],vehicle[0]):Infinity;
-  if(!vehicle||vehicleAge===null||vehicleAge>LIMITS.maxVehicleAge||vehicleGap>LIMITS.maxVehicleDistance){
-   remember({...previous,lastTimestamp:gps.timestamp,samples:[],phase:previous.phase==='left'?'left':'waiting',reason:'Poloha telefonu není ověřena polohou vozidla.'});return;
+  if(!paired||!vehicle||vehicleAge===null||vehicleAge>LIMITS.maxVehicleAge){
+   remember({...previous,lastTimestamp:gps.timestamp,samples:[],phase:previous.phase==='left'?'left':'waiting',reason:'Telefon není spárovaný s tramvají.'});return;
   }
   const nearest=getNearestStop(gps,stops,previous.displayIndex??baseIndex);
   const atStop=nearest&&nearest.distance<=LIMITS.approachRadius;
