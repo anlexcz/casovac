@@ -96,14 +96,15 @@ function App(){
  const vehicleCoords:[number,number]|null=Array.isArray(coords)&&coords.length>=2&&Number.isFinite(Number(coords[0]))&&Number.isFinite(Number(coords[1]))?[Number(coords[0]),Number(coords[1])]:null;
  const nextStopId=text(path(chosen,'properties.last_position.next_stop.id')??path(chosen,'properties.last_position.next_stop'));
  const pos=usePosition(trip.stops,tripId,nextStopId,gps,vehicleCoords,age,now);
- const position=manual??pos.confirmedIndex??(pos.nextIndex>=0?pos.nextIndex:null);
+ const position=manual??pos.confirmedIndex??pos.baseIndex;
  const current=position!==null?trip.stops[position]:undefined;
  const next=pos.nextIndex>=0?trip.stops[pos.nextIndex]:position!==null?trip.stops[position+1]:undefined;
  const departure=current?.departure||current?.arrival||'';
- const seconds=age!==null&&age<50?countdownSeconds(departure,now):null;
+ const seconds=age!==null&&age<50&&position!==null?countdownSeconds(departure,now):null;
  const delay=Number(path(chosen,'properties.last_position.delay.actual'));
  const validDelay=chosen&&Number.isFinite(delay)&&path(chosen,'properties.last_position.delay.actual')!==null&&path(chosen,'properties.last_position.delay.actual')!==undefined;
  const destination=trip.headsign||'Směr nezjištěn';
+ const stopMode=manual!==null?'RUČNÍ VÝBĚR':pos.confirmedIndex!==null?'OVĚŘENO GPS':pos.source==='id'?'PODLE GOLEMIA':pos.source==='vehicle'?'ODHAD PODLE VOZIDLA':pos.source==='gps'?'ODHAD PODLE GPS':'POLOHA NEURČENA';
  const state=active?(error?'Chyba připojení':age===null?'Připojování':age>=50?'Zastaralá data':chosen?'Sledování aktivní':'Pořadí nenalezeno'):'Připraveno';
  const nearby=useMemo(()=>{
   if(!current)return [];
@@ -148,15 +149,15 @@ function App(){
    </div>
    {chosen&&trip.stops.length?<>
     <div className="focusArea">
-     <div className="eyebrow">ZASTÁVKA {manual!==null?'· RUČNÍ VÝBĚR':pos.confirmedIndex!==null?'· OVĚŘENO GPS':'· PODLE GOLEMIA'}</div>
+     <div className="eyebrow">ZASTÁVKA · {stopMode}</div>
      <div className="focusName">{current?.name??'Neznámá zastávka'}</div>
-     <div className="focusSubtitle">Další dle Golemia: {next?.name??'Neznámá zastávka'}</div>
+     <div className="focusSubtitle">{pos.source==='id'?'Další dle Golemia':'Navazující zastávka · orientačně'}: {next?.name??'Neznámá zastávka'}</div>
     </div>
     <div className="timerPanel"><div className="eyebrow">{seconds===null?'ČAS NENÍ OVĚŘENÝ':seconds<0?'OD PLÁNOVANÉHO ODJEZDU UPLYNULO':'DO PLÁNOVANÉHO ODJEZDU'}</div>
      <div className="timerNumbers">{formatCountdown(seconds)}</div>
      <div className="timerFooter"><span>Odjezd JŘ <b>{formatStopTime(departure)}</b></span><span>Zpoždění <b>{validDelay?(delay>=0?'+':'')+Math.round(delay/60)+' min':'—'}</b></span></div>
     </div>
-    <p className="safetyLine">Orientační časový údaj. Není pokynem k odjezdu.</p>
+    <p className="safetyLine">{pos.source!=='id'&&manual===null?'Zastávka je odhadnuta podle polohy, ověř ji podle skutečné situace. ':''}Orientační časový údaj. Není pokynem k odjezdu.</p>
    </>:<div className="emptyState">{trip.loading||loading?'Načítám údaje spoje…':chosen?(trip.error||'Čekám na zastávky tripu.'):'Pořadí nelze jednoznačně přiřadit. Otevři diagnostiku.'}</div>}
   </section>}
 
