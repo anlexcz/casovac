@@ -107,9 +107,12 @@ export function useRecorder(){
   const feature=args.vehicle as {geometry?:{coordinates?:unknown}}|null;
   const c=feature?.geometry?.coordinates;
   const metres=args.gps&&Array.isArray(c)&&c.length>=2?distanceMeters(args.gps.lat,args.gps.lon,Number(c[1]),Number(c[0])):null;
+  const age=args.gps?args.responseAt-args.gps.timestamp:null;
+  const gpsReliable=!!args.gps&&age!==null&&age>=-10000&&age<=15000&&args.gps.accuracy<=35;
   append('api',{requestStartedAt:new Date(args.requestStartedAt).toISOString(),responseAt:new Date(args.responseAt).toISOString(),
    durationMs:args.responseAt-args.requestStartedAt,status:args.responseStatus,matchingCount:args.matchingCount,
-   gpsMode:!args.gps?'absent':metres!==null&&metres<=250?'near':'remote',phoneVehicleDistanceM:metres,
+   gpsMode:!args.gps?'absent':!gpsReliable?'stale_or_inaccurate':metres!==null&&metres<=250?'near':'remote',
+   phoneGpsAgeMs:age,phoneAccuracyM:args.gps?.accuracy??null,phoneVehicleDistanceM:metres,
    selectedVehicleSource:args.source,vehicle:args.vehicle});
  },[append]);
  const apiError=useCallback((line:string,order:string,status:string,message:string)=>{
