@@ -229,3 +229,23 @@
  .boardStack>.upcomingStop>.upcomingButton{min-height:41px;padding:9px var(--time-edge)}
  .departingStop .scheduledTime{font-size:13px}
 }
+
+/* Centralized route/order picker */
+.chooserModal{max-height:min(82dvh,720px);display:flex;flex-direction:column;gap:12px}
+.chooserHeading{align-items:flex-start}
+.chooserHeading .hint{margin:5px 0 0}
+.chooserModal #orderInput{flex:0 0 auto;font-size:17px}
+.chooserResults{min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.chooserCaption{font-size:12px;font-weight:650;color:#aeb8c4;margin:5px 0 10px}
+.chooserRow{width:100%;display:flex;align-items:center;gap:10px;min-height:55px;padding:12px;background:#1a1f26;border:1px solid #353b44;border-radius:10px;margin-bottom:7px;text-align:left}
+.chooserRow:hover,.chooserRow:focus-visible{border-color:#ff3636;background:#292e38}
+.chooserId{display:inline-flex;align-items:baseline;gap:0;flex:0 0 auto;color:#b2beca;font-size:17px;font-variant-numeric:tabular-nums}
+.chooserId strong{font-weight:850;color:#fff;font-size:19px}
+.chooserVehicle{color:#aeb8c4;font-size:13px;white-space:nowrap}
+.chooserStop{color:#b7c1cc;font-size:12px;text-align:right;margin-left:auto;min-width:0;overflow-wrap:anywhere}
+.chooserMissing{border:1px solid #49515d;background:#252a32;border-radius:11px;padding:15px}
+.chooserMissing strong{font-size:15px}
+.chooserMissing .hint{margin:10px 0}
+.chooserMissing .full{margin-top:10px;white-space:normal}
+.chooserModal .alert{margin:0}
+@media(max-width:420px){.chooserModal{padding:16px}.chooserRow{gap:7px;padding:10px}.chooserStop{font-size:11px}.chooserVehicle{font-size:12px}}
