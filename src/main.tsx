@@ -93,7 +93,7 @@ function App(){
   if(!editing||!lookupLine||!token.trim())return;
   let alive=true;const abort=new AbortController();
   async function load(){
-   setLookup({line:lookupLine,items:[],error:'',loading:true});
+   setLookup(previous=>({line:lookupLine,items:previous.line===lookupLine?previous.items:[],error:'',loading:true}));
    try{
     const url=new URL(API);url.searchParams.set('routeShortName',lookupLine);
     url.searchParams.set('includeNotTracking','true');url.searchParams.set('limit','1000');
@@ -182,7 +182,6 @@ function App(){
    try{
     const url=new URL(API);url.searchParams.set('routeShortName',active![0]);url.searchParams.set('limit','1000');
     url.searchParams.set('includeNotTracking','true');
-    const headers={'X-Access-Token':token.trim()};
     const data:unknown=await golemioJson<unknown>(url.toString(),token.trim(),12000);
     if(!alive||controller.signal.aborted)return;
     if(!data||typeof data!=='object'||!Array.isArray((data as Obj).features))throw Error('Neplatná odpověď živých poloh');
