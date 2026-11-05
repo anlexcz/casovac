@@ -80,6 +80,8 @@ function App(){
  const [gps,setGps]=useState<GpsFix|null>(null);
  const [gpsError,setGpsError]=useState('');
  const requestRef=useRef(0);
+ const handoffGuardRef=useRef(lastHandoff);
+ handoffGuardRef.current=lastHandoff;
  const recorder=useRecorder();
  const gpsRef=useRef<GpsFix|null>(null);
  gpsRef.current=gps;
@@ -237,7 +239,11 @@ function App(){
        start:path(feature,'properties.trip.start_timestamp')
      }));
      selectedResult=selectTrip(fetched,active![0],active![1],Date.now(),known?.vehicle);
-     const selected=selectedResult.feature;
+     const proposed=selectedResult.feature;
+     const handoffGuard=handoffGuardRef.current;
+     const selected=proposed&&handoffGuard&&
+      handoffGuard.to===active!.join('/')&&vehicleId(proposed)!==handoffGuard.vehicle?
+      null:proposed;
      const candidates=!selected?fetched.map(feature=>({
        order:orderOf(feature),vehicle:vehicleId(feature),tripId:selectedTripId(feature),
        route:path(feature,'properties.trip.gtfs.route_short_name'),state:path(feature,'properties.last_position.state_position'),
@@ -274,7 +280,9 @@ function App(){
 
  const resolved=active?selectTrip(features,active[0],active[1],now,lastSeen?.vehicle):null;
  const matches=resolved?.matches??[];
- const chosen=selectedTrip?features.find(f=>selectedTripId(f)===selectedTrip)??null:resolved?.feature??null;
+ const candidateFeature=selectedTrip?features.find(f=>selectedTripId(f)===selectedTrip)??null:resolved?.feature??null;
+ const chosen=candidateFeature&&lastHandoff&&active?.join('/')===lastHandoff.to&&
+  vehicleId(candidateFeature)!==lastHandoff.vehicle?null:candidateFeature;
  const chainRecordRef=useRef(recorder.chain);
  chainRecordRef.current=recorder.chain;
  const chainRecord=useRef((value:unknown)=>{
@@ -359,8 +367,12 @@ function App(){
   remote,progress:remoteProgress,gpsDeparture:departureDetection,
   stopsCount:trip.stops.length,apiAge:age,now,sourceTripState:lifecycle
  });
+ const successorActive=plannedHandoff?.next.state==='at_stop'||plannedHandoff?.next.state==='on_track';
+ const successorStart=plannedHandoff?Date.parse(String(plannedHandoff.next.start)):NaN;
+ const alreadyMoved=successorActive&&Number.isFinite(successorStart)&&
+  successorStart<=now+120000&&successorStart>=now-2*3600000;
  const handoffReady=!!active&&!!chosen&&!!plannedHandoff&&
-  continuity.ok&&departureEvidence.ok&&
+  continuity.ok&&(departureEvidence.ok||alreadyMoved)&&
   nextTrip.tripId===plannedHandoff.next.tripId&&!nextTrip.loading&&
   trip.tripId===tripId&&trip.stops.length>1&&manual===null;
  useEffect(()=>{
@@ -370,7 +382,7 @@ function App(){
   if(currentVehicle!==next.vehicle||!next.line||!next.order||!next.tripId)return;
   const target:[string,string]=[next.line,next.order];
   const from=active.join('/');
-  const reason=departureEvidence.reason+' '+continuity.reason;
+  const reason=(alreadyMoved&&!departureEvidence.ok?'Navazující trip je již aktivní.':departureEvidence.reason)+' '+continuity.reason;
   // Prepared trip comes from the other line's live vehicle snapshot.
   const synthetic:Feature={
    properties:{trip:next.rawTrip as Obj,
@@ -410,8 +422,9 @@ function App(){
   telemetryAge===null?'Čas měření polohy není dostupný':
   'Stáří polohy '+telemetryAge+' sekund';
  useEffect(()=>{
-  const recordActive=recorder.session?.state==='recording'&&active&&
-   recorder.session.target.line===active[0]&&recorder.session.target.order===active[1];
+  const recordActive=recorder.session?.state==='recording'&&active&&(
+   recorder.session.target.line===active[0]&&recorder.session.target.order===active[1]||
+   recorder.session.aliases?.includes(active.join('/')));
   if(!recordActive){lastDecisionRef.current='';return;}
   const summary={tripId,vehicle:chosen?vehicleId(chosen):null,queryMode,
    mode:onboard.mode,paired:compatible,gap:onboard.gap,routeGap:onboard.routeGap,
