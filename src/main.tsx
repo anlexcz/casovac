@@ -7,6 +7,7 @@ import {useTripData,countdownSeconds} from './tripData';
 import {useChooserStops,chooserStop} from './chooserStops';
 import type {ChooserTarget} from './chooserStops';
 import {golemioJson} from './golemioClient';
+import {useChainDiagnostics} from './chainDiagnostics';
 import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
 import {useRecorder} from './recorder';
@@ -272,6 +273,20 @@ function App(){
  const resolved=active?selectTrip(features,active[0],active[1],now,lastSeen?.vehicle):null;
  const matches=resolved?.matches??[];
  const chosen=selectedTrip?features.find(f=>selectedTripId(f)===selectedTrip)??null:resolved?.feature??null;
+ const chainRecordRef=useRef(recorder.chain);
+ chainRecordRef.current=recorder.chain;
+ const chainRecord=useRef((value:unknown)=>{
+  const target=chainTargetRef.current;
+  if(target)chainRecordRef.current(target[0],target[1],value);
+ }).current;
+ const chainTargetRef=useRef<[string,string]|null>(active);
+ chainTargetRef.current=active;
+ const chainDiagnostic=useChainDiagnostics({
+  active,knownVehicle:chosen?vehicleId(chosen):lastSeen?.vehicle??'',
+  token:token.trim(),
+  enabled:diagnostics||recorder.session?.state==='recording',
+  primaryFeatures:features,record:chainRecord
+ });
  const tripId=chosen?selectedTripId(chosen):'';
  const trip=useTripData(tripId,token.trim());
  const age=lastFetch===null?null:Math.max(0,Math.floor((now-lastFetch)/1000));
@@ -451,7 +466,7 @@ function App(){
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
   <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
-   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} remoteProgress={remoteProgress} lastSeen={lastSeen} relatedVehicle={relatedVehicle} recorder={recorder}/>
+   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} remoteProgress={remoteProgress} lastSeen={lastSeen} relatedVehicle={relatedVehicle} chainDiagnostic={chainDiagnostic} recorder={recorder}/>
   </div>
 
   <button className="debugFab" onClick={()=>setDiagnostics(v=>!v)} aria-label={diagnostics?'Zavřít diagnostiku':'Otevřít diagnostiku'} title="Diagnostika">{diagnostics?'×':'⌘'}</button>
