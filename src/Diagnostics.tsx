@@ -1,4 +1,5 @@
 import type {RemoteProgress} from './remoteProgress';
+import type {ChainSnapshot} from './chainDiagnostics';
 import type {LastSeen} from './lastSeen';
 import type {OnboardDecision} from './onboard';
 import type {RemoteState} from './remoteTracking';
@@ -21,11 +22,12 @@ type Props={
  remote:RemoteState;remoteProgress:RemoteProgress;onboard:boolean;onboardDecision:OnboardDecision;
  terminalWaiting:boolean;terminalName:string|null;queryMode:string;terminalCandidates:unknown[];
  lastSeen:LastSeen|null;relatedVehicle:{vehicle:string;route:string;order:string;state:string;time:number}|null;
+ chainDiagnostic:ChainSnapshot|null;
  recorder:ReturnType<typeof useRecorder>;
 };
 const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
-export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,recorder}:Props){
+export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,chainDiagnostic,recorder}:Props){
  const stops:Stop[]=trip.stops;
  const [copyState,setCopyState]=useState('');
  const [includePhone,setIncludePhone]=useState(false);
@@ -67,6 +69,47 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
   </div>
   {recorder.error&&<p className="warn" role="alert">{recorder.error}</p>}
   {recorder.session&&<p className="hint">Export JSON neobsahuje API token. {recorder.session.options.includePhoneCoordinates?'Souřadnice telefonu jsou součástí exportu.':'Souřadnice telefonu nejsou součástí exportu.'} Po stažení lze soubor rovnou nahrát do chatu.</p>}
+ </section>
+ <section className="panel" aria-label="Diagnostika řetězení linek">
+  <div className="row"><h2>Řetězení linek · živé tripy</h2>
+   <span className={'status '+(chainDiagnostic&&!chainDiagnostic.error?'good':'')}>
+    {chainDiagnostic?.loading?'Kontroluji':chainDiagnostic?.error?'Chyba':chainDiagnostic?.time?'Načteno':'Čekám'}
+   </span>
+  </div>
+  <p className="hint">Experimentální diagnostika, nikoliv automatické přepínání. Pro 5/6 a 9/10 kontroluje každých 40 s
+   také druhou linku a hledá všechny její záznamy se <strong>stejným evidenčním číslem</strong>.
+   Používá includeNotTracking=true, takže lze zachytit i trip před zahájením jízdy. Pokud zapneš
+   „Záznam testovací jízdy“, každý výsledek se přidá do exportovaného JSON.</p>
+  {!active?<p className="hint">Nejprve vyber linku a pořadí.</p>:
+   !['5','6','9','10'].includes(active[0])?<p className="hint">Prozatím měříme dvojice linek 5 ↔ 6 a 9 ↔ 10.</p>:
+   !chainDiagnostic?<p className="hint">Čekám na identifikaci vozu v živých datech. Zkontroluj API klíč a dostupnost pořadí.</p>:
+   <>
+    <div className="details">
+     <div><small>SLEDOVÁNO</small><strong>{chainDiagnostic.target} · #{chainDiagnostic.vehicle}</strong></div>
+     <div><small>NÁVAZNÁ LINKA</small><strong>{chainDiagnostic.relatedLine}</strong></div>
+     <div><small>POSLEDNÍ KONTROLA</small><strong>{chainDiagnostic.time?new Date(chainDiagnostic.time).toLocaleTimeString('cs-CZ'):'—'}</strong></div>
+     <div><small>ZÁZNAMŮ DRUHÉ LINKY CELKEM</small><strong>{chainDiagnostic.relatedTotal}</strong></div>
+     <div><small>SHODNÉ VOZIDLO NA DRUHÉ LINCE</small><strong>{chainDiagnostic.related.length} záznamů</strong></div>
+     <div><small>SHODNÉ VOZIDLO NA PŮVODNÍ LINCE</small><strong>{chainDiagnostic.primary.length} záznamů</strong></div>
+    </div>
+    {chainDiagnostic.error&&<p className="warn" role="status">{chainDiagnostic.error}</p>}
+    {chainDiagnostic.related.length===0&&!chainDiagnostic.loading&&!chainDiagnostic.error&&
+     <p className="hint">Na druhé lince nebyl ve vzorku nalezen stejný vůz.
+     Neznamená to, že nemá plánovaný další trip – Golemio jej nemusí posílat dopředu.</p>}
+    {[...chainDiagnostic.primary,...chainDiagnostic.related].map((f,i)=>
+     <div key={f.source+'-'+f.tripId+'-'+i} className="details">
+      <div><small>LINKA / POŘADÍ</small><strong>{f.line}/{f.order||'—'}</strong></div>
+      <div><small>STAV TRIPU</small><strong>{f.state||'—'}</strong></div>
+      <div><small>TRIP ID</small><strong>{f.tripId||'—'}</strong></div>
+      <div><small>START</small><strong>{value(f.start)}</strong></div>
+      <div><small>ZDROJ</small><strong>{f.source}</strong></div>
+      <div><small>VOZIDLO</small><strong>#{f.vehicle}</strong></div>
+     </div>
+    )}
+    <details><summary>Kompletní odpovědi tripů sledovaného vozu (bez API klíče)</summary>
+     <pre>{JSON.stringify(chainDiagnostic,null,2)}</pre>
+    </details>
+   </>}
  </section>
  <section className="panel remotePanel" aria-label="Vzdálené sledování">
   <div className="row"><h2>Sledování vozidla</h2><span className={'status '+(onboard?'good':'')}>{onboard?'GPS na palubě':'Vzdálený režim'}</span></div>
