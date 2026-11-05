@@ -6,6 +6,7 @@ import {selectTrip,isBeforeTrip,stateOf,terminalTrip} from './tripSelection';
 import {useTripData,countdownSeconds} from './tripData';
 import {useChooserStops,chooserStop} from './chooserStops';
 import type {ChooserTarget} from './chooserStops';
+import {golemioJson} from './golemioClient';
 import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
 import {useRecorder} from './recorder';
@@ -96,18 +97,19 @@ function App(){
    try{
     const url=new URL(API);url.searchParams.set('routeShortName',lookupLine);
     url.searchParams.set('includeNotTracking','true');url.searchParams.set('limit','1000');
-    const response=await fetch(url,{headers:{'X-Access-Token':token.trim()},signal:abort.signal,cache:'no-store'});
-    if(!response.ok)throw Error('Golemio HTTP '+response.status);
-    const body:unknown=await response.json();
+    const body:unknown=await golemioJson<unknown>(url.toString(),token.trim(),12000);
     if(!body||typeof body!=='object'||!Array.isArray((body as Obj).features))throw Error('Neplatná odpověď');
     if(alive)setLookup({line:lookupLine,items:(body as {features:Feature[]}).features,error:'',loading:false});
-   }catch(e){if(alive&&!abort.signal.aborted)setLookup({line:lookupLine,items:[],error:String(e),loading:false});}
+   }catch(e){if(alive&&!abort.signal.aborted)setLookup(previous=>({
+    line:lookupLine,items:previous.line===lookupLine?previous.items:[],
+    error:e instanceof Error?e.message:String(e),loading:false
+   }));}
   }
-  const delay=setTimeout(()=>void load(),250),interval=setInterval(()=>void load(),20000);
+  const delay=setTimeout(()=>void load(),550),interval=setInterval(()=>void load(),45000);
   return()=>{alive=false;abort.abort();clearTimeout(delay);clearInterval(interval);};
  },[editing,lookupLine,token]);
  const available=new Map<string,{line:string;order:string;car:string;target:ChooserTarget}>();
- if(lookup.line===lookupLine&&!lookup.loading&&!lookup.error){
+ if(lookup.line===lookupLine){
   const groups=new Map<string,Feature[]>();
   for(const f of lookup.items){
    const line=String(path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name')??'');
@@ -141,7 +143,7 @@ function App(){
  const stopNames=useChooserStops([...available.values()].map(v=>v.target),token.trim(),editing&&!!lookupLine);
  const lookupOrder=parseOrder(query);
  const results=[...available.values()].filter(item=>!lookupOrder||normalize(item.order)===normalize(lookupOrder[1])).sort((a,b)=>Number(a.order)-Number(b.order));
- const lookupReady=lookup.line===lookupLine&&!lookup.loading&&!lookup.error;
+ const lookupReady=lookup.line===lookupLine&&!lookup.loading;
  useEffect(()=>{if(active&&token.trim()){
   // Refresh only when a route is actively selected; do not keep extending on refresh.
   const raw=stored(ACTIVE_KEY);let storedRoute:null|{line:string;order:string;expires:number}=null;
@@ -181,9 +183,8 @@ function App(){
     const url=new URL(API);url.searchParams.set('routeShortName',active![0]);url.searchParams.set('limit','1000');
     url.searchParams.set('includeNotTracking','true');
     const headers={'X-Access-Token':token.trim()};
-    const response=await fetch(url,{headers,signal:controller.signal,cache:'no-store'});
-    if(!response.ok)throw Error('Golemio HTTP '+response.status);
-    const data:unknown=await response.json();
+    const data:unknown=await golemioJson<unknown>(url.toString(),token.trim(),12000);
+    if(!alive||controller.signal.aborted)return;
     if(!data||typeof data!=='object'||!Array.isArray((data as Obj).features))throw Error('Neplatná odpověď živých poloh');
     if(alive&&generation===requestRef.current){
      const standard=(data as {features:Feature[]}).features;
@@ -204,9 +205,8 @@ function App(){
        const globalUrl=new URL(API);
        globalUrl.searchParams.set('includeNotTracking','true');
        globalUrl.searchParams.set('limit','3000');
-       const broader=await fetch(globalUrl,{headers,signal:controller.signal,cache:'no-store'});
-       if(broader.ok){
-        const body:unknown=await broader.json();
+       const body:unknown=await golemioJson<unknown>(globalUrl.toString(),token.trim(),30000);
+       if(!controller.signal.aborted){
         const all=body&&typeof body==='object'&&Array.isArray((body as Obj).features)?
          (body as {features:Feature[]}).features:[];
         const sameCar=all.filter(item=>vehicleId(item)===known.vehicle);
@@ -221,7 +221,7 @@ function App(){
           fetched=[...fetched,car];matching=[car];queryMode='knownVehicle';
          }else queryMode='knownVehicleOnOtherTrip';
         }else queryMode='globalScanNoMatch';
-       }else queryMode='globalScanHTTP'+broader.status;
+       }
       }catch(e){if(controller.signal.aborted)throw e;queryMode='globalScanError';}
      }
      if(related)setRelatedVehicle(related);
@@ -243,7 +243,7 @@ function App(){
        nextStop:path(feature,'properties.last_position.next_stop'),
        lastStop:path(feature,'properties.last_position.last_stop')
      })):null;
-     recordApiRef.current({line:active![0],order:active![1],responseStatus:response.status,
+     recordApiRef.current({line:active![0],order:active![1],responseStatus:200,
       requestStartedAt,responseAt:Date.now(),matchingCount:matching.length,vehicle:selected,gps:gpsRef.current,
       source:selected?'unique_order':'ambiguous_or_missing',candidateVehicles:candidates,queryMode});
      if(selected){
@@ -400,13 +400,13 @@ function App(){
     {!token.trim()?<p className="hint">Pro vyhledávání je potřeba API klíč Golemio v nastavení.</p>:
      !lookupLine?<p className="hint">Zadej číslo linky nebo konkrétní pořadí.</p>:
      <div className="chooserResults">
-      <p className="chooserCaption">{!lookupReady&&!lookup.error?'Načítám dostupná pořadí…':lookup.error?'Nepodařilo se načíst data':lookupOrder?'Výsledek vyhledávání':'LINKA '+lookupLine+' · '+results.length+' POŘADÍ'}</p>
+      <p className="chooserCaption">{!lookupReady&&!results.length?'Načítám dostupná pořadí…':lookupOrder?'Výsledek vyhledávání':'LINKA '+lookupLine+' · '+results.length+' POŘADÍ'}</p>
       {lookup.line===lookupLine&&lookup.error&&<p className="hint" role="status">{lookup.error}</p>}
       {lookupReady&&results.map(item=><button type="button" className="chooserRow" key={item.line+'/'+item.order} onClick={()=>start(item.line+'/'+item.order)}>
        <span className="chooserId"><span>{item.line}/</span><strong>{item.order}</strong></span><span className="chooserVehicle">#{item.car}</span><span className="chooserStop"><svg className="chooserStopIcon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="5" y="3" width="14" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M5 10h14M8 7h2m4 0h2M8 19l-2 3m10-3 2 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg><span>{chooserStop(item.target,stopNames)}</span></span>
       </button>)}
-      {lookupReady&&lookupOrder&&results.length===0&&<div className="chooserMissing"><strong>Pořadí {lookupOrder[0]}/{lookupOrder[1]} není momentálně dostupné.</strong><p className="hint">Můžeš opravit zadání nebo pořadí sledovat a počkat na data.</p><button className="primary full" onClick={()=>start()}>Sledovat {lookupOrder[0]}/{lookupOrder[1]} a čekat na data</button></div>}
-      {lookupReady&&!lookupOrder&&results.length===0&&<p className="hint">Aktuálně nejsou dostupná žádná pořadí. Konkrétní pořadí můžeš zadat ručně.</p>}
+      {lookupReady&&!lookup.error&&lookupOrder&&results.length===0&&<div className="chooserMissing"><strong>Pořadí {lookupOrder[0]}/{lookupOrder[1]} není momentálně dostupné.</strong><p className="hint">Můžeš opravit zadání nebo pořadí sledovat a počkat na data.</p><button className="primary full" onClick={()=>start()}>Sledovat {lookupOrder[0]}/{lookupOrder[1]} a čekat na data</button></div>}
+      {lookupReady&&!lookup.error&&!lookupOrder&&results.length===0&&<p className="hint">Aktuálně nejsou dostupná žádná pořadí. Konkrétní pořadí můžeš zadat ručně.</p>}
      </div>}
    </section>
   </div>}
@@ -436,7 +436,7 @@ function App(){
       onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}/>
      :<div className="compactEmpty">
        {loading||trip.loading?'Načítání…':chosen?trip.error||'Jízdní řád nedostupný':lastSeen?
-       'Poslední vůz #'+lastSeen.vehicle+' · '+new Date(lastSeen.lastSeenAt).toLocaleTimeString('cs-CZ'):'Pořadí nenalezeno'}
+       'Poslední vůz #'+lastSeen.vehicle+' · '+new Date(lastSeen.lastSeenAt).toLocaleTimeString('cs-CZ'):error?'Data jsou dočasně nedostupná':'Pořadí nenalezeno'}
       </div>}
   </section>}
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
