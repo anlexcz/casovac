@@ -11,7 +11,7 @@ export type RecorderSession={
  schema:'casovac-diagnostics-v1';id:string;startedAt:string;endedAt:string|null;
  target:{line:string;order:string};
  options:{includePhoneCoordinates:boolean;pollMs:number;testScenario?:'gps-off'|'gps-remote'|'gps-onboard'};
- events:RecordEvent[];state:'recording'|'stopped';limits:{maxEvents:number};
+ events:RecordEvent[];state:'recording'|'stopped';limits:{maxEvents:number};aliases?:string[];
 };
 const DATABASE='casovac-diagnostics-v1',STORE='recordings',KEY='current',MAX=2400;
 function database():Promise<IDBDatabase>{
@@ -104,7 +104,8 @@ export function useRecorder(){
  },[safeSave]);
  const api=useCallback((args:{line:string;order:string;responseStatus:number;requestStartedAt:number;responseAt:number;
   matchingCount:number;vehicle:unknown;gps:GpsFix|null;source:string;candidateVehicles?:unknown;queryMode?:string})=>{
-  const old=ref.current;if(old?.state!=='recording'||old.target.line!==args.line||old.target.order!==args.order)return;
+  const old=ref.current;if(old?.state!=='recording'||!(old.target.line===args.line&&old.target.order===args.order)&&
+   !old.aliases?.includes(args.line+'/'+args.order))return;
   const feature=args.vehicle as {geometry?:{coordinates?:unknown}}|null;
   const c=feature?.geometry?.coordinates;
   const metres=args.gps&&Array.isArray(c)&&c.length>=2?distanceMeters(args.gps.lat,args.gps.lon,Number(c[1]),Number(c[0])):null;
@@ -118,7 +119,8 @@ export function useRecorder(){
    candidateVehicles:args.candidateVehicles??null,vehicle:args.vehicle});
  },[append]);
  const apiError=useCallback((line:string,order:string,status:string,message:string)=>{
-  if(ref.current?.target.line===line&&ref.current.target.order===order)append('api_error',{status,message});
+  if(ref.current&&(ref.current.target.line===line&&ref.current.target.order===order||
+   ref.current.aliases?.includes(line+'/'+order)))append('api_error',{status,message});
  },[append]);
  const trip=useCallback((tripId:string,stops:unknown,raw:unknown)=>{
   const old=ref.current;if(old?.state!=='recording'||old.events.some(e=>e.kind==='trip'&&(e.data as {tripId?:string}).tripId===tripId))return;
@@ -138,13 +140,22 @@ export function useRecorder(){
   lastGpsWrite.current=fix.timestamp;
   append('gps',{...fix,recordingMode:onboard?'onboard':'remote'});
  },[append]);
+ const follow=useCallback((line:string,order:string,tripId:string,reason:string)=>{
+  const old=ref.current;
+  if(old?.state!=='recording')return;
+  const target=line+'/'+order;
+  if(!old.aliases?.includes(target))safeSave({...old,aliases:[...(old.aliases??[]),target]});
+  // Allow the recording to continue across the line switch.
+  append('note',{message:'Řetězení: '+target+' · '+tripId+' · '+reason});
+ },[append,safeSave]);
  const decision=useCallback((data:unknown)=>append('decision',data),[append]);
  const chain=useCallback((line:string,order:string,data:unknown)=>{
   const current=ref.current;
-  if(current?.state==='recording'&&current.target.line===line&&current.target.order===order)
+  if(current?.state==='recording'&&(current.target.line===line&&current.target.order===order||
+   current.aliases?.includes(line+'/'+order)))
    append('chain',data);
  },[append]);
  const note=useCallback((message:string)=>{if(message.trim())append('note',{message:message.trim()});},[append]);
  const download=useCallback(()=>{const value=ref.current;if(value)exportFile(value);},[]);
- return {session,ready,error,start,stop,discard,download,api,apiError,trip,gps,note,decision,chain};
+ return {session,ready,error,start,stop,discard,download,api,apiError,trip,gps,note,decision,chain,follow};
 }
