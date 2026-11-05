@@ -86,6 +86,7 @@ function App(){
  const [gps,setGps]=useState<GpsFix|null>(null);
  const [gpsError,setGpsError]=useState('');
  const requestRef=useRef(0);
+ const handoffFallbackRef=useRef<{target:string;vehicle:string;feature:Feature;until:number}|null>(null);
  const handoffGuardRef=useRef(lastHandoff);
  handoffGuardRef.current=lastHandoff;
  const recorder=useRecorder();
@@ -200,6 +201,15 @@ function App(){
     if(alive&&generation===requestRef.current){
      const standard=(data as {features:Feature[]}).features;
      let fetched=standard;
+     // Keep the prepared successor visible while Golemio still reports the old line.
+     // Never treat this cached object as a fresh observation.
+     const fallback=handoffFallbackRef.current;
+     if(fallback&&fallback.target===active!.join('/')&&Date.now()<fallback.until){
+      const liveSameCar=standard.some(f=>vehicleId(f)===fallback.vehicle&&
+       String(path(f,'properties.trip.gtfs.route_short_name')??'')===active![0]);
+      if(!liveSameCar)fetched=[...standard,fallback.feature];
+      else handoffFallbackRef.current=null;
+     }else if(fallback&&fallback.target===active!.join('/'))handoffFallbackRef.current=null;
      let selectedResult=selectTrip(fetched,active![0],active![1],Date.now(),
       readLastSeen(active![0],active![1])?.vehicle);
      let matching=selectedResult.matches;
@@ -260,8 +270,8 @@ function App(){
      })):null;
      recordApiRef.current({line:active![0],order:active![1],responseStatus:200,
       requestStartedAt,responseAt:Date.now(),matchingCount:matching.length,vehicle:selected,gps:gpsRef.current,
-      source:selected?'unique_order':'ambiguous_or_missing',candidateVehicles:candidates,queryMode});
-     if(selected){
+      source:selected?(selected===handoffFallbackRef.current?.feature?'handoff_pending':'unique_order'):'ambiguous_or_missing',candidateVehicles:candidates,queryMode});
+     if(selected&&selected!==handoffFallbackRef.current?.feature){
       const loc=selected.geometry?.coordinates;
       const coords=Array.isArray(loc)&&loc.length>=2?loc:null;
       const p=path(selected,'properties.last_position') as Obj|undefined;
@@ -402,6 +412,7 @@ function App(){
    lastStop:'',nextStop:'',state:next.state,route:next.line
   };
   saveLastSeen(remembered);
+  handoffFallbackRef.current={target:target.join('/'),vehicle:currentVehicle,feature:synthetic,until:Date.now()+180000};
   setLastHandoff({from,to:target.join('/'),vehicle:currentVehicle,tripId:next.tripId,reason,time:Date.now()});
   recorder.follow(next.line,next.order,next.tripId,reason);
   setSelectedTrip('');setManual(null);setExpanded(false);
@@ -456,7 +467,7 @@ function App(){
   const parsed=parseOrder(value);if(!parsed){setError('Zadej linku a pořadí, například 25/5.');return;}
   if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v Nastavení.');return;}
   setQuery(parsed[0]+'/'+parsed[1]);
-  setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);setLastHandoff(null);
+  setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);setLastHandoff(null);handoffFallbackRef.current=null;
   // Reuse the already retrieved line snapshot immediately on selection.
   // The running timer shares its Golemio URL and its 20-second cache.
   if(lookup.line===parsed[0]&&lookup.items.length){
@@ -469,7 +480,7 @@ function App(){
   setActive(parsed);
  }
  function forget(){
-  setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);setSettings(false);
+  setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setSelectedTrip(id);setManual(null);}
  function toggleGPS(){setGpsWanted(v=>!v);}
