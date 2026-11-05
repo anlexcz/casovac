@@ -1,79 +1,195 @@
-import TripPanel from './TripPanel';
-import React, { useEffect, useRef, useState } from 'react';
-import { createRoot } from 'react-dom/client';
+import {useEffect,useMemo,useRef,useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import Diagnostics from './Diagnostics';
+import {useTripData,formatStopTime,countdownSeconds,formatCountdown} from './tripData';
+import {usePosition} from './position';
+import type {GpsFix} from './position';
 import './style.css';
 
-type Json = Record<string, unknown>;
-type Feature = { type?: string; properties?: Json; geometry?: { coordinates?: unknown }; id?: unknown };
-type Gps = { lat:number; lon:number; accuracy:number; speed:number|null; timestamp:number };
-const API = 'https://api.golemio.cz/v2/vehiclepositions';
-const TOKEN_STORAGE_KEY='casovac:golemio-token:v1';
-const readStoredToken=():string=>{try{return window.localStorage.getItem(TOKEN_STORAGE_KEY)??'';}catch{return '';}};
-const field = (obj:unknown,path:string):unknown => path.split('.').reduce<unknown>((v,k)=>v && typeof v==='object' ? (v as Json)[k] : undefined,obj);
-const str=(v:unknown):string=>v===undefined||v===null?'—':String(v);
-const initial = (raw:string):[string,string]=>{const m=raw.trim().match(/^(\d{1,3})\s*\/\s*(\d{1,4})$/);if(!m)throw new Error('Zadej linku a pořadí ve formátu 25/5.');return [m[1],m[2]];};
-const tripId=(f:Feature)=>str(field(f,'properties.trip.gtfs.trip_id') ?? field(f,'properties.trip.trip_id'));
-const orderCandidates=(f:Feature)=>['trip.cis.order','trip.cis.order_number','trip.cis.sequence','trip.order','trip.order_number','trip.sequence','trip.sequence_id'].map(p=>({field:p,value:field(f.properties,p)})).filter(x=>x.value!==undefined&&x.value!==null&&x.value!=='');
-const vehicleId=(f:Feature)=>str(field(f,'properties.trip.vehicle_registration_number') ?? field(f,'properties.trip.vehicle.id') ?? field(f,'properties.trip.vehicle.registration_number') ?? field(f,'properties.trip.vehicle_id'));
-const stamp=(time:number|null)=>time?new Date(time).toLocaleTimeString('cs-CZ'):'—';
-const errText=(e:unknown)=>e instanceof Error?e.message:String(e);
+type Obj=Record<string,unknown>;
+type Feature={properties?:Obj;geometry?:{coordinates?:unknown}};
+const API='https://api.golemio.cz/v2/vehiclepositions';
+const TOKEN_KEY='casovac:golemio-token:v1';
+const ROUTE_KEY='casovac:last-order:v1';
+const GPS_KEY='casovac:gps-preferred:v1';
+const stored=(key:string):string=>{try{return localStorage.getItem(key)??'';}catch{return '';}};
+const save=(key:string,value:string)=>{try{if(value)localStorage.setItem(key,value);else localStorage.removeItem(key);return true;}catch{return false;}};
+const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Obj)[k]:undefined,obj);
+const text=(value:unknown):string=>value===undefined||value===null?'—':String(value);
+const selectedTripId=(f:Feature)=>text(path(f,'properties.trip.gtfs.trip_id')??path(f,'properties.trip.trip_id'));
+const vehicleId=(f:Feature)=>text(path(f,'properties.trip.vehicle_registration_number')??path(f,'properties.trip.vehicle.id')??path(f,'properties.trip.vehicle_id'));
+const orderOf=(f:Feature)=>path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??path(f,'properties.trip.order');
+const normalize=(v:unknown)=>String(v??'').replace(/^0+/,'')||'0';
+const parseOrder=(q:string):[string,string]|null=>{
+ const match=/^(\d{1,3})\s*\/\s*(\d{1,4})$/.exec(q.trim());
+ return match?[match[1],match[2]]:null;
+};
 function App(){
- const [token,setToken]=useState(readStoredToken); const [settings,setSettings]=useState(false); const [showToken,setShowToken]=useState(false);
- const [rememberToken,setRememberToken]=useState(()=>!!readStoredToken()); const [storageError,setStorageError]=useState('');
- const [query,setQuery]=useState('25/5'); const [active,setActive]=useState<[string,string]|null>(null);
- const [features,setFeatures]=useState<Feature[]>([]); const [selected,setSelected]=useState<string|null>(null);
- const [error,setError]=useState('');const [lastFetch,setLastFetch]=useState<number|null>(null);const [loading,setLoading]=useState(false);
- const [gps,setGps]=useState<Gps|null>(null);const [gpsError,setGpsError]=useState('');const [gpsOn,setGpsOn]=useState(false);
- const [now,setNow]=useState(Date.now()); const [rawOpen,setRawOpen]=useState(false);
- const fetchCounter=useRef(0); const gpsWatch=useRef<number|null>(null);
- useEffect(()=>{
-  try{
-   if(rememberToken&&token.trim())window.localStorage.setItem(TOKEN_STORAGE_KEY,token.trim());
-   else window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-   setStorageError('');
-  }catch{
-   setStorageError('Prohlížeč nepovolil místní uložení klíče. Po obnovení stránky může zmizet.');
-  }
- },[rememberToken,token]);
- function forgetToken(){
-  setRememberToken(false);setToken('');setActive(null);setFeatures([]);setSelected(null);
-  try{window.localStorage.removeItem(TOKEN_STORAGE_KEY);setStorageError('');}
-  catch{setStorageError('Uložený klíč se nepodařilo smazat. Zkontroluj úložiště webu v nastavení prohlížeče.');}
- }
+ const [token,setToken]=useState(()=>stored(TOKEN_KEY));
+ const [rememberToken,setRememberToken]=useState(()=>!!stored(TOKEN_KEY));
+ const [tokenVisible,setTokenVisible]=useState(false);
+ const [settings,setSettings]=useState(false);
+ const [query,setQuery]=useState(()=>stored(ROUTE_KEY));
+ const [active,setActive]=useState<[string,string]|null>(null);
+ const [diagnostics,setDiagnostics]=useState(false);
+ const [selectedTrip,setSelectedTrip]=useState('');
+ const [manual,setManual]=useState<number|null>(null);
+ const [expanded,setExpanded]=useState(false);
+ const [features,setFeatures]=useState<Feature[]>([]);
+ const [lastFetch,setLastFetch]=useState<number|null>(null);
+ const [loading,setLoading]=useState(false);
+ const [error,setError]=useState('');
+ const [now,setNow]=useState(Date.now());
+ const [gpsWanted,setGpsWanted]=useState(()=>stored(GPS_KEY)==='1');
+ const [gps,setGps]=useState<GpsFix|null>(null);
+ const [gpsError,setGpsError]=useState('');
+ const requestRef=useRef(0);
 
- useEffect(()=>{const t=window.setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(t);},[]);
- useEffect(()=>{if(!active||!token.trim())return;let cancelled=false;const controller=new AbortController();const serial=++fetchCounter.current;
- async function load(){if(cancelled)return;setLoading(true);setError('');const url=new URL(API);url.searchParams.set('routeShortName',active![0]);url.searchParams.set('limit','1000');
- try{const response=await fetch(url.toString(),{headers:{'X-Access-Token':token.trim()},signal:controller.signal,cache:'no-store'});if(!response.ok){const suffix=response.status===401||response.status===403?' – zkontroluj API klíč':response.status===429?' – překročen limit požadavků':'';throw new Error('Golemio HTTP '+response.status+suffix);}const json=await response.json() as {features?:unknown};if(!Array.isArray(json.features))throw new Error('API nevrátilo očekávaný GeoJSON seznam features.');if(cancelled||serial!==fetchCounter.current)return;setFeatures(json.features as Feature[]);setLastFetch(Date.now());}
- catch(e){if(!cancelled&&!(e instanceof DOMException&&e.name==='AbortError'))setError(errText(e)+'; případně zkontroluj CORS v konzoli prohlížeče.');}finally{if(!cancelled)setLoading(false);}}
- void load();const timer=window.setInterval(()=>void load(),20000);return()=>{cancelled=true;controller.abort();clearInterval(timer);};},[active,token]);
- useEffect(()=>()=>{if(gpsWatch.current!==null)navigator.geolocation.clearWatch(gpsWatch.current);},[]);
- function startGps(){if(!('geolocation' in navigator)){setGpsError('Prohlížeč nepodporuje geolokaci.');return;}setGpsError('');setGpsOn(true);gpsWatch.current=navigator.geolocation.watchPosition(p=>{setGps({lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy,speed:p.coords.speed,timestamp:p.timestamp});setGpsError('');},e=>setGpsError(e.message),{enableHighAccuracy:true,maximumAge:5000,timeout:20000});}
- function stopGps(){if(gpsWatch.current!==null)navigator.geolocation.clearWatch(gpsWatch.current);gpsWatch.current=null;setGpsOn(false);setGps(null);}
- function start(){try{const parsed=initial(query);if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v nastavení.');return;}setFeatures([]);setSelected(null);setLastFetch(null);setError('');setActive(parsed);}catch(e){setError(errText(e));}}
- const candidates=features.map((f,i)=>({f,id:tripId(f),key:String(i)+':'+tripId(f),order:orderCandidates(f)}));
- const matching=active?candidates.filter(c=>c.order.some(o=>String(o.value).replace(/^0+/,'')===active[1].replace(/^0+/,''))):[];
- const auto=matching.length===1?matching[0]:null;
- const chosen=candidates.find(c=>c.key===selected) ?? (selected?null:auto);
- const age=lastFetch===null?null:Math.floor((now-lastFetch)/1000);
- const gpsAge=gps?Math.floor((now-gps.timestamp)/1000):null;
- const coords=chosen?.f.geometry?.coordinates;const coordinates=Array.isArray(coords)&&coords.length>=2?coords:null;
- const info=chosen?.f.properties;
- return <main><header><div><span className="eyebrow">PID / PROVOZNÍ DIAGNOSTIKA</span><h1>ČASOVAČ<span className="dot">.</span></h1></div><button className="iconButton" onClick={()=>setSettings(true)} aria-label="Otevřít nastavení">⚙ Nastavení</button></header>
- <section className="panel"><label htmlFor="pair">LINKA / POŘADÍ</label><div className="search"><input id="pair" inputMode="text" value={query} placeholder="25/5" onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&start()}/><button className="primary" onClick={start}>Sledovat</button></div><p className="hint">Živá diagnostika. Odjezdy zatím nejsou vyhodnocovány.</p></section>
- {error&&<div className="alert" role="alert">{error}</div>}
- <section className="panel"><div className="row"><h2>Živá data {active?active.join('/'):''}</h2><span className={'status '+(error?'bad':age!==null&&age<50?'good':'')}>{loading?'Načítám…':age===null?'Neaktivní':age<50?'Online':'Zastaralá data'}</span></div><p className="hint">Poslední úspěšná aktualizace: {stamp(lastFetch)} {age===null?'':'('+age+' s zpět)'}. Obnova každých 20 s.</p>
- {active&&<><p>Na lince <b>{active[0]}</b> nalezeno <b>{features.length}</b> záznamů. Shoda pořadí <b>{active[1]}</b>: <b>{matching.length}</b>.</p><p className="hint">{matching.length===1&&!selected?'Jednoznačná shoda podle dostupného pole pořadí.': 'Automatická shoda není jednoznačná. Vyber vozidlo ručně; číslování pořadí je nutné ověřit v surových datech.'}</p><label htmlFor="vehicle">VÝBĚR VOZIDLA / TRIPU</label><select id="vehicle" value={selected??''} onChange={e=>setSelected(e.target.value||null)}><option value="">Automaticky podle pořadí (pokud je jednoznačné)</option>{candidates.map(c=><option key={c.key} value={c.key}>{vehicleId(c.f)} · {c.id} · pořadí: {c.order.map(v=>v.field+'='+v.value).join(', ')||'nezjištěno'}</option>)}</select>{features.length===1000&&<p className="warn">Dosažen limit 1000 výsledků; seznam může být neúplný.</p>}</>}
- {chosen&&<div className="details"><div><small>TRIP ID</small><strong>{chosen.id}</strong></div><div><small>VOZIDLO</small><strong>{vehicleId(chosen.f)}</strong></div><div><small>ZPOŽDĚNÍ</small><strong>{str(field(info,'last_position.delay.actual'))} s</strong></div><div><small>DALŠÍ ZASTÁVKA – ID</small><strong>{str(field(info,'last_position.next_stop.id')??field(info,'last_position.next_stop'))}</strong></div><div><small>POLOHA GOLEMIO</small><strong>{coordinates?coordinates.map(v=>Number(v).toFixed(5)).join(', '):'—'}</strong></div><div><small>POŘADÍ – MOŽNÁ POLE</small><strong>{chosen.order.map(o=>o.field+'='+o.value).join(', ')||'nenalezeno'}</strong></div></div>}
- <button className="quiet" onClick={()=>setRawOpen(v=>!v)}>{rawOpen?'Skrýt':'Zobrazit'} surová data vybraného záznamu</button>{rawOpen&&<pre>{JSON.stringify(chosen?.f??(features.length?features[0]:{message:'Zatím bez dat'}),null,2)}</pre>}</section>
- {chosen&&<TripPanel tripId={chosen.id} token={token.trim()} gps={gps} nextStopId={str(field(info,'last_position.next_stop.id')??field(info,'last_position.next_stop'))} now={now} vehicleCoords={coordinates&&Number.isFinite(Number(coordinates[0]))&&Number.isFinite(Number(coordinates[1]))?[Number(coordinates[0]),Number(coordinates[1])]:null} vehicleAge={age}/>}
- <section className="panel"><div className="row"><h2>GPS telefonu</h2><span className={'status '+(gps&&gpsAge!==null&&gpsAge<20?'good':'')}>{gpsOn?'Zapnuto':'Vypnuto'}</span></div><p className="hint">GPS se porovnává s vozidlem a zastávkami přímo v telefonu. Nic neodesíláme na vlastní server.</p><button onClick={gpsOn?stopGps:startGps} className={gpsOn?'quiet':'primary'}>{gpsOn?'Vypnout GPS':'Povolit a zapnout GPS'}</button>{gpsError&&<p className="warn">{gpsError}</p>}{gps&&<div className="details"><div><small>POLOHA TELEFONU</small><strong>{gps.lat.toFixed(6)}, {gps.lon.toFixed(6)}</strong></div><div><small>PŘESNOST</small><strong>±{Math.round(gps.accuracy)} m</strong></div><div><small>RYCHLOST</small><strong>{gps.speed===null?'—':(gps.speed*3.6).toFixed(1)+' km/h'}</strong></div><div><small>STÁŘÍ POLOHY</small><strong>{gpsAge} s</strong></div></div>}</section>
- <footer>PROTOTYP 0.3 · Informační diagnostika, nikoli pokyn k odjezdu. Klíč lze volitelně uložit pouze do tohoto prohlížeče.</footer>
- {settings&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setSettings(false)}><div className="modal" role="dialog" aria-modal="true" aria-label="Nastavení API"><div className="row"><h2>Nastavení</h2><button className="iconButton" onClick={()=>setSettings(false)} aria-label="Zavřít">✕</button></div><label htmlFor="token">GOLEMIO API KLÍČ</label><div className="search"><input id="token" type={showToken?'text':'password'} autoComplete="off" spellCheck={false} value={token} onChange={e=>setToken(e.target.value)} placeholder="X-Access-Token"/><button onClick={()=>setShowToken(v=>!v)}>{showToken?'Skrýt':'Ukázat'}</button></div><label className="rememberOption"><input type="checkbox" checked={rememberToken} onChange={e=>setRememberToken(e.target.checked)}/><span>Zapamatovat API klíč v tomto prohlížeči</span></label>
- <p className="hint">{rememberToken?'Klíč se ukládá do místního úložiště prohlížeče (localStorage) a zůstane i po obnovení stránky. Není šifrovaný a může být dostupný skriptům či rozšířením s přístupem k webu. Na sdíleném zařízení tuto volbu vypni.':'Klíč zůstane pouze v paměti stránky a po obnovení zmizí.'} Nikdy ho neukládáme do URL ani do GitHubu. API požadavky ho posílají pouze službě Golemio.</p>
- {storageError&&<p className="warn" role="alert">{storageError}</p>}
- <button className="quiet full" onClick={forgetToken} disabled={!token&&!rememberToken}>Zapomenout klíč z tohoto zařízení</button>
- <button className="primary full" onClick={()=>setSettings(false)}>Hotovo</button></div></div>}
+ useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
+ useEffect(()=>{save(ROUTE_KEY,query.trim());},[query]);
+ useEffect(()=>{if(rememberToken)save(TOKEN_KEY,token.trim());else save(TOKEN_KEY,'');},[rememberToken,token]);
+ useEffect(()=>{
+  save(GPS_KEY,gpsWanted?'1':'');
+  if(!gpsWanted){setGps(null);setGpsError('');return;}
+  if(!navigator.geolocation){setGpsError('Geolokace není v prohlížeči dostupná.');return;}
+  let alive=true;
+  const watch=navigator.geolocation.watchPosition(
+   p=>{if(alive){setGps({lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy,speed:p.coords.speed,timestamp:p.timestamp});setGpsError('');}},
+   e=>{if(alive){setGps(null);setGpsError(e.message);}},
+   {enableHighAccuracy:true,maximumAge:5000,timeout:20000}
+  );
+  return()=>{alive=false;navigator.geolocation.clearWatch(watch);};
+ },[gpsWanted]);
+
+ useEffect(()=>{
+  if(!active||!token.trim())return;
+  const controller=new AbortController();let alive=true;let busy=false;
+  const generation=++requestRef.current;
+  async function refresh(){
+   if(busy||!alive)return;busy=true;setLoading(true);
+   try{
+    const url=new URL(API);url.searchParams.set('routeShortName',active![0]);url.searchParams.set('limit','1000');
+    const response=await fetch(url,{headers:{'X-Access-Token':token.trim()},signal:controller.signal,cache:'no-store'});
+    if(!response.ok)throw Error('Golemio HTTP '+response.status);
+    const data:unknown=await response.json();
+    if(!data||typeof data!=='object'||!Array.isArray((data as Obj).features))throw Error('Neplatná odpověď živých poloh');
+    if(alive&&generation===requestRef.current){
+     setFeatures((data as {features:Feature[]}).features);setLastFetch(Date.now());setError('');
+    }
+   }catch(e){if(alive&&!controller.signal.aborted)setError(e instanceof Error?e.message:String(e));}
+   finally{busy=false;if(alive)setLoading(false);}
+  }
+  void refresh();const timer=setInterval(()=>void refresh(),20000);
+  return()=>{alive=false;clearInterval(timer);controller.abort();};
+ },[active,token]);
+
+ const matches=active?features.filter(f=>{
+  const line=path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name');
+  return normalize(orderOf(f))===normalize(active[1])&&(line===undefined||String(line)===active[0]);
+ }):[];
+ const chosen=selectedTrip?features.find(f=>selectedTripId(f)===selectedTrip)??null:matches.length===1?matches[0]:null;
+ const tripId=chosen?selectedTripId(chosen):'';
+ const trip=useTripData(tripId,token.trim());
+ const age=lastFetch===null?null:Math.max(0,Math.floor((now-lastFetch)/1000));
+ const gpsAge=gps?Math.max(0,Math.floor((now-gps.timestamp)/1000)):null;
+ const coords=chosen?.geometry?.coordinates;
+ const vehicleCoords:[number,number]|null=Array.isArray(coords)&&coords.length>=2&&Number.isFinite(Number(coords[0]))&&Number.isFinite(Number(coords[1]))?[Number(coords[0]),Number(coords[1])]:null;
+ const nextStopId=text(path(chosen,'properties.last_position.next_stop.id')??path(chosen,'properties.last_position.next_stop'));
+ const pos=usePosition(trip.stops,tripId,nextStopId,gps,vehicleCoords,age,now);
+ const position=manual??pos.confirmedIndex??(pos.nextIndex>=0?pos.nextIndex:null);
+ const current=position!==null?trip.stops[position]:undefined;
+ const next=pos.nextIndex>=0?trip.stops[pos.nextIndex]:position!==null?trip.stops[position+1]:undefined;
+ const departure=current?.departure||current?.arrival||'';
+ const seconds=age!==null&&age<50?countdownSeconds(departure,now):null;
+ const delay=Number(path(chosen,'properties.last_position.delay.actual'));
+ const validDelay=chosen&&Number.isFinite(delay)&&path(chosen,'properties.last_position.delay.actual')!==null&&path(chosen,'properties.last_position.delay.actual')!==undefined;
+ const destination=trip.headsign||'Směr nezjištěn';
+ const state=active?(error?'Chyba připojení':age===null?'Připojování':age>=50?'Zastaralá data':chosen?'Sledování aktivní':'Pořadí nenalezeno'):'Připraveno';
+ const nearby=useMemo(()=>{
+  if(!current)return [];
+  const index=position??0;
+  return trip.stops.slice(Math.max(0,index-2),Math.min(trip.stops.length,index+4)).map((s,i)=>({stop:s,index:Math.max(0,index-2)+i}));
+ },[trip.stops,current,position]);
+ function start(){
+  const parsed=parseOrder(query);if(!parsed){setError('Zadej linku a pořadí, například 25/5.');return;}
+  if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v Nastavení.');return;}
+  setSelectedTrip('');setManual(null);setExpanded(false);
+  setFeatures([]);setLastFetch(null);setError('');
+  setActive(parsed);
+ }
+ function forget(){
+  setRememberToken(false);setToken('');save(TOKEN_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setSettings(false);
+ }
+ function chooseTrip(id:string){setSelectedTrip(id);setManual(null);}
+ function toggleGPS(){setGpsWanted(v=>!v);}
+ const showStops=expanded?trip.stops.map((stop,index)=>({stop,index})):nearby;
+ return <main className="appShell">
+  <header className="topbar">
+   <div><span className="eyebrow">PID / ODJEZDOVÝ HLÍDAČ</span><h1>ČASOVAČ<span className="dot">.</span></h1></div>
+   <div className="headActions">
+    <button className={'headButton '+(gpsWanted&&!gpsError&&gpsAge!==null&&gpsAge<=20?'gpsActive':'')} onClick={toggleGPS} aria-pressed={gpsWanted} aria-label={gpsWanted?'Vypnout GPS':'Zapnout GPS'} title={gpsError||pos.status}>⌖ <span>GPS</span></button>
+    <button className="headButton" onClick={()=>setSettings(true)} aria-label="Nastavení">⚙</button>
+   </div>
+  </header>
+
+  <section className="panel searchPanel">
+   <label htmlFor="orderInput">LINKA / POŘADÍ</label>
+   <div className="search"><input id="orderInput" inputMode="text" placeholder="25/5" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')start();}}/><button className="primary" onClick={start}>Sledovat</button></div>
+   <p className="hint">{active?'Sleduješ '+active.join('/')+' · '+state:'Poslední zadané pořadí si prohlížeč pamatuje. Spuštění je ruční.'}</p>
+  </section>
+  {error&&<div className="alert" role="status">{error}</div>}
+  {gpsError&&<p className="warn topWarning">GPS: {gpsError}</p>}
+
+  {active&&<section className="panel journeyPanel">
+   <div className="journeyHeader">
+    <div className="routeTile">{active[0]}</div>
+    <div className="journeyIdentity"><div className="journeyTitle">Pořadí {active[1]}</div><div className="journeySubtitle">{destination}</div><div className="journeySubtitle">Vůz {chosen?vehicleId(chosen):'—'}</div></div>
+    <span className={'liveDot '+(age!==null&&age<50&&chosen?'on':'')} title={state}></span>
+   </div>
+   {chosen&&trip.stops.length?<>
+    <div className="focusArea">
+     <div className="eyebrow">ZASTÁVKA {manual!==null?'· RUČNÍ VÝBĚR':pos.confirmedIndex!==null?'· OVĚŘENO GPS':'· PODLE GOLEMIA'}</div>
+     <div className="focusName">{current?.name??'Neznámá zastávka'}</div>
+     <div className="focusSubtitle">Další dle Golemia: {next?.name??'Neznámá zastávka'}</div>
+    </div>
+    <div className="timerPanel"><div className="eyebrow">{seconds===null?'ČAS NENÍ OVĚŘENÝ':seconds<0?'OD PLÁNOVANÉHO ODJEZDU UPLYNULO':'DO PLÁNOVANÉHO ODJEZDU'}</div>
+     <div className="timerNumbers">{formatCountdown(seconds)}</div>
+     <div className="timerFooter"><span>Odjezd JŘ <b>{formatStopTime(departure)}</b></span><span>Zpoždění <b>{validDelay?(delay>=0?'+':'')+Math.round(delay/60)+' min':'—'}</b></span></div>
+    </div>
+    <p className="safetyLine">Orientační časový údaj. Není pokynem k odjezdu.</p>
+   </>:<div className="emptyState">{trip.loading||loading?'Načítám údaje spoje…':chosen?(trip.error||'Čekám na zastávky tripu.'):'Pořadí nelze jednoznačně přiřadit. Otevři diagnostiku.'}</div>}
+  </section>}
+
+  {active&&trip.stops.length>0&&<section className="panel timelinePanel"><div className="row"><h2>Zastávky</h2><span className="status">{trip.stops.length} zastávek</span></div>
+   <div className="publicStops">{showStops.map(({stop,index})=><button className={'publicStop '+(index===position?'activeStop':'')} key={index} onClick={()=>setManual(index)} title="Ruční výběr zastávky">
+    <span className="stopMarker">{index< (position??0)?'✓':index===(position??-1)?'●':'○'}</span>
+    <span className="publicStopName">{stop.name}</span><span className="publicStopTime">{formatStopTime(stop.departure||stop.arrival)}</span>
+   </button>)}</div>
+   <div className="timelineActions">
+    <button className="quiet" onClick={()=>setExpanded(v=>!v)}>{expanded?'Zobrazit okolní':'Zobrazit všechny zastávky'}</button>
+    {manual!==null&&<button className="quiet" onClick={()=>setManual(null)}>Zpět na automatiku</button>}
+   </div>
+   <p className="hint">Klepnutím na zastávku ji lze ručně vybrat. GPS a Golemio pokračují ve sledování.</p>
+  </section>}
+  {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
+
+  <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
+   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId}/>
+  </div>
+  <footer>ČASOVAČ 0.4 · Provozní pomůcka, nikoli oprávnění k odjezdu.</footer>
+  <button className="debugFab" onClick={()=>setDiagnostics(v=>!v)} aria-label={diagnostics?'Zavřít diagnostiku':'Otevřít diagnostiku'} title="Diagnostika">{diagnostics?'×':'⌘'}</button>
+
+  {settings&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSettings(false);}}>
+   <div className="modal" role="dialog" aria-modal="true" aria-label="Nastavení">
+    <div className="row"><h2>Nastavení</h2><button className="iconButton" onClick={()=>setSettings(false)} aria-label="Zavřít">✕</button></div>
+    <label htmlFor="token">GOLEMIO API KLÍČ</label>
+    <div className="search"><input id="token" type={tokenVisible?'text':'password'} value={token} onChange={e=>setToken(e.target.value)} autoComplete="off" spellCheck={false} placeholder="X-Access-Token"/><button onClick={()=>setTokenVisible(v=>!v)}>{tokenVisible?'Skrýt':'Ukázat'}</button></div>
+    <label className="rememberOption"><input type="checkbox" checked={rememberToken} onChange={e=>setRememberToken(e.target.checked)}/><span>Zapamatovat klíč v tomto prohlížeči</span></label>
+    <p className="hint">Při zapamatování se token uloží nešifrovaně v localStorage tohoto prohlížeče. Neukládá se na GitHub ani do URL; čtou ho však skripty stránky a může být dostupný rozšířením.</p>
+    <button className="quiet full" disabled={!token} onClick={forget}>Zapomenout API klíč</button>
+    <button className="primary full" onClick={()=>setSettings(false)}>Hotovo</button>
+   </div>
+  </div>}
  </main>;
 }
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+createRoot(document.getElementById('root')!).render(<App/>);
