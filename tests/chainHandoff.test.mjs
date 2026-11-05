@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {findPlannedHandoff,verifyHandoffStops,departureForHandoff} from '../src/chainHandoff.ts';
+import {continuousStops} from '../src/chainStops.ts';
 
 const now=Date.parse('2026-11-05T16:23:00+01:00');
 const next={line:'9',order:'21',tripId:'9_30458_261012',vehicle:'9383',
@@ -20,8 +21,11 @@ const gps={phase:'waiting',displayIndex:27};
 test('identifies 10 → 9 from the real observed trip IDs',()=>{
  assert.equal(findPlannedHandoff(snapshot,current,now)?.next.tripId,next.tripId);
 });
-test('rejects another physical vehicle',()=>{
- assert.equal(findPlannedHandoff(snapshot,{...current,vehicle:'9384'},now),null);
+test('keeps the order when a replacement tram takes over',()=>{
+ assert.equal(findPlannedHandoff({...snapshot,vehicle:'9384'}, {...current,vehicle:'9384'},now)?.next.tripId,next.tripId);
+});
+test('rejects different order and different tram',()=>{
+ assert.equal(findPlannedHandoff({...snapshot,related:[{...next,vehicle:'9999',order:'22'}]},current,now),null);
 });
 test('rejects stale and unrelated snapshots',()=>{
  assert.equal(findPlannedHandoff({...snapshot,time:now-200000},current,now),null);
@@ -55,4 +59,18 @@ test('switches after confirmed penultimate departure, not while stopped',()=>{
 test('never switches on stale vehicle telemetry',()=>{
  const common={stopsCount:28,apiAge:5,now,sourceTripState:'on_track',progress,gpsDeparture:gps};
  assert.equal(departureForHandoff({...common,remote:remote('on_track',26,27,130)}).ok,false);
+});
+
+test('joins the trip stops without duplicating the transition platform',()=>{
+ const currentStops=[stop('A','16:24:00'),stop('X','16:28:00',2)];
+ const nextStops=[stop('X','16:28:00'),stop('B','16:30:00',2),stop('C','16:33:00',3)];
+ const joined=continuousStops(currentStops,nextStops,true);
+ assert.deepEqual(joined.map(x=>x.stop.id),['A','X','B','C']);
+ assert.deepEqual(joined.map(x=>x.continuation),[false,false,true,true]);
+});
+test('does not append unverified trip stops',()=>{
+ const before=[stop('A','16:24:00'),stop('X','16:28:00',2)];
+ const after=[stop('X','16:28:00'),stop('B','16:30:00',2)];
+ assert.equal(continuousStops(before,after,false).length,2);
+ assert.equal(continuousStops(before,[{...after[0],id:'OTHER'},after[1]],true).length,2);
 });
