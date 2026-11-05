@@ -181,3 +181,16 @@ Změny:
 - Matchování pořadí má doplňkový fallback na `trip.gtfs.run_number` (pouze pokud se nedá použít žádný běžnější identifikátor).
 
 **Limity:** Záložní širší dotaz je dostupný jen při existenci předchozí bezpečně spárované identity. Pokud se pořadí poprvé hledá až po zmizení z dat a neexistuje historie či diagnostický záznam, není možné garantovat identifikaci fyzického vozu. Stejně tak poslední známá poloha neprokazuje, že tramvaj stále stojí právě na konečné. Pro definitivní model návazných tripů bude potřebná další empirická diagnostika.
+
+## Časovač 1.2 – návazné tripy na konečné a automatické obnovení pořadí
+
+**Zdroj:** testovací záznam 5. 11. 2026 pro linku 25 / pořadí 5 / vůz 9147 (Bílá Hora, odjezd 13:27, nový trip `25_13381_260831`). Před jízdou Golemio poskytuje `before_track`, po aktivaci `at_stop` na první zastávce a při jízdě `on_track`. Dotaz s `includeNotTracking=true` může najednou vracet pro stejné pořadí jak předchozí `after_track`, tak další `before_track`; dvě takové shody nejsou chyba ani dva vozy.
+
+- **Výběr tripu:** nový `src/tripSelection.ts` vybírá podle linky a pořadí nejprve jednoznačné fyzické vozidlo; teprve z jeho tripů upřednostní aktivní `at_stop/on_track`, následně nejbližší připravovaný `before_track`, a nakonec ukončený `after_track`. Při více různých vozech se používá jen dříve potvrzené evidenční číslo; pokud chybí, zůstává stav nejednoznačný.
+- **Dotaz:** `/v2/vehiclepositions?routeShortName=...&limit=1000&includeNotTracking=true` je nyní výchozí, aby Časovač nehledal připravovaný trip jen po předchozím neúspěchu. Suroví kandidáti zůstávají v diagnostice.
+- **Konečná:** připravený trip načítá svůj GTFS stop_times, směr a odpočet od první zastávky. Šedý řádek `clockTerminal` zůstává ve stavu `before_track` i na první zastávce `at_stop`; přechod do normálního barevného režimu nastane až po potvrzení jízdy `on_track` nebo GPS odjezdu. Potvrzení je v rámci tripu zapamatované, aby šedá neblikala při dalších hlášeních.
+- **Palubní GPS:** párování se nyní váže na fyzické evidenční číslo, a nezaniká samo o sobě při přechodu mezi tripy. Dříve spárovaný telefon může na trase zůstat spárovaný i při dlouho neaktualizované GPS vozu, včetně rozdílů nad 750 m; čerstvý nesoulad vozidla nebo opuštění koridoru trasy se dál vyhodnocují opatrně. Prvotní spárování zůstává přísné a vyžaduje skutečnou blízkost.
+- **Automatické obnovení sledování:** po zadání `Sledovat` se linka/pořadí ukládají do `localStorage` na **4 hodiny** pod `casovac:active-order:v1`. Pokud je při obnovení stránky stále platná volba a uživatel má dostupný uložený Golemio token, sledování se samo znovu zahájí. Při vypršení 4 hodin se automaticky neobnoví. Po explicitní změně pořadí začíná nové čtyřhodinové okno. Při smazání tokenu je odstraněna i volba aktivního sledování. Uložené pořadí neobsahuje token ani GPS telefonu.
+- **Záměrné omezení:** automatické obnovení neprodlužuje expiraci každým načtením stránky. Průběžné sledování může pokračovat, ale po čtyřech hodinách od zvolení pořadí se již po restartu stránky nespustí samo.
+
+**Důležité pro test:** rozpoznávání konečné je založeno na odpovědích testované linky 25; ostatní linky s nepravidelnými službami mohou mít jiné stavy a časové vztahy. Odpočet je čistě informativní, nikoli provozní pokyn.
