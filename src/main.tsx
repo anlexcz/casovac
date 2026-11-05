@@ -20,6 +20,7 @@ import type {LastSeen} from './lastSeen';
 import {observationTimestamp} from './remoteTracking';
 import type {GpsFix} from './position';
 import './style.css';
+import './typography.css';
 
 type Obj=Record<string,unknown>;
 type Feature={properties?:Obj;geometry?:{coordinates?:unknown}};
