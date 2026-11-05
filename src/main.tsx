@@ -261,7 +261,7 @@ function App(){
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
  const highlightedRemaining=terminalWaiting?terminalCountdown:seconds;
  const telemetryAge=remote.sourceAge;
- const statusColor=!chosen||error||age===null||age>90?'statusGray':
+ const statusColor=!chosen?'statusGray':error||age===null||age>90?'statusRed':
   telemetryAge===null?'statusGray':telemetryAge<=30?'statusGreen':telemetryAge<=90?'statusAmber':'statusRed';
  const statusDescription=!chosen?'Vůz není aktuálně nalezen':error?'Chyba připojení':
   telemetryAge===null?'Čas měření polohy není dostupný':
