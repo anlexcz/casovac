@@ -58,6 +58,8 @@ function App(){
  const recordApiRef=useRef(recorder.api);recordApiRef.current=recorder.api;
  const recordErrorRef=useRef(recorder.apiError);recordErrorRef.current=recorder.apiError;
  const recordGpsRef=useRef(recorder.gps);recordGpsRef.current=recorder.gps;
+ const recordDecisionRef=useRef(recorder.decision);recordDecisionRef.current=recorder.decision;
+ const lastDecisionRef=useRef('');
  const historyRef=useRef<{previous:RemoteHistory|null;current:RemoteHistory|null}>({previous:null,current:null});
 
  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
@@ -199,6 +201,27 @@ function App(){
  const terminalCountdown=terminalWaiting?firstDeparture:null;
  const stopMode=manual!==null?'RUČNÍ VÝBĚR':terminalWaiting?'ČEKÁ NA ODJEZD Z KONEČNÉ':!compatible?(remote.vehicleState==='at_stop'&&remote.index!==null?'V ZASTÁVCE · GOLEMIO':remote.status==='confirmed'?'GOLEMIO · POTVRZENO':remote.status==='estimated'?'VZDÁLENÝ ODHAD':remote.status==='off-route'?'MIMO TRASU':remote.status==='stale'?'NEAKTUÁLNÍ DATA':'VZDÁLENÉ SLEDOVÁNÍ'):departureDetection.phase==='left'?'ODJEZD POTVRZEN GPS':departureDetection.phase==='verifying'?'OVĚŘUJI ODJEZD':departureDetection.phase==='at-stop'?'V ZASTÁVCE':pos.confirmedIndex!==null?'OVĚŘENO GPS':'GPS · ČEKÁM NA ZASTÁVKU';
  const state=active?(error?'Chyba připojení':age===null?'Připojování':age>=50?'Zastaralá data':chosen?'Sledování aktivní':'Pořadí nenalezeno'):'Připraveno';
+ useEffect(()=>{
+  const recordActive=recorder.session?.state==='recording'&&active&&
+   recorder.session.target.line===active[0]&&recorder.session.target.order===active[1];
+  if(!recordActive){lastDecisionRef.current='';return;}
+  const summary={tripId,vehicle:chosen?vehicleId(chosen):null,queryMode,
+   mode:onboard.mode,paired:compatible,gap:onboard.gap,routeGap:onboard.routeGap,
+   reason:onboard.reason,remoteSource:remote.source,remoteState:remote.status,
+   vehicleState:remote.vehicleState,lastStopSequence:remote.previousIndex===null?null:trip.stops[remote.previousIndex]?.sequence??null,
+   nextStopSequence:remote.nextIndex===null?null:trip.stops[remote.nextIndex]?.sequence??null,
+   currentIndex:position,stopName:current?.name??null,departurePhase:departureDetection.phase,
+   departureLastSwitch:departureDetection.lastSwitch,terminalWaiting,terminalName,
+   sourceAgeSeconds:remote.sourceAge};
+  const signature=JSON.stringify({...summary,gap:null,routeGap:null,sourceAgeSeconds:null,reason:null});
+  if(lastDecisionRef.current===signature)return;
+  lastDecisionRef.current=signature;
+  recordDecisionRef.current(summary);
+ // State transitions only: no event on every clock tick or GPS metre.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[recorder.session?.id,recorder.session?.state,tripId,chosen,queryMode,onboard.mode,
+    compatible,remote.source,remote.status,remote.vehicleState,remote.previousIndex,
+    remote.nextIndex,position,departureDetection.phase,departureDetection.lastSwitch,terminalWaiting]);
  const nearby=useMemo(()=>{
   if(!current)return [];
   const index=position??0;
