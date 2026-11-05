@@ -1,4 +1,4 @@
-# Časovač 0.6
+# Časovač 0.7
 
 Mobilní webová pomůcka pro sledování tramvajového pořadí PID. React, TypeScript, Vite a GitHub Pages.
 
@@ -140,3 +140,19 @@ Tento parametr zahrnuje také **spoje mimo právě aktivní výjezd**, tedy pře
 6. Nepouštět predikci pohybu/odjezdu jen z uplynutí jízdního řádu, zejména při pobytu na konečné.
 
 **Stav:** pouze diagnostický nález a návrh; **žádné změny funkčního kódu, API dotazů nebo UI nebyly provedeny**.
+
+## Časovač 0.7: výsledky prvního testu a tři testovací režimy (5. 11. 2026)
+
+První 5,5minutový záznam pořadí `25/5` obsahoval 16 úspěšných dotazů Golemia, šest odlišných časů původních hlášení a 655 GPS událostí telefonu mimo tramvaj. Všechny GTFS zastávky mají v tomto formátu prázdné `stop_id`, ale korektní `stop_sequence` a souřadnice. Živé hlášení obsahuje `last_position.last_stop.sequence`, `next_stop.sequence` a `state_position` (`at_stop`, `on_track`). Proto je **pořadí zastávky** důvěryhodnější párovací klíč než přímé srovnávání `stop_id`.
+
+Změny v 0.7:
+- Ve vzdáleném režimu mají přednost číselné sekvence zastávek; stav `at_stop` ukazuje právě obsluhovanou zastávku, `on_track` následující zastávku. Toto platí i když je GPS telefonu vypnutá nebo několik kilometrů daleko.
+- Samostatně se zobrazuje stáří telemetrie vozidla a API odpovědi. Při zpožděných hlášeních se stav označuje jako nejistý, při velkém zpoždění se nevymýšlí další průjezd. Odhad polohy z geometrie je pouze záložní metoda.
+- GPS telefonu se považuje za zdroj z tramvaje až při aktuálním a přesném měření do 250 m od polohy vozu. Vzdálenost 1 000 m jednoznačně znamená vzdálené sledování. GPS se stále používá pouze lokálně; rychlostní podmínky odjezdu se neuplatňují při vzdáleném sledování.
+- Když běžný dotaz nevrátí žádnou shodu pořadí, zkusí se druhý dotaz s `includeNotTracking=true`; to může doplnit tramvaje čekající na konečné. Zda skutečně pokryje konkrétní typ stání, musí potvrdit test. Při nulové shodě se do diagnostiky zapisuje seznam kandidátů bez API tokenu.
+- Do diagnostiky přibyly tři scénáře, jejichž označení se ukládá do exportu: **GPS vypnutá**, **GPS zapnutá mimo tramvaj**, **GPS zapnutá na palubě**.
+- Surové GPS vzorky telefonu se při vzdáleném testu (a pouze po volitelném souhlasu k jejich exportu) zapisují maximálně jednou za 30 s; při poloze u tramvaje maximálně jednou za 2 s. Původní limit 2 400 událostí díky tomu vydrží podstatně déle. Každá API odpověď se stále loguje zvlášť, i když je totožná.
+
+**Doporučený postup:** Pro každý scénář vytvořit nový záznam, sledovat stejné pořadí po 20–30 minutách a exportovat tři oddělené JSON soubory. Testy s GPS jsou nezávislé na tom, zda telefon skutečně v tramvaji je; aplikace režim vyhodnocuje sama, volba scénáře slouží jako popisek experimentu. Pro test na palubě lze zapnout export souřadnic telefonu, ale jde o citlivá data. Při řízení tramvaje s aplikací nemanipulovat; ovládání a ukládání provádět před jízdou nebo mimo řízení.
+
+**Zbývající omezení:** Pokud je vozidlo mimo seznam obou dotazů, aplikace ho nemůže spolehlivě identifikovat pouze podle jízdního řádu. Stáří dat a chybné či opožděné polohy se musí dál ověřit na delších záznamech. Pobyt na konečné zatím nemá samostatnou plnohodnotnou obrazovku; doplněn je první datový fallback.
