@@ -1,7 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import Diagnostics from './Diagnostics';
-import {useTripData,formatStopTime,countdownSeconds} from './tripData';
+import StopBoard from './StopBoard';
+import {useTripData,countdownSeconds} from './tripData';
 import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
 import {useRecorder} from './recorder';
@@ -29,13 +30,6 @@ const selectedTripId=(f:Feature)=>text(path(f,'properties.trip.gtfs.trip_id')??p
 const vehicleId=(f:Feature)=>text(path(f,'properties.trip.vehicle_registration_number')??path(f,'properties.trip.vehicle.id')??path(f,'properties.trip.vehicle_id'));
 const orderOf=(f:Feature)=>path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??path(f,'properties.trip.order')??path(f,'properties.trip.gtfs.run_number');
 const normalize=(v:unknown)=>String(v??'').replace(/^0+/,'')||'0';
-// Negative = before scheduled departure, zero and positive = at/after it.
-const signedTime=(remaining:number|null)=>{
- if(remaining===null)return '—';
- const elapsed=-remaining;
- const magnitude=Math.abs(elapsed);
- return (elapsed<0?'−':'+')+String(Math.floor(magnitude/60)).padStart(2,'0')+':'+String(magnitude%60).padStart(2,'0');
-};
 const parseOrder=(q:string):[string,string]|null=>{
  const match=/^(\d{1,3})\s*\/\s*(\d{1,4})$/.exec(q.trim());
  return match?[match[1],match[2]]:null;
@@ -265,10 +259,13 @@ function App(){
  const terminalCountdown=terminalWaiting?firstDeparture:null;
  const displayedIndex=terminalWaiting?0:position;
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
- const highlightedTime=terminalWaiting?(firstStop?.departure||firstStop?.arrival||''):departure;
  const highlightedRemaining=terminalWaiting?terminalCountdown:seconds;
- const clockState=highlightedRemaining===null?'clockUnknown':highlightedRemaining>0?'clockEarly':'clockReady';
- const futureStops=displayedIndex===null?[]:trip.stops.slice(displayedIndex+1);
+ const telemetryAge=remote.sourceAge;
+ const statusColor=!chosen||error||age===null||age>90?'statusGray':
+  telemetryAge===null?'statusGray':telemetryAge<=30?'statusGreen':telemetryAge<=90?'statusAmber':'statusRed';
+ const statusDescription=!chosen?'Vůz není aktuálně nalezen':error?'Chyba připojení':
+  telemetryAge===null?'Čas měření polohy není dostupný':
+  'Stáří polohy '+telemetryAge+' sekund';
  useEffect(()=>{
   const recordActive=recorder.session?.state==='recording'&&active&&
    recorder.session.target.line===active[0]&&recorder.session.target.order===active[1];
@@ -320,31 +317,31 @@ function App(){
       <div className="routeTile" aria-label={'Linka '+active[0]}>{active[0]}</div>
       <div className="orderTile" aria-label={'Pořadí '+active[1]}>{active[1]}</div>
       <div className="identityDetails">
-       <div className="routeDirection">{destination}</div>
-       <div className="vehicleNumber">#{chosen?vehicleId(chosen):lastSeen?.vehicle??'—'}</div>
-      </div>
-      <button type="button" className="editOrder" onClick={()=>setEditing(v=>!v)} aria-label={editing?'Skrýt zadání':'Změnit linku nebo pořadí'} title="Změnit linku/pořadí">✎</button>
-    </div>
-    {highlightedStop?
-     <div className={'activeDeparture '+clockState}>
-       <div className="activeStopName">{highlightedStop.name}</div>
-       <div className="departureNumbers">
-        <span className="liveOffset" aria-label="Rozdíl od plánovaného odjezdu">{signedTime(highlightedRemaining)}</span>
-        <time className="scheduledTime" aria-label="Odjezd podle jízdního řádu">{formatStopTime(highlightedTime)}</time>
+       <div className="routeDirection">
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="identityIcon"><path d="M4 12h16m-7-7 7 7-7 7" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <span>{destination}</span>
        </div>
-     </div>
+       <div className="vehicleNumber">
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="identityIcon"><rect x="5" y="3.5" width="14" height="15" rx="3" fill="none" stroke="currentColor" strokeWidth="1.9"/><path d="M5 11h14M8 7.5h2m4 0h2M8 18.5l-2 3m10-3 2 3M9 21h6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg>
+        <span>#{chosen?vehicleId(chosen):lastSeen?.vehicle??'—'}</span>
+       </div>
+      </div>
+      <button className={'vehicleStatus '+statusColor} type="button" onClick={()=>setDiagnostics(true)}
+       aria-label={statusDescription+'; otevřít diagnostiku'} title={statusDescription}>
+       <span className="statusDot"/>
+      </button>
+      <button type="button" className="editOrder" onClick={()=>setEditing(v=>!v)} aria-label={editing?'Skrýt zadání':'Změnit linku nebo pořadí'} title="Změnit linku/pořadí">
+       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m15 5 4 4M4 20l4.8-1 10-10a2.8 2.8 0 0 0-4-4l-10 10L4 20Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+    </div>
+    {highlightedStop&&displayedIndex!==null?
+     <StopBoard stops={trip.stops} index={displayedIndex} tripId={tripId} remaining={highlightedRemaining}
+      expanded={expanded} onExpand={()=>setExpanded(v=>!v)}
+      onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}/>
      :<div className="compactEmpty">
        {loading||trip.loading?'Načítání…':chosen?trip.error||'Jízdní řád nedostupný':lastSeen?
        'Poslední vůz #'+lastSeen.vehicle+' · '+new Date(lastSeen.lastSeenAt).toLocaleTimeString('cs-CZ'):'Pořadí nenalezeno'}
       </div>}
-    {futureStops.length>0&&<div className="upcomingStops">
-      {(expanded?futureStops:futureStops.slice(0,6)).map((stop,i)=>
-       <button type="button" className="upcomingStop" key={stop.sequence+'-'+i} onClick={()=>setManual((displayedIndex??0)+i+1)} title="Vybrat zastávku">
-        <span className="upcomingName">{stop.name}</span>
-        <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
-       </button>)}
-      {futureStops.length>6&&<button type="button" className="moreStops" onClick={()=>setExpanded(v=>!v)}>{expanded?'Méně':'Další zastávky ('+(futureStops.length-6)+')'}</button>}
-    </div>}
   </section>}
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
