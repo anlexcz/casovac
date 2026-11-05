@@ -42,3 +42,16 @@ Nasazení probíhá workflow `Deploy Časovač` na GitHub Pages: https://anlexcz
 - Přepínání zastávek dle GPS je konzervativní; vyžaduje soulad s posledním hlášením Golemia a vyhovující GPS fix.
 - Webová GPS není garantovaná při zamknutém displeji ani při práci na pozadí.
 - Odpočet se nezohledněním posunů či výluk nezmění ve skutečné oprávnění k odjezdu. Časovač je jen orientační informační pomůcka.
+
+## Diagnostický audit identifikátorů zastávek
+
+V diagnostice otevři **Audit ID zastávek**. Srovnává:
+- živé ID `last_position.next_stop.id` s `stop_id` všech výskytů zastávek konkrétního tripu;
+- přesný řetězec a normalizovaný zápis;
+- společný základ kódu `U...Z...P` bez automatického slučování různých nástupišť;
+- počet chybějících/duplicitních GTFS ID;
+- nejbližší zastávky vůči poloze hlášeného vozidla.
+
+Kandidáti stejného základního kódu ani blízké GPS polohy **nejsou automaticky uznány jako shoda ID**. Srovnání slouží k nalezení skutečného problému parseru či rozdílného kódování. Pomocí tlačítka lze zkopírovat textový audit bez API tokenu a bez polohy telefonu.
+
+Zpráva je stavovým snímkem během sledování. Při další aktualizaci živých dat se kandidáti přepočítají. Jakmile se prokáže skutečná struktura kódů, lze vytvořit explicitní bezpečný převod.
