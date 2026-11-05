@@ -1,3 +1,4 @@
+import type {RemoteProgress} from './remoteProgress';
 import type {LastSeen} from './lastSeen';
 import type {OnboardDecision} from './onboard';
 import type {RemoteState} from './remoteTracking';
@@ -17,14 +18,14 @@ type Props={
  manual:number|null;setManual:(index:number|null)=>void;
  selectedTrip:string;setSelectedTrip:(id:string)=>void;
  startGps:()=>void;stopGps:()=>void;nextStopId:string;departure:DepartureTelemetry;
- remote:RemoteState;onboard:boolean;onboardDecision:OnboardDecision;
+ remote:RemoteState;remoteProgress:RemoteProgress;onboard:boolean;onboardDecision:OnboardDecision;
  terminalWaiting:boolean;terminalName:string|null;queryMode:string;terminalCandidates:unknown[];
  lastSeen:LastSeen|null;relatedVehicle:{vehicle:string;route:string;order:string;state:string;time:number}|null;
  recorder:ReturnType<typeof useRecorder>;
 };
 const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
-export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,recorder}:Props){
+export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,recorder}:Props){
  const stops:Stop[]=trip.stops;
  const [copyState,setCopyState]=useState('');
  const [includePhone,setIncludePhone]=useState(false);
@@ -84,6 +85,10 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
   <details><summary>Kandidáti z posledního dotazu</summary><pre>{JSON.stringify(terminalCandidates,null,2)}</pre></details>
   <div className="details">
    <div><small>STAV PREDIKCE</small><strong>{remote.status}</strong></div>
+   <div><small>VÝBĚR BEZ GPS</small><strong>{remoteProgress.predicted?'Predikovaný odjezd':'Potvrzený stav'}</strong></div>
+   <div><small>OD POSLEDNÍHO HLÁŠENÍ V ZASTÁVCE</small><strong>{remoteProgress.atStopAge===null?'—':Math.round(remoteProgress.atStopAge)+' s'}</strong></div>
+   <div><small>PRÁH PREDIKCE</small><strong>{remoteProgress.threshold===null?'—':remoteProgress.threshold+' s'}</strong></div>
+   <div><small>ZOBRAZENÝ INDEX BEZ GPS</small><strong>{remoteProgress.index===null?'—':remoteProgress.index+1}</strong></div>
    <div><small>STAV VOZIDLA</small><strong>{remote.vehicleState}</strong></div>
    <div><small>ZDROJ URČENÍ ZASTÁVKY</small><strong>{remote.source}</strong></div>
    <div><small>POSLEDNÍ / DALŠÍ ZASTÁVKA</small><strong>{remote.previousIndex===null?'—':stops[remote.previousIndex]?.name??'—'} / {remote.nextIndex===null?'—':stops[remote.nextIndex]?.name??'—'}</strong></div>
@@ -95,7 +100,7 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
    <div><small>PREDIKOVANÁ POLOHA</small><strong>{remote.predictedProgress===null?'—':Math.round(remote.predictedProgress)+' m'}</strong></div>
    <div><small>ODHAD RYCHLOSTI</small><strong>{remote.estimatedSpeed===null?'—':remote.estimatedSpeed.toFixed(1)+' km/h'}</strong></div>
   </div>
-  <p className="hint">{remote.reason}</p>
+  <p className="hint">{remoteProgress.reason}</p>
  </section>
  <div className="panel"><div className="row"><h2>Živá data {active?.join('/')??'—'}</h2><span className={'status '+(age!==null&&age<50?'good':'')}>{age===null?'Bez dat':age<50?'Online':'Zastaralá data'}</span></div>
  <p className="hint">Aktualizace: {lastFetch?new Date(lastFetch).toLocaleTimeString('cs-CZ'):'—'} · stáří {age??'—'} s · obnova 20 s</p>
