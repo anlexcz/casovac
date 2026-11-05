@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import Diagnostics from './Diagnostics';
 import {useTripData,formatStopTime,countdownSeconds} from './tripData';
