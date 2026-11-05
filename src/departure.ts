@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import type {GpsFix} from './position';
 import {distanceMeters} from './position';
 import type {Stop} from './tripData';
@@ -70,8 +70,8 @@ export function useDepartureDetection(args:{
  vehicleAge:number|null;now:number;baseIndex:number|null;manualIndex:number|null;
 }):DepartureTelemetry{
  const {tripId,stops,raw,gps,vehicle,vehicleAge,now,baseIndex,manualIndex}=args;
- const route=decodeRoute(raw);
- const stopProgress=buildStopProgress(stops,route);
+ const route=useMemo(()=>decodeRoute(raw),[raw]);
+ const stopProgress=useMemo(()=>buildStopProgress(stops,route),[stops,route]);
  const [state,setState]=useState<State>(INIT);
  const stateRef=useRef<State>(INIT);
  const lastContext=useRef('');
