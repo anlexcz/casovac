@@ -10,7 +10,7 @@ export type RecordEvent={
 export type RecorderSession={
  schema:'casovac-diagnostics-v1';id:string;startedAt:string;endedAt:string|null;
  target:{line:string;order:string};
- options:{includePhoneCoordinates:boolean;pollMs:number};
+ options:{includePhoneCoordinates:boolean;pollMs:number;testScenario?:'gps-off'|'gps-remote'|'gps-onboard'};
  events:RecordEvent[];state:'recording'|'stopped';limits:{maxEvents:number};
 };
 const DATABASE='casovac-diagnostics-v1',STORE='recordings',KEY='current',MAX=2400;
@@ -62,7 +62,7 @@ function exportFile(session:RecorderSession){
  const url=URL.createObjectURL(blob);
  const a=document.createElement('a');
  a.href=url;
- a.download='casovac-'+session.target.line+'-'+session.target.order+'-'+session.startedAt.replace(/[:.]/g,'-')+'.json';
+ a.download='casovac-'+session.target.line+'-'+session.target.order+'-'+(session.options.testScenario??'test')+'-'+session.startedAt.replace(/[:.]/g,'-')+'.json';
  document.body.appendChild(a);a.click();a.remove();
  window.setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
@@ -86,11 +86,11 @@ export function useRecorder(){
   }).catch(e=>{if(active){setError('Lokální ukládání není dostupné: '+String(e));setReady(true);}});
   return()=>{active=false;};
  },[]);
- const start=useCallback((line:string,order:string,includePhoneCoordinates:boolean)=>{
+ const start=useCallback((line:string,order:string,includePhoneCoordinates:boolean,testScenario:'gps-off'|'gps-remote'|'gps-onboard'='gps-off')=>{
   if(!ready||error)return;
   const time=new Date().toISOString();lastGpsWrite.current=0;
   safeSave({schema:'casovac-diagnostics-v1',id:time+'-'+line+'-'+order,startedAt:time,endedAt:null,
-   target:{line,order},options:{includePhoneCoordinates,pollMs:20000},events:[],state:'recording',limits:{maxEvents:MAX}});
+   target:{line,order},options:{includePhoneCoordinates,pollMs:20000,testScenario},events:[],state:'recording',limits:{maxEvents:MAX}});
  },[ready,error,safeSave]);
  const stop=useCallback(()=>{const old=ref.current;if(old?.state==='recording')safeSave({...old,state:'stopped',endedAt:new Date().toISOString()});},[safeSave]);
  const discard=useCallback(()=>safeSave(null),[safeSave]);
