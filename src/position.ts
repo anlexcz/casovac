@@ -43,7 +43,7 @@ export function usePosition(stops:Stop[],tripId:string,nextStopId:string,gps:Gps
  // The platform ID must win when available. Otherwise derive a provisional index from the
  // vehicle GPS within a bounded radius; do not guess an arbitrary stop over long distances.
  const fallback=nextIndex<0&&vehicleNearest&&vehicleNearest.meters<=350?vehicleNearest:null;
- const inferredNextIndex=fallback?.index??null;
+ const inferredNextIndex=fallback?.index??(nextIndex<0&&paired&&gpsNearest&&gpsNearest.meters<=200?gpsNearest.index:null);
  const baseIndex=nextIndex>=0?nextIndex:inferredNextIndex;
  const near=paired&&gpsNearest&&baseIndex!==null&&gpsNearest.meters<=Math.max(35,Math.min(75,2*(gps?.accuracy??0)))&&
  (gpsNearest.index===baseIndex||gpsNearest.index===baseIndex-1)?gpsNearest:null;
@@ -61,5 +61,5 @@ export function usePosition(stops:Stop[],tripId:string,nextStopId:string,gps:Gps
  },[gps,near?.index,context]);
  const validConfirmed=confirmed!==null&&baseIndex!==null&&(confirmed===baseIndex||confirmed===baseIndex-1)&&paired;
  const status=!gps?'GPS vypnutá':!fresh?'GPS nepřesná nebo zastaralá':!paired?'GPS a vozidlo nejsou spárované':validConfirmed?'Poloha potvrzena GPS':near?'Ověřuji polohu GPS':'GPS mimo očekávanou zastávku';
- return {nextIndex,inferredNextIndex,baseIndex,confirmedIndex:validConfirmed?confirmed:null,vehicleDistance,vehicleNearest,gpsNearest,source:nextIndex>=0?'id':inferredNextIndex!==null?'vehicle':'unknown',gpsFresh:fresh,status};
+ return {nextIndex,inferredNextIndex,baseIndex,confirmedIndex:validConfirmed?confirmed:null,vehicleDistance,vehicleNearest,gpsNearest,source:nextIndex>=0?'id':fallback?'vehicle':inferredNextIndex!==null?'gps':'unknown',gpsFresh:fresh,status};
 }
