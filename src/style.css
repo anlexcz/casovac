@@ -207,3 +207,25 @@
 .activeDeparture.clockTerminal{background:#454b54;color:#f6f7f9}
 .activeDeparture.clockTerminal .scheduledTime{color:#c2cbd4}
 .activeDeparture.clockTerminal .liveOffset{font-variant-numeric:tabular-nums}
+
+/* One DOM row per stop. FLIP only changes transforms; the list owns layout. */
+.boardStack>.upcomingStop{display:block;padding:0;min-height:0;border-bottom:1px solid #303740}
+.boardStack>.upcomingStop>.upcomingButton{display:grid;grid-template-columns:minmax(0,1fr) var(--time-column);
+ align-items:center;width:100%;min-height:43px;padding:9px var(--time-edge);
+ column-gap:12px;text-align:left;border:0;background:transparent;color:inherit;cursor:pointer}
+.boardStack>.upcomingStop>.upcomingButton:hover{background:rgba(255,255,255,.035)}
+.boardStack>.upcomingStop>.upcomingButton:focus-visible{outline:2px solid #a7b6c5;outline-offset:-2px}
+.boardStack>.activeDeparture{position:relative;z-index:1}
+.boardStack>.departingStop{position:absolute;left:0;right:0;z-index:2;box-sizing:border-box;
+ display:grid;grid-template-columns:minmax(0,1fr) var(--time-column);align-items:center;
+ gap:8px;padding:14px var(--time-edge);border-radius:11px;pointer-events:none;overflow:hidden}
+.departingStop.clockEarly{background:#ae2926;color:#fff}
+.departingStop.clockReady{background:#1d7651;color:#fff}
+.departingStop.clockTerminal{background:#454b54;color:#fff}
+.departingStop.clockUnknown{background:#303640;color:#fff}
+.departingStop .activeStopName{font-size:clamp(18px,4.5vw,24px);font-weight:800}
+.departingStop .scheduledTime{font-size:14px;color:#d4d8dc}
+@media(max-width:490px){
+ .boardStack>.upcomingStop>.upcomingButton{min-height:41px;padding:9px var(--time-edge)}
+ .departingStop .scheduledTime{font-size:13px}
+}
