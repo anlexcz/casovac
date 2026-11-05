@@ -400,7 +400,7 @@ function App(){
     {!token.trim()?<p className="hint">Pro vyhledávání je potřeba API klíč Golemio v nastavení.</p>:
      !lookupLine?<p className="hint">Zadej číslo linky nebo konkrétní pořadí.</p>:
      <div className="chooserResults">
-      <p className="chooserCaption">{!lookupReady&&!lookup.error?'Načítám dostupná pořadí…':lookup.error?'Nepodařilo se načíst data':lookupOrder?'Výsledek vyhledávání''LINKA '+lookupLine+' · '+results.length+' POŘADÍ'}</p>
+      <p className="chooserCaption">{!lookupReady&&!lookup.error?'Načítám dostupná pořadí…':lookup.error?'Nepodařilo se načíst data':lookupOrder?'Výsledek vyhledávání':'LINKA '+lookupLine+' · '+results.length+' POŘADÍ'}</p>
       {lookup.line===lookupLine&&lookup.error&&<p className="hint" role="status">{lookup.error}</p>}
       {lookupReady&&results.map(item=><button type="button" className="chooserRow" key={item.line+'/'+item.order} onClick={()=>start(item.line+'/'+item.order)}>
        <span className="chooserId"><span>{item.line}/</span><strong>{item.order}</strong></span><span className="chooserVehicle">#{item.car}</span><span className="chooserStop"><svg className="chooserStopIcon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="5" y="3" width="14" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M5 10h14M8 7h2m4 0h2M8 19l-2 3m10-3 2 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg><span>{chooserStop(item.target,stopNames)}</span></span>
