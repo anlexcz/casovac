@@ -92,7 +92,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
  if(!current)return null;
  return <div className="boardStack" ref={stack}>
   {shown.map((entry,i)=>{
-   const {stop,n,continuation:isNext}=entry,primary=i===0;
+   const {stop,index:n,continuation:isNext}=entry,primary=i===0;
    return <div key={(isNext?'next-':'current-')+n}
     data-stop-index={n} className={primary?'activeDeparture '+clock:'upcomingStop'}>
     {primary?<>
