@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import {useEffect,useState} from 'react';
 
 /** Only static, public PID GTFS data. No per-vehicle Golemio lookup. */
