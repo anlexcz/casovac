@@ -1,4 +1,4 @@
-import {path,normalize} from './featureUtils';
+import {path,normalize} from './featureUtils.ts';
 // A single vehicle may have an ended trip and the next planned trip in one
 // includeNotTracking response. Resolve the vehicle first, then the trip.
 export type TripFeature={properties?:Record<string,unknown>;geometry?:{coordinates?:unknown}};
