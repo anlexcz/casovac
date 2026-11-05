@@ -16,9 +16,10 @@ type Snapshot={trip:string;index:number;rects:Map<string,DOMRect>};
 export default function StopBoard({stops,index,tripId,remaining,expanded,onExpand,onChoose,animate}:Props){
  const stack=useRef<HTMLDivElement|null>(null);
  const previous=useRef<Snapshot|null>(null);
- const valid=index!==null&&index>=0&&index<stops.length;
- const current=valid?stops[index]:null;
- const future=valid?stops.slice(index+1):[];
+ const currentIndex=index??-1;
+ const valid=currentIndex>=0&&currentIndex<stops.length;
+ const current=valid?stops[currentIndex]:null;
+ const future=valid?stops.slice(currentIndex+1):[];
  const list=expanded?future:future.slice(0,6);
  const clock=remaining===null?'clockUnknown':remaining>0?'clockEarly':'clockReady';
  useLayoutEffect(()=>{
@@ -69,7 +70,7 @@ export default function StopBoard({stops,index,tripId,remaining,expanded,onExpan
  },[index,tripId,stops,expanded,animate]);
  if(!current)return null;
  return <div className="boardStack" ref={stack}>
-  <div className={'activeDeparture '+clock} data-stop-key={'stop-'+index}>
+  <div className={'activeDeparture '+clock} data-stop-key={'stop-'+currentIndex}>
    <span className="activeStopName">{current.name}</span>
    <span className="departureNumbers">
     <span className="liveOffset" aria-label="Časový rozdíl vůči jízdnímu řádu">{signed(remaining)}</span>
@@ -79,8 +80,8 @@ export default function StopBoard({stops,index,tripId,remaining,expanded,onExpan
   {future.length>0&&<div className="upcomingStops">
    {list.map((stop,i)=><button
     type="button" className="upcomingStop" key={stop.sequence+'-'+i}
-    data-stop-key={'stop-'+(index+i+1)}
-    onClick={()=>onChoose(index+i+1)} title="Vybrat zastávku">
+    data-stop-key={'stop-'+(currentIndex+i+1)}
+    onClick={()=>onChoose(currentIndex+i+1)} title="Vybrat zastávku">
      <span className="upcomingName">{stop.name}</span>
      <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
     </button>)}
