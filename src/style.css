@@ -141,3 +141,64 @@
  .activeDeparture{grid-template-columns:1fr;gap:8px}
  .departureNumbers{justify-content:space-between}
 }
+
+/* 1.1 — unified timetable grid and restrained moving-stop transition */
+.compactIdentity{align-items:stretch;gap:10px;min-height:65px;padding-bottom:16px}
+.compactIdentity .routeTile{font-weight:900;font-synthesis:weight}
+.orderTile{flex:0 0 auto;align-self:flex-end;margin-bottom:3px;font-size:25px;font-weight:400;line-height:1.05;letter-spacing:0}
+.identityDetails{justify-content:center;gap:8px}
+.routeDirection,.vehicleNumber{display:flex;align-items:center;gap:7px;min-width:0}
+.routeDirection{font-size:clamp(15px,4vw,19px);font-weight:700}
+.routeDirection span,.vehicleNumber span{overflow-wrap:anywhere}
+.vehicleNumber{font-size:14px;font-weight:550}
+.identityIcon{width:17px;height:17px;flex:0 0 17px;color:#a9b6c5}
+.vehicleNumber .identityIcon{width:16px;height:16px;flex-basis:16px}
+.vehicleStatus{align-self:flex-start;flex:0 0 26px;width:26px;height:32px;padding:0;border:0;border-radius:10px;background:transparent;display:grid;place-items:center}
+.vehicleStatus:hover,.vehicleStatus:focus-visible{background:#303640}
+.statusDot{width:9px;height:9px;border-radius:100%;background:#7e8794;box-shadow:0 0 0 3px #7e87941a}
+.statusGreen .statusDot{background:#35ca91;box-shadow:0 0 0 3px #35ca9123}
+.statusAmber .statusDot{background:#ecac43;box-shadow:0 0 0 3px #ecac4323}
+.statusRed .statusDot{background:#ed6464;box-shadow:0 0 0 3px #ed646426}
+.editOrder{flex:0 0 27px;align-self:flex-start;width:27px;height:32px;padding:4px;display:grid;place-items:center;border-radius:8px}
+.editOrder:hover,.editOrder:focus-visible{background:#303640}
+.boardStack{position:relative;isolation:isolate;--time-column:55px;--time-edge:10px}
+.activeDeparture{grid-template-columns:minmax(0,1fr) auto;column-gap:9px;padding:14px var(--time-edge);min-height:84px}
+.activeStopName{font-weight:800;line-height:1.17;font-size:clamp(18px,4.5vw,24px)}
+.departureNumbers{display:grid;grid-template-columns:minmax(87px,auto) var(--time-column);column-gap:8px;align-items:center;justify-items:end}
+.liveOffset{font-size:clamp(24px,6vw,35px);letter-spacing:-.8px}
+.scheduledTime{font-size:14px;font-weight:550;text-align:right;color:#d4d8dc}
+.upcomingStop{grid-template-columns:minmax(0,1fr) var(--time-column);column-gap:12px;padding:10px var(--time-edge);min-height:43px}
+.upcomingName{font-size:14px;font-weight:480;line-height:1.25}
+.upcomingTime{font-size:14px;font-weight:540}
+.upcomingStops{margin-top:6px}
+.moreStops{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:44px;margin:3px auto 0;color:#aab5c0}
+.departureGhost{position:absolute;left:0;right:0;z-index:2;border-radius:11px;background:#2d343a;padding:18px 12px;display:flex;align-items:center;font-size:17px;font-weight:700;pointer-events:none;overflow:hidden;white-space:nowrap;isolation:isolate}
+@media(max-width:490px){
+ .compactIdentity{min-height:57px;gap:8px;padding-bottom:14px}
+ .orderTile{font-size:24px;margin-bottom:2px}
+ .identityDetails{gap:6px}
+ .routeDirection{font-size:15px}
+ .routeDirection,.vehicleNumber{gap:5px}
+ .identityIcon{width:15px;height:15px;flex-basis:15px}
+ .vehicleNumber{font-size:13px}
+ .vehicleNumber .identityIcon{width:14px;height:14px;flex-basis:14px}
+ .vehicleStatus{width:21px;flex-basis:21px}
+ .editOrder{width:24px;flex-basis:24px}
+ .boardStack{--time-column:49px;--time-edge:10px}
+ .activeDeparture{gap:7px;min-height:84px;padding:14px var(--time-edge)}
+ .departureNumbers{grid-template-columns:minmax(75px,auto) var(--time-column);column-gap:6px}
+ .liveOffset{font-size:clamp(23px,6vw,30px)}
+ .scheduledTime{font-size:13px}
+ .upcomingStop{grid-template-columns:minmax(0,1fr) var(--time-column);padding:9px var(--time-edge);min-height:41px}
+}
+@media(max-width:360px){
+ .compactIdentity{gap:6px}
+ .compactIdentity .routeTile{width:52px;height:54px;flex-basis:52px}
+ .orderTile{font-size:22px}
+ .activeDeparture{grid-template-columns:minmax(0,1fr) auto;gap:6px}
+ .departureNumbers{grid-template-columns:minmax(72px,auto) var(--time-column);gap:5px}
+ .liveOffset{font-size:22px}
+}
+@media(prefers-reduced-motion:reduce){
+ .boardStack *, .boardStack *::before,.boardStack *::after{animation:none!important;transition:none!important}
+}
