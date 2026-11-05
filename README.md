@@ -1,4 +1,4 @@
-# Časovač 0.4
+# Časovač 0.6
 
 Mobilní webová pomůcka pro sledování tramvajového pořadí PID. React, TypeScript, Vite a GitHub Pages.
 
@@ -76,3 +76,27 @@ Při spuštění sledování **mezi zastávkami** se systém nesnaží zpětně 
 V diagnostice je karta **Detekce odjezdu** s fází, vzdáleností, rychlostí, počtem měření, posunem po trase, odchylkou od trasy, důvodem čekání a posledním potvrzeným přepnutím. Prahy jsou prozatím testovací a mohou potřebovat úpravu po jízdních zkouškách.
 
 GPS měření v prohlížeči nemusejí chodit pravidelně a při zamčeném telefonu se mohou pozastavit. Odpočet stále není provozní pokyn k odjezdu.
+
+## Časovač 0.6: vzdálené sledování a záznam dat
+
+**Zdroje polohy jsou oddělené.** Pokud GPS telefonu není dostupná, je nepřesná nebo se nachází více než 250 m od polohy sledované tramvaje, aplikace automaticky použije vzdálený režim a GPS telefonu neovlivňuje výběr zastávky. Stejný režim funguje také při úplně vypnuté GPS. Telefon není považován za poruchu vozidla.
+
+- Sledování používá konkrétní živou polohu vozidla, ID následující zastávky, GTFS pořadí zastávek a geometrii `shapes`.
+- Odděleně počítá stáří posledního úspěšného API dotazu a původního časového razítka polohy vozidla (pokud je k dispozici). Chybějící čas vzniku polohy se neoznačuje za čerstvou telemetrii.
+- Na základě dvou odlišných časově seřazených hlášení lze krátce odhadnout další postup po trase. Maximální extrapolace je 20 sekund a 90 metrů; neověřený stav je označen jako odhad.
+- Při neaktuální telemetrii nad 90 s, nesouladu polohy s trasou nad 150 m nebo neznámých údajích se predikce omezí či pozastaví.
+- GPS detekce odjezdu z 0.5 zůstává pro telefon přímo ve vozidle.
+- Užitečným výstupem pro ověření modelu je sériový záznam skutečných hlášení z testování.
+
+**Jak zaznamenat test:**
+1. Otevři aplikaci, zadej linku/pořadí a stiskni **Sledovat**.
+2. Vpravo dole otevři **Diagnostiku**.
+3. V panelu **Záznam testovací jízdy** stiskni **Spustit záznam**.
+4. Nech aplikaci v prohlížeči otevřenou a aktivní, ideálně 30–60 minut. Lze při tom mít GPS vypnutou i zapnutou na jiném místě.
+5. Stiskni **Ukončit záznam**, potom **Stáhnout JSON** a soubor přilož do chatu.
+
+Každý úspěšný dotaz se ukládá jako samostatný vzorek i tehdy, když Golemio vrátilo stejnou polohu. Záznam zachovává čas žádosti, čas odpovědi, počet shod, surovou odpověď pro vybrané vozidlo, informaci o GPS režimu a vzdálenost telefonu od vozidla (je-li GPS dostupná). Ukládají se i chyby API, GTFS detail a volitelné poznámky.
+
+**Uložení a soukromí:** záznam je uložen pouze místně v IndexedDB. Po obnovení stránky zůstane, ale pro další nové dotazy musí uživatel opět spustit sledování. Záznam je omezen na 2400 událostí a poté se automaticky zastaví bez mazání dat. Export přes tlačítko vytvoří JSON; API token se nesmí v exportu objevit. Souřadnice GPS telefonu se **standardně nezaznamenávají**. Samostatná volba před začátkem testu je může výslovně přidat. I při výchozím nastavení JSON obsahuje veřejně hlášené souřadnice vozidla; při sdílení souboru to zohledni.
+
+**Omezení webu:** mobilní prohlížeče mohou na pozadí nebo se zamknutým displejem pozastavit časovače i síťové požadavky, takže není garantován nepřetržitý 20sekundový interval. Zaznamenané časové mezery jsou součástí testovacího výsledku.
