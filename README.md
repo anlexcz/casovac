@@ -194,3 +194,24 @@ Změny:
 - **Záměrné omezení:** automatické obnovení neprodlužuje expiraci každým načtením stránky. Průběžné sledování může pokračovat, ale po čtyřech hodinách od zvolení pořadí se již po restartu stránky nespustí samo.
 
 **Důležité pro test:** rozpoznávání konečné je založeno na odpovědích testované linky 25; ostatní linky s nepravidelnými službami mohou mít jiné stavy a časové vztahy. Odpočet je čistě informativní, nikoli provozní pokyn.
+
+## Audit animace a přepínání bez GPS (5. 11. 2026) – verze 1.3
+
+### Zjištění z diagnostických exportů
+
+Pět diagnostických záznamů linky 25/5 obsahuje přímo hlášení `last_position.state_position` a původní časy `origin_timestamp`. U **13 navazujících dvojic** nových hlášení `at_stop → on_track` pro stejnou poslední zastávku je medián časového rozestupu **64 s** (rozsah 31–74 s, průměr 58,3 s). Tyto hodnoty nejsou čistou dobou pobytu v zastávce: zahrnují i prodlevu sběru či publikování telemetrie. Ve čtyřech z těchto situací původní GPS na palubě potvrdila skutečný odjezd před doručením aktuálního `on_track`, takže čekání na `on_track` pro včasné přepnutí nestačí.
+
+**Nový algoritmus `src/remoteProgress.ts`:**
+- V režimu mimo palubu vychází z posledního hlášení `at_stop`, jeho `origin_timestamp`, `last_stop.sequence`, `next_stop.sequence`, plánovaných časů GTFS a zpoždění `last_stop_arrival` či `actual`, pokud je dostupné.
+- Po posledním `at_stop` předpokládá odjezd **po 36 s** u úseků do 75 s, **po 40 s** u úseků do 135 s, jinak **po 45 s**. Při dostupném zpoždění se nesmí přepnout před odhadovaným odjezdem `čas JŘ + zpoždění + 10 s`. Jde o první **heuristické** prahy vycházející z malého počtu záznamů, nikoliv o naučený model přesně určující skutečný odjezd.
+- Podmínky: odpověď API do 45 s, původní hlášení maximálně 100 s staré, dvojice navazujících stop sequences, existující další zastávka, žádný odklon či stale stav. Pořadí zastávek se nenavyšuje o více než jednu bez nového potvrzení; přepnutí může být označené jako **predikované**.
+- Predikce se vypíná během čekání na konečné; po příchodu skutečného `on_track` nebo nové zastávky z Golemia se opíráme o potvrzená data. Při dočasném opakování stejného staršího hlášení nedochází k blikání zpět.
+- V diagnostice je možné vidět čas od `at_stop`, práh 36/40/45 s, predikovaný index a zdroj rozhodnutí. Ve výstupním JSON se změna projevuje mezi událostmi `decision`. Na hlavní obrazovce odhadovanou zastávku označuje nenápadná **oranžová stavová tečka**; názvy a časy zůstávají minimalistické.
+
+**Audit animace `src/StopBoard.tsx`:**
+- Dříve byl hlavní řádek mimo DOM seznam ostatních zastávek, takže se jednotlivé elementy nedaly plynule přesouvat jako jeden seznam. Při přepnutí se ještě vytvářela separátní neúplná kopie předchozího řádku; výsledkem mohl být vizuálně nesouvislý přesun či překrývání.
+- Nově jsou hlavní i následující zastávky **sourozenecké řádky ve stejném kontejneru**, se stabilním identifikátorem podle indexu tripu. Pro sousední přepnutí používají animaci FLIP (`translateY`, 720 ms). Dřívější hlavní řádek krátce odjede nahoru jako nepřekážející dekorativní kopie. Ruční skok, změna tripu a nastavení `prefers-reduced-motion` plynulý přesun nepoužívají.
+- Zobrazení časů je nadále v jedné pravé ose a červená/zelená barva má **výhradně časový význam**.
+
+**Limitace:** Bez přímé polohy telefonu na palubě nemůže aplikace spolehlivě potvrdit skutečný okamžik rozjezdu z pravidelných sporadických zpráv Golemia. Predikce proto může v některých situacích přepnout před odjezdem nebo později, zejména při delším stání na zastávce, dopravní nepravidelnosti nebo změně intervalů aktualizace. Pro definitivní kalibraci je vhodný další záznam z několika linek; UI výslovně odlišuje predikci od potvrzení. 
+
