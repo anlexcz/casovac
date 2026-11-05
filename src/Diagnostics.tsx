@@ -67,6 +67,9 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
   <p className="hint">{onboard?'GPS telefonu odpovídá poloze tramvaje, lze použít detekci skutečného rozjezdu.':'GPS telefonu je vypnutá, neaktuální nebo mimo sledovanou tramvaj. Používám výhradně údaje Golemia.'}</p>
   <div className="details">
    <div><small>STAV PREDIKCE</small><strong>{remote.status}</strong></div>
+   <div><small>STAV VOZIDLA</small><strong>{remote.vehicleState}</strong></div>
+   <div><small>ZDROJ URČENÍ ZASTÁVKY</small><strong>{remote.source}</strong></div>
+   <div><small>POSLEDNÍ / DALŠÍ ZASTÁVKA</small><strong>{remote.previousIndex===null?'—':stops[remote.previousIndex]?.name??'—'} / {remote.nextIndex===null?'—':stops[remote.nextIndex]?.name??'—'}</strong></div>
    <div><small>ODHADOVANÁ ZASTÁVKA</small><strong>{remote.index===null?'—':(stops[remote.index]?.name??'—')}</strong></div>
    <div><small>STÁŘÍ POLOHY VOZIDLA</small><strong>{remote.sourceAge===null?'Čas měření není k dispozici':remote.sourceAge+' s'}</strong></div>
    <div><small>STÁŘÍ API ODPOVĚDI</small><strong>{remote.apiAge===null?'—':remote.apiAge+' s'}</strong></div>
