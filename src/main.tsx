@@ -59,6 +59,7 @@ function App(){
  const [expanded,setExpanded]=useState(false);
  const [editing,setEditing]=useState(false);
  const [features,setFeatures]=useState<Feature[]>([]);
+ const [lookup,setLookup]=useState<{line:string;items:Feature[];error:string;loading:boolean}>({line:'',items:[],error:'',loading:false});
  const [lastFetch,setLastFetch]=useState<number|null>(null);
  const [queryMode,setQueryMode]=useState('active');
  const [lastSeen,setLastSeen]=useState<LastSeen|null>(null);
@@ -84,6 +85,39 @@ function App(){
 
  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
  useEffect(()=>{save(ROUTE_KEY,query.trim());},[query]);
+ const lookupLine=/^\d{1,3}(?:\s*\/\s*\d{0,4})?$/.test(query.trim())?query.trim().split('/')[0].trim():'';
+ useEffect(()=>{
+  if(!editing||!lookupLine||!token.trim())return;
+  let alive=true;const abort=new AbortController();
+  async function load(){
+   setLookup({line:lookupLine,items:[],error:'',loading:true});
+   try{
+    const url=new URL(API);url.searchParams.set('routeShortName',lookupLine);
+    url.searchParams.set('includeNotTracking','true');url.searchParams.set('limit','1000');
+    const response=await fetch(url,{headers:{'X-Access-Token':token.trim()},signal:abort.signal,cache:'no-store'});
+    if(!response.ok)throw Error('Golemio HTTP '+response.status);
+    const body:unknown=await response.json();
+    if(!body||typeof body!=='object'||!Array.isArray((body as Obj).features))throw Error('Neplatná odpověď');
+    if(alive)setLookup({line:lookupLine,items:(body as {features:Feature[]}).features,error:'',loading:false});
+   }catch(e){if(alive&&!abort.signal.aborted)setLookup({line:lookupLine,items:[],error:String(e),loading:false});}
+  }
+  const delay=setTimeout(()=>void load(),250),interval=setInterval(()=>void load(),20000);
+  return()=>{alive=false;abort.abort();clearTimeout(delay);clearInterval(interval);};
+ },[editing,lookupLine,token]);
+ const available=new Map<string,{line:string;order:string;car:string;stop:string}>();
+ if(lookup.line===lookupLine&&!lookup.loading&&!lookup.error)for(const f of lookup.items){
+  const line=String(path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name')??'');
+  const raw=orderOf(f);
+  if(normalize(line)!==normalize(lookupLine)||raw===null||raw===undefined||!/^\d+$/.test(String(raw)))continue;
+  const order=normalize(raw),key=normalize(line)+'/'+order;
+  const stop=path(f,'properties.last_position.next_stop.name')??path(f,'properties.last_position.last_stop.name');
+  const item={line,order,car:vehicleId(f),stop:typeof stop==='string'&&stop?stop:'Poloha neznámá'};
+  const previous=available.get(key);
+  if(!previous||previous.car==='—'&&item.car!=='—')available.set(key,item);
+ }
+ const lookupOrder=parseOrder(query);
+ const results=[...available.values()].filter(item=>!lookupOrder||normalize(item.order)===normalize(lookupOrder[1])).sort((a,b)=>Number(a.order)-Number(b.order));
+ const lookupReady=lookup.line===lookupLine&&!lookup.loading&&!lookup.error;
  useEffect(()=>{if(active&&token.trim()){
   // Refresh only when a route is actively selected; do not keep extending on refresh.
   const raw=stored(ACTIVE_KEY);let storedRoute:null|{line:string;order:string;expires:number}=null;
@@ -310,9 +344,10 @@ function App(){
  },[recorder.session?.id,recorder.session?.state,tripId,chosen,queryMode,onboard.mode,
     compatible,remote.source,remote.status,remote.vehicleState,remote.previousIndex,
     remote.nextIndex,displayedIndex,remoteProgress.predicted,departureDetection.phase,departureDetection.lastSwitch,terminalWaiting]);
- function start(){
-  const parsed=parseOrder(query);if(!parsed){setError('Zadej linku a pořadí, například 25/5.');return;}
+ function start(value=query){
+  const parsed=parseOrder(value);if(!parsed){setError('Zadej linku a pořadí, například 25/5.');return;}
   if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v Nastavení.');return;}
+  setQuery(parsed[0]+'/'+parsed[1]);
   setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);
   setFeatures([]);setLastFetch(null);setError('');
   save(ACTIVE_KEY,JSON.stringify({line:parsed[0],order:parsed[1],expires:Date.now()+ACTIVE_TTL}));
@@ -327,14 +362,30 @@ function App(){
   <header className="topbar">
    <div><h1>ČASOVAČ<span className="dot">.</span></h1></div>
    <div className="headActions">
+    <button className="headButton" type="button" onClick={()=>{setQuery(active?.[0]??'');setEditing(true);setError('');}} aria-label="Vybrat sledovaný spoj" title="Vybrat sledovaný spoj"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="m15 5 4 4M4 20l4.8-1 10-10a2.8 2.8 0 0 0-4-4l-10 10L4 20Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
     <button className={'headButton '+(gpsWanted&&!gpsError&&gpsAge!==null&&gpsAge<=20?'gpsActive':'')} onClick={toggleGPS} aria-pressed={gpsWanted} aria-label={gpsWanted?'Vypnout GPS':'Zapnout GPS'} title={gpsError||pos.status}>⌖ <span>GPS</span></button>
     <button className="headButton" onClick={()=>setSettings(true)} aria-label="Nastavení">⚙</button>
    </div>
   </header>
 
-  {(!active||editing)&&<section className="panel searchPanel compactSearch">
-   <div className="search"><input id="orderInput" aria-label="Linka / pořadí" inputMode="text" placeholder="25/5" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')start();}}/><button className="primary" onClick={start}>Sledovat</button></div>
-  </section>}
+  {!active&&!editing&&<section className="panel searchPanel compactSearch"><button className="primary full" onClick={()=>setEditing(true)}>Vybrat sledovaný spoj</button></section>}
+  {editing&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setEditing(false);}}>
+   <section className="modal chooserModal" role="dialog" aria-modal="true" aria-label="Vybrat sledovaný spoj">
+    <div className="row chooserHeading"><div><h2>Vybrat sledovaný spoj</h2><p className="hint">Linka nebo linka/pořadí</p></div><button className="iconButton" onClick={()=>setEditing(false)} aria-label="Zavřít">✕</button></div>
+    <input id="orderInput" autoFocus aria-label="Linka nebo linka/pořadí" placeholder="Např. 25 nebo 25/5" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&parseOrder(query))start();}}/>
+    {!token.trim()?<p className="hint">Pro vyhledávání je potřeba API klíč Golemio v nastavení.</p>:
+     !lookupLine?<p className="hint">Zadej číslo linky nebo konkrétní pořadí.</p>:
+     <div className="chooserResults">
+      <p className="chooserCaption">{!lookupReady&&!lookup.error?'Načítám dostupná pořadí…':lookup.error?'Nepodařilo se načíst data':lookupOrder?'Výsledek vyhledávání':'Dostupná pořadí linky '+lookupLine}</p>
+      {lookup.line===lookupLine&&lookup.error&&<p className="hint" role="status">{lookup.error}</p>}
+      {lookupReady&&results.map(item=><button type="button" className="chooserRow" key={item.line+'/'+item.order} onClick={()=>start(item.line+'/'+item.order)}>
+       <span className="chooserId"><span>{item.line}/</span><strong>{item.order}</strong></span><span className="chooserVehicle">#{item.car}</span><span className="chooserStop">{item.stop}</span>
+      </button>)}
+      {lookupReady&&lookupOrder&&results.length===0&&<div className="chooserMissing"><strong>Pořadí {lookupOrder[0]}/{lookupOrder[1]} není momentálně dostupné.</strong><p className="hint">Můžeš opravit zadání nebo pořadí sledovat a počkat na data.</p><button className="primary full" onClick={()=>start()}>Sledovat {lookupOrder[0]}/{lookupOrder[1]} a čekat na data</button></div>}
+      {lookupReady&&!lookupOrder&&results.length===0&&<p className="hint">Aktuálně nejsou dostupná žádná pořadí. Konkrétní pořadí můžeš zadat ručně.</p>}
+     </div>}
+   </section>
+  </div>}
   {error&&<div className="alert" role="status">{error}</div>}
   {active&&<section className="panel journeyPanel compactJourney">
     <div className="compactIdentity">
@@ -353,9 +404,6 @@ function App(){
       <button className={'vehicleStatus '+statusColor} type="button" onClick={()=>setDiagnostics(true)}
        aria-label={statusDescription+'; otevřít diagnostiku'} title={statusDescription}>
        <span className="statusDot"/>
-      </button>
-      <button type="button" className="editOrder" onClick={()=>setEditing(v=>!v)} aria-label={editing?'Skrýt zadání':'Změnit linku nebo pořadí'} title="Změnit linku/pořadí">
-       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m15 5 4 4M4 20l4.8-1 10-10a2.8 2.8 0 0 0-4-4l-10 10L4 20Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
     </div>
     {highlightedStop&&displayedIndex!==null?
