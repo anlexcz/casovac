@@ -82,3 +82,15 @@
 .departureAudit .details{grid-template-columns:repeat(2,minmax(0,1fr))}
 .departureAudit .details strong{font-variant-numeric:tabular-nums}
 @media(max-width:500px){.departureAudit .details{grid-template-columns:1fr}}
+
+/* 0.6 diagnostic recorder and remote telemetry */
+.recorderPanel{border-color:#52616d;background:#19212a}
+.recorderPanel h2,.remotePanel h2{font-size:18px}
+.recorderActions{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+.recorderActions button{flex:1 1 160px}
+.recorderActions button:disabled{opacity:.45;cursor:not-allowed}
+.recorderPanel .rememberOption{margin:14px 0}
+.recorderPanel .search{margin-top:13px}
+.recorderPanel .search input{font-size:13px}
+.remotePanel{background:#172027}
+.remotePanel .details strong{font-variant-numeric:tabular-nums}
