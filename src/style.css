@@ -202,3 +202,8 @@
 @media(prefers-reduced-motion:reduce){
  .boardStack *, .boardStack *::before,.boardStack *::after{animation:none!important;transition:none!important}
 }
+
+/* Terminal layover: neutral timing until departure is confirmed. */
+.activeDeparture.clockTerminal{background:#454b54;color:#f6f7f9}
+.activeDeparture.clockTerminal .scheduledTime{color:#c2cbd4}
+.activeDeparture.clockTerminal .liveOffset{font-variant-numeric:tabular-nums}
