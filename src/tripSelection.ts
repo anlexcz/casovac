@@ -33,8 +33,20 @@ export function selectTrip(features:TripFeature[],line:string,order:string,now:n
  const activeVehicles=[...vehicles].filter(([,trips])=>trips.some(isActiveTrip));
  if(activeVehicles.length===1)vehicle=activeVehicles[0][0];
  else if(activeVehicles.length>1){
-  // Conflicting simultaneous active reports are unsafe to auto-resolve.
-  return {feature:null,matches,reason:'Pořadí hlásí více současně aktivních vozů.',vehicle:null,ambiguous:true};
+  // During a vehicle replacement the old and new car can briefly both
+  // carry an active state. Resolve only if one has clearly fresher telemetry.
+  const observation=(f:TripFeature)=>stamp(
+   at(f,'properties.last_position.origin_timestamp')??
+   at(f,'properties.last_position.timestamp')??
+   at(f,'properties.last_position.last_updated')??
+   at(f,'properties.last_position.recorded_at')??
+   at(f,'properties.last_position.updated_at'))??0;
+  const ranked=activeVehicles.map(([id,trips])=>({
+   id,time:Math.max(...trips.filter(isActiveTrip).map(observation))
+  })).sort((a,b)=>b.time-a.time);
+  if(ranked[0].time>now-90000&&ranked[0].time-ranked[1].time>=30000)
+   vehicle=ranked[0].id;
+  else return {feature:null,matches,reason:'Dva vozy současně hlásí stejné pořadí bez jednoznačně novější polohy.',vehicle:null,ambiguous:true};
  }else if(vehicles.size===1)vehicle=[...vehicles.keys()][0];
  else {
   const prepared=[...vehicles].filter(([,trips])=>trips.some(f=>isBeforeTrip(f)&&
