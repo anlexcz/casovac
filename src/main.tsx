@@ -281,8 +281,10 @@ function App(){
    countdownSeconds(highlightedTime,now):seconds;
  const telemetryAge=remote.sourceAge;
  const statusColor=!chosen?'statusGray':error||age===null||age>90?'statusRed':
+  !compatible&&remoteProgress.predicted?'statusAmber':
   telemetryAge===null?'statusGray':telemetryAge<=30?'statusGreen':telemetryAge<=90?'statusAmber':'statusRed';
  const statusDescription=!chosen?'Vůz není aktuálně nalezen':error?'Chyba připojení':
+  !compatible&&remoteProgress.predicted?'Zastávka je predikovaná podle posledního hlášení':
   telemetryAge===null?'Čas měření polohy není dostupný':
   'Stáří polohy '+telemetryAge+' sekund';
  useEffect(()=>{
