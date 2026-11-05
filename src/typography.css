@@ -175,3 +175,30 @@ body, button, input, select, textarea { font-family: var(--font-ui); }
   }
   .compactIdentity .serviceBadge .orderTile { left: 45px; }
 }
+
+/* Continuation of a chained operating order inside the same stop board. */
+.chainLabel{
+ display:flex;
+ align-items:center;
+ gap:8px;
+ padding:10px 10px 5px;
+ color:#bfcbd5;
+ font:500 12px var(--font-ui);
+ letter-spacing:0;
+ border-top:1px solid #424953;
+}
+.chainLine{
+ display:grid;
+ place-items:center;
+ min-width:25px;
+ height:24px;
+ padding:0 5px;
+ border-radius:5px;
+ background:#ff3636;
+ color:#fff;
+ font:400 19px/1 var(--font-display);
+}
+.boardStack>.upcomingStop>.chainUpcoming{
+ cursor:default;
+ min-height:41px;
+}
