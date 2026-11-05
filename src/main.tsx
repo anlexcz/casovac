@@ -532,7 +532,9 @@ function App(){
     {highlightedStop&&displayedIndex!==null?
      <StopBoard stops={trip.stops} index={displayedIndex} tripId={tripId} remaining={highlightedRemaining}
       terminalWaiting={terminalWaiting} expanded={expanded} onExpand={()=>setExpanded(v=>!v)}
-      onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}/>
+      onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}
+      continuation={continuity.ok&&plannedHandoff&&nextTrip.tripId===plannedHandoff.next.tripId?
+       {line:plannedHandoff.next.line,order:plannedHandoff.next.order,stops:nextTrip.stops}:null}/>
      :<div className="compactEmpty">
        {loading||trip.loading?'Načítání…':chosen?trip.error||'Jízdní řád nedostupný':lastSeen?
        'Poslední vůz #'+lastSeen.vehicle+' · '+new Date(lastSeen.lastSeenAt).toLocaleTimeString('cs-CZ'):error?'Data jsou dočasně nedostupná':'Pořadí nenalezeno'}
