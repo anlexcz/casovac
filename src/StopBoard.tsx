@@ -3,7 +3,7 @@ import type {Stop} from './tripData';
 import {formatStopTime} from './tripData';
 
 type Props={
- stops:Stop[];index:number|null;tripId:string;remaining:number|null;
+ stops:Stop[];index:number|null;tripId:string;remaining:number|null;terminalWaiting:boolean;
  expanded:boolean;onExpand:()=>void;onChoose:(index:number)=>void;
  animate:boolean;
 };
@@ -13,7 +13,7 @@ function signed(remaining:number|null){
  return (elapsed<0?'−':'+')+String(Math.floor(abs/60)).padStart(2,'0')+':'+String(abs%60).padStart(2,'0');
 }
 type Snapshot={trip:string;index:number;rects:Map<string,DOMRect>};
-export default function StopBoard({stops,index,tripId,remaining,expanded,onExpand,onChoose,animate}:Props){
+export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate}:Props){
  const stack=useRef<HTMLDivElement|null>(null);
  const previous=useRef<Snapshot|null>(null);
  const currentIndex=index??-1;
@@ -21,7 +21,7 @@ export default function StopBoard({stops,index,tripId,remaining,expanded,onExpan
  const current=valid?stops[currentIndex]:null;
  const future=valid?stops.slice(currentIndex+1):[];
  const list=expanded?future:future.slice(0,6);
- const clock=remaining===null?'clockUnknown':remaining>0?'clockEarly':'clockReady';
+ const clock=terminalWaiting?'clockTerminal':remaining===null?'clockUnknown':remaining>0?'clockEarly':'clockReady';
  useLayoutEffect(()=>{
   const root=stack.current;
   if(!root)return;
