@@ -70,6 +70,7 @@ export function useRecorder(){
  const [session,setSession]=useState<RecorderSession|null>(null);
  const ref=useRef<RecorderSession|null>(null);
  const queue=useRef<Promise<unknown>>(Promise.resolve());
+ const lastGpsWrite=useRef(0);
  const [ready,setReady]=useState(false);
  const [error,setError]=useState('');
  const safeSave=useCallback((next:RecorderSession|null)=>{
@@ -87,7 +88,7 @@ export function useRecorder(){
  },[]);
  const start=useCallback((line:string,order:string,includePhoneCoordinates:boolean)=>{
   if(!ready||error)return;
-  const time=new Date().toISOString();
+  const time=new Date().toISOString();lastGpsWrite.current=0;
   safeSave({schema:'casovac-diagnostics-v1',id:time+'-'+line+'-'+order,startedAt:time,endedAt:null,
    target:{line,order},options:{includePhoneCoordinates,pollMs:20000},events:[],state:'recording',limits:{maxEvents:MAX}});
  },[ready,error,safeSave]);
@@ -102,7 +103,7 @@ export function useRecorder(){
   }else safeSave({...old,events});
  },[safeSave]);
  const api=useCallback((args:{line:string;order:string;responseStatus:number;requestStartedAt:number;responseAt:number;
-  matchingCount:number;vehicle:unknown;gps:GpsFix|null;source:string})=>{
+  matchingCount:number;vehicle:unknown;gps:GpsFix|null;source:string;candidateVehicles?:unknown;queryMode?:string})=>{
   const old=ref.current;if(old?.state!=='recording'||old.target.line!==args.line||old.target.order!==args.order)return;
   const feature=args.vehicle as {geometry?:{coordinates?:unknown}}|null;
   const c=feature?.geometry?.coordinates;
@@ -113,7 +114,8 @@ export function useRecorder(){
    durationMs:args.responseAt-args.requestStartedAt,status:args.responseStatus,matchingCount:args.matchingCount,
    gpsMode:!args.gps?'absent':!gpsReliable?'stale_or_inaccurate':metres!==null&&metres<=250?'near':'remote',
    phoneGpsAgeMs:age,phoneAccuracyM:args.gps?.accuracy??null,phoneVehicleDistanceM:metres,
-   selectedVehicleSource:args.source,vehicle:args.vehicle});
+   selectedVehicleSource:args.source,queryMode:args.queryMode??'default',
+   candidateVehicles:args.candidateVehicles??null,vehicle:args.vehicle});
  },[append]);
  const apiError=useCallback((line:string,order:string,status:string,message:string)=>{
   if(ref.current?.target.line===line&&ref.current.target.order===order)append('api_error',{status,message});
@@ -124,7 +126,17 @@ export function useRecorder(){
  },[append]);
  const gps=useCallback((fix:GpsFix)=>{
   const old=ref.current;if(old?.state!=='recording'||!old.options.includePhoneCoordinates)return;
-  append('gps',{...fix});
+  // Keep high-enough resolution for a departing tram, but avoid thousands of
+  // phone samples when the vehicle is elsewhere. Never infer onboard without
+  // an independently known vehicle position.
+  const recent=old.events.slice(-20).reverse().find(e=>e.kind==='api');
+  const info=recent?.data as {phoneVehicleDistanceM?:number|null;gpsMode?:string}|undefined;
+  const onboard=info?.gpsMode==='near'&&info.phoneVehicleDistanceM!==null&&
+   info.phoneVehicleDistanceM!==undefined&&info.phoneVehicleDistanceM<=250;
+  const minimumInterval=onboard?2000:30000;
+  if(fix.timestamp-lastGpsWrite.current<minimumInterval)return;
+  lastGpsWrite.current=fix.timestamp;
+  append('gps',{...fix,recordingMode:onboard?'onboard':'remote'});
  },[append]);
  const note=useCallback((message:string)=>{if(message.trim())append('note',{message:message.trim()});},[append]);
  const download=useCallback(()=>{const value=ref.current;if(value)exportFile(value);},[]);
