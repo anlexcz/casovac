@@ -90,7 +90,7 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
   </div>
   {lastHandoff&&<details><summary>Zdůvodnění posledního přepnutí</summary><pre>{JSON.stringify(lastHandoff,null,2)}</pre></details>}
   <p className="hint">Pro 5/6 a 9/10 kontroluje každých 40 s
-   také druhou linku a hledá všechny její záznamy se <strong>stejným evidenčním číslem</strong>.
+   také druhou linku a hledá tripy se <strong>stejným pořadím nebo evidenčním číslem</strong>.
    Používá includeNotTracking=true, takže lze zachytit i trip před zahájením jízdy. Pokud zapneš
    „Záznam testovací jízdy“, každý výsledek se přidá do exportovaného JSON.</p>
   {!active?<p className="hint">Nejprve vyber linku a pořadí.</p>:
@@ -102,12 +102,12 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
      <div><small>NÁVAZNÁ LINKA</small><strong>{chainDiagnostic.relatedLine}</strong></div>
      <div><small>POSLEDNÍ KONTROLA</small><strong>{chainDiagnostic.time?new Date(chainDiagnostic.time).toLocaleTimeString('cs-CZ'):'—'}</strong></div>
      <div><small>ZÁZNAMŮ DRUHÉ LINKY CELKEM</small><strong>{chainDiagnostic.relatedTotal}</strong></div>
-     <div><small>SHODNÉ VOZIDLO NA DRUHÉ LINCE</small><strong>{chainDiagnostic.related.length} záznamů</strong></div>
+     <div><small>KANDIDÁTI NÁVAZNÉ LINKY (POŘADÍ NEBO VŮZ)</small><strong>{chainDiagnostic.related.length} záznamů</strong></div>
      <div><small>SHODNÉ VOZIDLO NA PŮVODNÍ LINCE</small><strong>{chainDiagnostic.primary.length} záznamů</strong></div>
     </div>
     {chainDiagnostic.error&&<p className="warn" role="status">{chainDiagnostic.error}</p>}
     {chainDiagnostic.related.length===0&&!chainDiagnostic.loading&&!chainDiagnostic.error&&
-     <p className="hint">Na druhé lince nebyl ve vzorku nalezen stejný vůz.
+     <p className="hint">Na druhé lince nebyl ve vzorku nalezen kandidát návaznosti.
      Neznamená to, že nemá plánovaný další trip – Golemio jej nemusí posílat dopředu.</p>}
     {[...chainDiagnostic.primary,...chainDiagnostic.related].map((f,i)=>
      <div key={f.source+'-'+f.tripId+'-'+i} className="details">
