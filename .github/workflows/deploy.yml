@@ -29,6 +29,8 @@ jobs:
       - name: Build daily PID GTFS lookup (static assets)
         run: python scripts/build_gtfs_lookup.py
       - run: npm install --no-audit --no-fund
+      - name: Verify chained-line handoff rules
+        run: npm test
       - run: npm run build
       - name: Verify compiled site
         run: |
