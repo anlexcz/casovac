@@ -3,7 +3,7 @@ import type {GpsFix} from './position';
 import {distanceMeters} from './position';
 
 export type RecordEvent={
- kind:'api'|'api_error'|'trip'|'gps'|'note'|'decision';
+ kind:'api'|'api_error'|'trip'|'gps'|'note'|'decision'|'chain';
  receivedAt:string;receivedAtMs:number;
  data:unknown;
 };
@@ -139,7 +139,12 @@ export function useRecorder(){
   append('gps',{...fix,recordingMode:onboard?'onboard':'remote'});
  },[append]);
  const decision=useCallback((data:unknown)=>append('decision',data),[append]);
+ const chain=useCallback((line:string,order:string,data:unknown)=>{
+  const current=ref.current;
+  if(current?.state==='recording'&&current.target.line===line&&current.target.order===order)
+   append('chain',data);
+ },[append]);
  const note=useCallback((message:string)=>{if(message.trim())append('note',{message:message.trim()});},[append]);
  const download=useCallback(()=>{const value=ref.current;if(value)exportFile(value);},[]);
- return {session,ready,error,start,stop,discard,download,api,apiError,trip,gps,note,decision};
+ return {session,ready,error,start,stop,discard,download,api,apiError,trip,gps,note,decision,chain};
 }
