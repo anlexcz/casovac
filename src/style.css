@@ -76,3 +76,9 @@
 .stopAudit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:#dce3eb}
 .stopAudit button{margin-top:14px}
 .stopAudit pre{white-space:pre-wrap;overflow-wrap:anywhere}
+
+.departureAudit{margin:16px 0;border:1px solid #344b5a;background:#141d25;border-radius:12px;padding:15px}
+.departureAudit h3{margin:0;font-size:16px}
+.departureAudit .details{grid-template-columns:repeat(2,minmax(0,1fr))}
+.departureAudit .details strong{font-variant-numeric:tabular-nums}
+@media(max-width:500px){.departureAudit .details{grid-template-columns:1fr}}
