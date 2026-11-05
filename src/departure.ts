@@ -75,7 +75,7 @@ export function useDepartureDetection(args:{
  const [state,setState]=useState<State>(INIT);
  const stateRef=useRef<State>(INIT);
  const lastContext=useRef('');
- const context=tripId+'|'+stops.length+'|'+(manualIndex??'automatic');
+ const context=tripId+'|'+stops.length+'|'+(manualIndex??'automatic')+'|'+(gps?'onboard':'remote');
  useEffect(()=>{
   lastContext.current=context;stateRef.current={...INIT,displayIndex:manualIndex??baseIndex};
   setState(stateRef.current);
