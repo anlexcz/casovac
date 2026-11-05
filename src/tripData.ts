@@ -50,7 +50,8 @@ export function useTripData(tripId:string,token:string):TripData{
         const url=new URL('https://api.golemio.cz/v2/public/gtfs/trips/'+encodeURIComponent(tripId));
         url.searchParams.append('scopes[]','info');
         url.searchParams.append('scopes[]','stop_times');
-        // Geometry is not required for the public dashboard.
+        // Directional departure detection uses the full ordered shape geometry.
+        url.searchParams.append('scopes[]','shapes');
         const headers={'X-Access-Token':token};
         const response=await fetch(url,{headers,cache:'no-store',signal:abort.signal});
         if(!response.ok)throw new Error('Detail tripu: HTTP '+response.status);
