@@ -14,11 +14,11 @@ async function getStops(id:string,token:string):Promise<Stop[]>{
  const promise=(async()=>{
   const url=new URL('https://api.golemio.cz/v2/public/gtfs/trips/'+encodeURIComponent(id));
   url.searchParams.append('scopes[]','info');url.searchParams.append('scopes[]','stop_times');
-  const body=await golemioJson<unknown>(url.toString(),token,30*60*1000);
+  const body=await golemioJson<unknown>(url.toString(),token,30*60*1000,'low');
   let stops=parseStops(body);
   if(!stops.length){
    const fallback='https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(id);
-   try{stops=parseStops(await golemioJson<unknown>(fallback,token,30*60*1000));}
+   try{stops=parseStops(await golemioJson<unknown>(fallback,token,30*60*1000,'low'));}
    catch(e){if(e instanceof GolemioLimitError)throw e;}
   }
   if(stops.some(s=>good(s.name)))cache.set(id,stops);
@@ -34,7 +34,10 @@ export function useChooserStops(targets:ChooserTarget[],token:string,enabled:boo
  useEffect(()=>{
   if(!enabled||!token||!keys.length)return;
   let alive=true;
-  const ids=keys.filter(id=>!cache.has(id));
+  // Only a small, bounded number of decorations per opened line.
+  // Previously each of 30+ orders caused a separate network lookup and starved
+  // the actual vehicle selector and the running timer.
+  const ids=keys.filter(id=>!cache.has(id)).slice(0,4);
   const run=async()=>{
    // Sequential, low-priority enrichment. A list of 30 vehicles must not
    // trigger 30 simultaneous trip lookups while the main timer is polling.
