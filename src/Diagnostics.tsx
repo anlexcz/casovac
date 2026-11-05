@@ -1,5 +1,5 @@
 import type {RemoteProgress} from './remoteProgress';
-import type {ChainSnapshot} from './chainDiagnostics';
+import type {ChainSnapshot,ChainTrip} from './chainDiagnostics';
 import type {LastSeen} from './lastSeen';
 import type {OnboardDecision} from './onboard';
 import type {RemoteState} from './remoteTracking';
@@ -23,11 +23,13 @@ type Props={
  terminalWaiting:boolean;terminalName:string|null;queryMode:string;terminalCandidates:unknown[];
  lastSeen:LastSeen|null;relatedVehicle:{vehicle:string;route:string;order:string;state:string;time:number}|null;
  chainDiagnostic:ChainSnapshot|null;
+ lastHandoff:{from:string;to:string;vehicle:string;tripId:string;reason:string;time:number}|null;
+ plannedHandoff:ChainTrip|null;handoffContinuity:string;handoffDeparture:string;
  recorder:ReturnType<typeof useRecorder>;
 };
 const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
-export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,chainDiagnostic,recorder}:Props){
+export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,chainDiagnostic,lastHandoff,plannedHandoff,handoffContinuity,handoffDeparture,recorder}:Props){
  const stops:Stop[]=trip.stops;
  const [copyState,setCopyState]=useState('');
  const [includePhone,setIncludePhone]=useState(false);
@@ -76,7 +78,18 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
     {chainDiagnostic?.loading?'Kontroluji':chainDiagnostic?.error?'Chyba':chainDiagnostic?.time?'Načteno':'Čekám'}
    </span>
   </div>
-  <p className="hint">Experimentální diagnostika, nikoliv automatické přepínání. Pro 5/6 a 9/10 kontroluje každých 40 s
+  <p className="hint">Automatické přepínání je aktivní: Časovač čeká na jednoznačnou návaznost
+   a potvrzený odjezd z předposlední zastávky. Testovací záznam může pokračovat i po změně linky.</p>
+  <div className="details">
+   <div><small>PŘIPRAVENÝ NÁSLEDUJÍCÍ TRIP</small><strong>{plannedHandoff?
+    plannedHandoff.line+'/'+plannedHandoff.order+' · '+plannedHandoff.tripId:'Nenalezen'}</strong></div>
+   <div><small>OVĚŘENÍ NÁVAZNOSTI</small><strong>{handoffContinuity}</strong></div>
+   <div><small>SPÍNAČ PŘECHODU</small><strong>{handoffDeparture}</strong></div>
+   <div><small>POSLEDNÍ PŘEPNUTÍ</small><strong>{lastHandoff?
+    lastHandoff.from+' → '+lastHandoff.to+' · '+new Date(lastHandoff.time).toLocaleTimeString('cs-CZ'):'—'}</strong></div>
+  </div>
+  {lastHandoff&&<details><summary>Zdůvodnění posledního přepnutí</summary><pre>{JSON.stringify(lastHandoff,null,2)}</pre></details>}
+  <p className="hint">Pro 5/6 a 9/10 kontroluje každých 40 s
    také druhou linku a hledá všechny její záznamy se <strong>stejným evidenčním číslem</strong>.
    Používá includeNotTracking=true, takže lze zachytit i trip před zahájením jízdy. Pokud zapneš
    „Záznam testovací jízdy“, každý výsledek se přidá do exportovaného JSON.</p>
