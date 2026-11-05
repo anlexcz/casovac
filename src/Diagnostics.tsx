@@ -1,3 +1,4 @@
+import type {DepartureTelemetry} from './departure';
 import {useMemo,useState} from 'react';
 import {auditStopIds,stopAuditReport} from './stopAudit';
 import type {Stop,TripData} from './tripData';
@@ -11,11 +12,11 @@ type Props={
  position:number|null;positionState:string;vehicleDistance:number|null;
  manual:number|null;setManual:(index:number|null)=>void;
  selectedTrip:string;setSelectedTrip:(id:string)=>void;
- startGps:()=>void;stopGps:()=>void;nextStopId:string;
+ startGps:()=>void;stopGps:()=>void;nextStopId:string;departure:DepartureTelemetry;
 };
 const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
-export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId}:Props){
+export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure}:Props){
  const stops:Stop[]=trip.stops;
  const [copyState,setCopyState]=useState('');
  const coordinates=chosen?.geometry?.coordinates;
@@ -52,6 +53,23 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
  <div><small>GPS / VOZIDLO</small><strong>{vehicleDistance??'—'} m</strong></div>
  <div><small>AKTUÁLNÍ INDEX</small><strong>{position===null?'—':position+1}</strong></div>
  </div>
+ <section className="departureAudit" aria-label="Detekce opuštění zastávky">
+ <div className="row"><h3>Detekce odjezdu</h3><span className={'status '+(departure.phase==='left'?'good':'')}>{departure.phase}</span></div>
+ <p className="hint">{departure.reason}</p>
+ <div className="details">
+ <div><small>MONITOROVANÁ ZASTÁVKA</small><strong>{departure.stopIndex===null?'—':(stops[departure.stopIndex]?.name??'—')}</strong></div>
+ <div><small>ZOBRAZENÝ INDEX</small><strong>{departure.displayIndex===null?'—':departure.displayIndex+1}</strong></div>
+ <div><small>VZDÁLENOST OD ZASTÁVKY</small><strong>{departure.distance===null?'—':departure.distance+' m'} / 50 m</strong></div>
+ <div><small>POSTUP PO TRASE</small><strong>{departure.along===null?'—':departure.along.toFixed(1)+' m'} / 50 m</strong></div>
+ <div><small>RYCHLOST</small><strong>{departure.speed===null?'—':departure.speed.toFixed(1)+' km/h'} / 9 km/h</strong></div>
+ <div><small>POTVRZENÍ GPS</small><strong>{departure.samples}/3 měření · {departure.seconds.toFixed(1)}/4 s</strong></div>
+ <div><small>NÁRŮST VZDÁLENOSTI</small><strong>{departure.increase===null?'—':departure.increase+' m'} / 15 m</strong></div>
+ <div><small>ODCHYLKA OD TRASY</small><strong>{departure.crossTrack===null?'—':departure.crossTrack.toFixed(1)+' m'}</strong></div>
+ <div><small>GTFS SHAPE</small><strong>{departure.routeReady?'Načtená':'Není použitelná'}</strong></div>
+ <div><small>POSLEDNÍ PŘEPNUTÍ</small><strong>{departure.lastSwitch??'—'}</strong></div>
+ </div>
+ <p className="hint">Přepnutí se provádí až po potvrzeném odjezdu z prostoru zastávky. Rychlost, postup po trase i vzdálenost musejí odpovídat. Po obnovení webu se detekce z bezpečnostních důvodů znovu inicializuje.</p>
+ </section>
  <section className="stopAudit" aria-label="Audit párování identifikátorů">
  <div className="row"><h3>Audit ID zastávek</h3><span className={'status '+(['exact','normalized'].includes(stopAudit.status)?'good':stopAudit.status==='missing'?'':'bad')}>{stopAudit.status}</span></div>
  <p className="hint">{stopAudit.message}</p>
