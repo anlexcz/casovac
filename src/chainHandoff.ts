@@ -9,7 +9,6 @@ const stamp=(value:unknown):number|null=>{
  const n=typeof value==='string'?Date.parse(value):typeof value==='number'?value:NaN;
  return Number.isFinite(n)?n:null;
 };
-const number=(v:string)=>String(v).replace(/^0+/,'')||'0';
 const clock=(v:string):number|null=>{
  const match=/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(v);
  if(!match)return null;
