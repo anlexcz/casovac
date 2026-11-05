@@ -28,9 +28,21 @@ export function selectTrip(features:TripFeature[],line:string,order:string,now:n
  for(const f of matches){const v=vehicleOf(f);if(!v||v==='—')continue;vehicles.set(v,[...(vehicles.get(v)??[]),f]);}
  if(vehicles.size===0)return {feature:null,matches,reason:'Pořadí nemá identifikovatelné vozidlo.',vehicle:null,ambiguous:true};
  let vehicle:string|null=null;
- if(vehicles.size===1)vehicle=[...vehicles.keys()][0];
- else if(knownVehicle&&vehicles.has(knownVehicle))vehicle=knownVehicle;
- if(!vehicle)return {feature:null,matches,reason:'Stejné pořadí je přiřazeno více fyzickým vozům.',vehicle:null,ambiguous:true};
+ // The selected operating order takes precedence over a remembered vehicle.
+ // A replacement can appear while the old car still has an ended/prepared record.
+ const activeVehicles=[...vehicles].filter(([,trips])=>trips.some(isActiveTrip));
+ if(activeVehicles.length===1)vehicle=activeVehicles[0][0];
+ else if(activeVehicles.length>1){
+  // Conflicting simultaneous active reports are unsafe to auto-resolve.
+  return {feature:null,matches,reason:'Pořadí hlásí více současně aktivních vozů.',vehicle:null,ambiguous:true};
+ }else if(vehicles.size===1)vehicle=[...vehicles.keys()][0];
+ else {
+  const prepared=[...vehicles].filter(([,trips])=>trips.some(f=>isBeforeTrip(f)&&
+   (tripStart(f)===null||tripStart(f)!>=now-30*60000)));
+  if(prepared.length===1)vehicle=prepared[0][0];
+  else if(knownVehicle&&vehicles.has(knownVehicle))vehicle=knownVehicle;
+ }
+ if(!vehicle)return {feature:null,matches,reason:'Stejné pořadí je přiřazeno více vozům bez jednoznačného aktivního tripu.',vehicle:null,ambiguous:true};
  const owned=vehicles.get(vehicle)!;
  // Prefer an active trip, but never let its ended record hide the prepared trip.
  const active=owned.filter(isActiveTrip);
