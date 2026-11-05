@@ -82,20 +82,49 @@ function App(){
    const requestStartedAt=Date.now();
    try{
     const url=new URL(API);url.searchParams.set('routeShortName',active![0]);url.searchParams.set('limit','1000');
-    const response=await fetch(url,{headers:{'X-Access-Token':token.trim()},signal:controller.signal,cache:'no-store'});
+    const headers={'X-Access-Token':token.trim()};
+    const response=await fetch(url,{headers,signal:controller.signal,cache:'no-store'});
     if(!response.ok)throw Error('Golemio HTTP '+response.status);
     const data:unknown=await response.json();
     if(!data||typeof data!=='object'||!Array.isArray((data as Obj).features))throw Error('Neplatná odpověď živých poloh');
     if(alive&&generation===requestRef.current){
-     const fetched=(data as {features:Feature[]}).features;
-     const matching=fetched.filter(feature=>{
+     const standard=(data as {features:Feature[]}).features;
+     const filterOrder=(list:Feature[])=>list.filter(feature=>{
       const candidateLine=path(feature,'properties.trip.gtfs.route_short_name')??path(feature,'properties.trip.route_short_name');
       return normalize(orderOf(feature))===normalize(active![1])&&(candidateLine===undefined||String(candidateLine)===active![0]);
      });
+     let fetched=standard;
+     let matching=filterOrder(fetched);
+     let queryMode='active';
+     // Vehicles waiting on a terminal may not be actively tracking a trip.
+     // Only query the wider set when the normal response lacks the order.
+     if(!matching.length){
+      try{
+       const extended=new URL(url);
+       extended.searchParams.set('includeNotTracking','true');
+       const extra=await fetch(extended,{headers,signal:controller.signal,cache:'no-store'});
+       if(extra.ok){
+        const payload:unknown=await extra.json();
+        if(payload&&typeof payload==='object'&&Array.isArray((payload as Obj).features)){
+         fetched=(payload as {features:Feature[]}).features;
+         matching=filterOrder(fetched);
+         queryMode='includeNotTracking';
+        }
+       }
+      }catch(e){if(controller.signal.aborted)throw e;}
+     }
      const selected=matching.length===1?matching[0]:null;
+     const candidates=!selected?fetched.map(feature=>({
+       order:orderOf(feature),vehicle:vehicleId(feature),tripId:selectedTripId(feature),
+       route:path(feature,'properties.trip.gtfs.route_short_name'),state:path(feature,'properties.last_position.state_position'),
+       tracking:path(feature,'properties.last_position.tracking'),
+       start:path(feature,'properties.trip.start_timestamp'),
+       nextStop:path(feature,'properties.last_position.next_stop'),
+       lastStop:path(feature,'properties.last_position.last_stop')
+     })):null;
      recordApiRef.current({line:active![0],order:active![1],responseStatus:response.status,
       requestStartedAt,responseAt:Date.now(),matchingCount:matching.length,vehicle:selected,gps:gpsRef.current,
-      source:selected?'unique_order':'ambiguous_or_missing'});
+      source:selected?'unique_order':'ambiguous_or_missing',candidateVehicles:candidates,queryMode});
      setFeatures(fetched);setLastFetch(Date.now());setError('');
     }
    }catch(e){if(alive&&!controller.signal.aborted){const message=e instanceof Error?e.message:String(e);setError(message);recordErrorRef.current(active![0],active![1],'fetch_error',message);}}
@@ -118,11 +147,11 @@ function App(){
  const vehicleCoords:[number,number]|null=Array.isArray(coords)&&coords.length>=2&&Number.isFinite(Number(coords[0]))&&Number.isFinite(Number(coords[1]))?[Number(coords[0]),Number(coords[1])]:null;
  const nextStopId=text(path(chosen,'properties.last_position.next_stop.id')??path(chosen,'properties.last_position.next_stop'));
  const pos=usePosition(trip.stops,tripId,nextStopId,gps,vehicleCoords,age,now);
- const sourceAge=remoteEstimate({feature:chosen??null,stops:trip.stops,raw:trip.raw,tripId,fetchedAt:lastFetch,now,history:null}).sourceAge;
+ const remote=remoteEstimate({feature:chosen??null,stops:trip.stops,raw:trip.raw,tripId,fetchedAt:lastFetch,now,history:historyRef.current.previous});
+ const sourceAge=remote.sourceAge;
  const compatible=!!gpsWanted&&!!gps&&gpsAge!==null&&gpsAge<=15&&gps.accuracy<=35&&!!vehicleCoords&&
   distanceMeters(gps.lat,gps.lon,vehicleCoords[1],vehicleCoords[0])<=250&&age!==null&&age<=45&&
-  (sourceAge===null||sourceAge<=60);
- const remote=remoteEstimate({feature:chosen??null,stops:trip.stops,raw:trip.raw,tripId,fetchedAt:lastFetch,now,history:historyRef.current.previous});
+  (sourceAge===null||sourceAge<=120);
  useEffect(()=>{
   const timestamp=remote.sourceTimestamp,metres=remote.vehicleProgress;
   if(!tripId||timestamp===null||metres===null||!vehicleCoords)return;
@@ -134,13 +163,13 @@ function App(){
   };
  },[tripId,remote.sourceTimestamp,remote.vehicleProgress,vehicleCoords?.[0],vehicleCoords?.[1]]);
  const departureDetection=useDepartureDetection({tripId,stops:trip.stops,raw:trip.raw,gps:compatible?gps:null,
-  vehicle:vehicleCoords,vehicleAge:age,now,baseIndex:pos.baseIndex,manualIndex:manual});
+  vehicle:vehicleCoords,vehicleAge:age,now,baseIndex:remote.index??pos.baseIndex,manualIndex:manual});
  useEffect(()=>{
   if(trip.tripId&&trip.stops.length&&trip.raw)recorder.trip(trip.tripId,trip.stops,trip.raw);
  // Record GTFS once per trip, not once per render.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[trip.tripId,trip.raw,trip.stops.length,recorder.session?.id]);
- const position=manual??(compatible?(departureDetection.phase==='waiting'?pos.confirmedIndex??pos.baseIndex:departureDetection.displayIndex):remote.index);
+ const position=manual??(compatible?(departureDetection.phase==='waiting'?remote.index??pos.confirmedIndex??pos.baseIndex:departureDetection.displayIndex):remote.index);
  const current=position!==null?trip.stops[position]:undefined;
  const next=position!==null?trip.stops[position+1]:undefined;
  const departure=current?.departure||current?.arrival||'';
@@ -148,7 +177,7 @@ function App(){
  const delay=Number(path(chosen,'properties.last_position.delay.actual'));
  const validDelay=chosen&&Number.isFinite(delay)&&path(chosen,'properties.last_position.delay.actual')!==null&&path(chosen,'properties.last_position.delay.actual')!==undefined;
  const destination=trip.headsign||'Směr nezjištěn';
- const stopMode=manual!==null?'RUČNÍ VÝBĚR':!compatible?(remote.status==='confirmed'?'GOLEMIO · POTVRZENO':remote.status==='estimated'?'VZDÁLENÝ ODHAD':remote.status==='off-route'?'MIMO TRASU':remote.status==='stale'?'NEAKTUÁLNÍ DATA':'VZDÁLENÉ SLEDOVÁNÍ'):departureDetection.phase==='left'?'ODJEZD POTVRZEN GPS':departureDetection.phase==='verifying'?'OVĚŘUJI ODJEZD':departureDetection.phase==='at-stop'?'V ZASTÁVCE':pos.confirmedIndex!==null?'OVĚŘENO GPS':'GPS · ČEKÁM NA ZASTÁVKU';
+ const stopMode=manual!==null?'RUČNÍ VÝBĚR':!compatible?(remote.vehicleState==='at_stop'&&remote.index!==null?'V ZASTÁVCE · GOLEMIO':remote.status==='confirmed'?'GOLEMIO · POTVRZENO':remote.status==='estimated'?'VZDÁLENÝ ODHAD':remote.status==='off-route'?'MIMO TRASU':remote.status==='stale'?'NEAKTUÁLNÍ DATA':'VZDÁLENÉ SLEDOVÁNÍ'):departureDetection.phase==='left'?'ODJEZD POTVRZEN GPS':departureDetection.phase==='verifying'?'OVĚŘUJI ODJEZD':departureDetection.phase==='at-stop'?'V ZASTÁVCE':pos.confirmedIndex!==null?'OVĚŘENO GPS':'GPS · ČEKÁM NA ZASTÁVKU';
  const state=active?(error?'Chyba připojení':age===null?'Připojování':age>=50?'Zastaralá data':chosen?'Sledování aktivní':'Pořadí nenalezeno'):'Připraveno';
  const nearby=useMemo(()=>{
   if(!current)return [];
@@ -221,7 +250,7 @@ function App(){
   <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
    <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} recorder={recorder}/>
   </div>
-  <footer>ČASOVAČ 0.6 · Provozní pomůcka, nikoli oprávnění k odjezdu.</footer>
+  <footer>ČASOVAČ 0.7 · Provozní pomůcka, nikoli oprávnění k odjezdu.</footer>
   <button className="debugFab" onClick={()=>setDiagnostics(v=>!v)} aria-label={diagnostics?'Zavřít diagnostiku':'Otevřít diagnostiku'} title="Diagnostika">{diagnostics?'×':'⌘'}</button>
 
   {settings&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSettings(false);}}>
