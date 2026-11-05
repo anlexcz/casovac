@@ -7,6 +7,8 @@ type Json = Record<string, unknown>;
 type Feature = { type?: string; properties?: Json; geometry?: { coordinates?: unknown }; id?: unknown };
 type Gps = { lat:number; lon:number; accuracy:number; speed:number|null; timestamp:number };
 const API = 'https://api.golemio.cz/v2/vehiclepositions';
+const TOKEN_STORAGE_KEY='casovac:golemio-token:v1';
+const readStoredToken=():string=>{try{return window.localStorage.getItem(TOKEN_STORAGE_KEY)??'';}catch{return '';}};
 const field = (obj:unknown,path:string):unknown => path.split('.').reduce<unknown>((v,k)=>v && typeof v==='object' ? (v as Json)[k] : undefined,obj);
 const str=(v:unknown):string=>v===undefined||v===null?'—':String(v);
 const initial = (raw:string):[string,string]=>{const m=raw.trim().match(/^(\d{1,3})\s*\/\s*(\d{1,4})$/);if(!m)throw new Error('Zadej linku a pořadí ve formátu 25/5.');return [m[1],m[2]];};
@@ -16,13 +18,29 @@ const vehicleId=(f:Feature)=>str(field(f,'properties.trip.vehicle_registration_n
 const stamp=(time:number|null)=>time?new Date(time).toLocaleTimeString('cs-CZ'):'—';
 const errText=(e:unknown)=>e instanceof Error?e.message:String(e);
 function App(){
- const [token,setToken]=useState(''); const [settings,setSettings]=useState(false); const [showToken,setShowToken]=useState(false);
+ const [token,setToken]=useState(readStoredToken); const [settings,setSettings]=useState(false); const [showToken,setShowToken]=useState(false);
+ const [rememberToken,setRememberToken]=useState(()=>!!readStoredToken()); const [storageError,setStorageError]=useState('');
  const [query,setQuery]=useState('25/5'); const [active,setActive]=useState<[string,string]|null>(null);
  const [features,setFeatures]=useState<Feature[]>([]); const [selected,setSelected]=useState<string|null>(null);
  const [error,setError]=useState('');const [lastFetch,setLastFetch]=useState<number|null>(null);const [loading,setLoading]=useState(false);
  const [gps,setGps]=useState<Gps|null>(null);const [gpsError,setGpsError]=useState('');const [gpsOn,setGpsOn]=useState(false);
  const [now,setNow]=useState(Date.now()); const [rawOpen,setRawOpen]=useState(false);
  const fetchCounter=useRef(0); const gpsWatch=useRef<number|null>(null);
+ useEffect(()=>{
+  try{
+   if(rememberToken&&token.trim())window.localStorage.setItem(TOKEN_STORAGE_KEY,token.trim());
+   else window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+   setStorageError('');
+  }catch{
+   setStorageError('Prohlížeč nepovolil místní uložení klíče. Po obnovení stránky může zmizet.');
+  }
+ },[rememberToken,token]);
+ function forgetToken(){
+  setRememberToken(false);setToken('');setActive(null);setFeatures([]);setSelected(null);
+  try{window.localStorage.removeItem(TOKEN_STORAGE_KEY);setStorageError('');}
+  catch{setStorageError('Uložený klíč se nepodařilo smazat. Zkontroluj úložiště webu v nastavení prohlížeče.');}
+ }
+
  useEffect(()=>{const t=window.setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(t);},[]);
  useEffect(()=>{if(!active||!token.trim())return;let cancelled=false;const controller=new AbortController();const serial=++fetchCounter.current;
  async function load(){if(cancelled)return;setLoading(true);setError('');const url=new URL(API);url.searchParams.set('routeShortName',active![0]);url.searchParams.set('limit','1000');
@@ -50,8 +68,12 @@ function App(){
  <button className="quiet" onClick={()=>setRawOpen(v=>!v)}>{rawOpen?'Skrýt':'Zobrazit'} surová data vybraného záznamu</button>{rawOpen&&<pre>{JSON.stringify(chosen?.f??(features.length?features[0]:{message:'Zatím bez dat'}),null,2)}</pre>}</section>
  {chosen&&<TripPanel tripId={chosen.id} token={token.trim()} gps={gps} nextStopId={str(field(info,'last_position.next_stop.id')??field(info,'last_position.next_stop'))} now={now}/>}
  <section className="panel"><div className="row"><h2>GPS telefonu</h2><span className={'status '+(gps&&gpsAge!==null&&gpsAge<20?'good':'')}>{gpsOn?'Zapnuto':'Vypnuto'}</span></div><p className="hint">Poloha slouží pro budoucí párování se zastávkami. Nic neodesíláme na vlastní server.</p><button onClick={gpsOn?stopGps:startGps} className={gpsOn?'quiet':'primary'}>{gpsOn?'Vypnout GPS':'Povolit a zapnout GPS'}</button>{gpsError&&<p className="warn">{gpsError}</p>}{gps&&<div className="details"><div><small>POLOHA TELEFONU</small><strong>{gps.lat.toFixed(6)}, {gps.lon.toFixed(6)}</strong></div><div><small>PŘESNOST</small><strong>±{Math.round(gps.accuracy)} m</strong></div><div><small>RYCHLOST</small><strong>{gps.speed===null?'—':(gps.speed*3.6).toFixed(1)+' km/h'}</strong></div><div><small>STÁŘÍ POLOHY</small><strong>{gpsAge} s</strong></div></div>}</section>
- <footer>PROTOTYP 0.1 · Informační diagnostika, nikoli pokyn k odjezdu. Klíč je pouze v paměti této stránky.</footer>
- {settings&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setSettings(false)}><div className="modal" role="dialog" aria-modal="true" aria-label="Nastavení API"><div className="row"><h2>Nastavení</h2><button className="iconButton" onClick={()=>setSettings(false)} aria-label="Zavřít">✕</button></div><label htmlFor="token">GOLEMIO API KLÍČ</label><div className="search"><input id="token" type={showToken?'text':'password'} autoComplete="off" spellCheck={false} value={token} onChange={e=>setToken(e.target.value)} placeholder="X-Access-Token"/><button onClick={()=>setShowToken(v=>!v)}>{showToken?'Skrýt':'Ukázat'}</button></div><p className="hint">Klíč se neukládá do localStorage, URL ani GitHubu. Po obnovení stránky zmizí. Bude zasílán pouze jako hlavička požadavků na api.golemio.cz.</p><button className="primary full" onClick={()=>setSettings(false)}>Hotovo</button></div></div>}
+ <footer>PROTOTYP 0.2 · Informační diagnostika, nikoli pokyn k odjezdu. Klíč lze volitelně uložit pouze do tohoto prohlížeče.</footer>
+ {settings&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setSettings(false)}><div className="modal" role="dialog" aria-modal="true" aria-label="Nastavení API"><div className="row"><h2>Nastavení</h2><button className="iconButton" onClick={()=>setSettings(false)} aria-label="Zavřít">✕</button></div><label htmlFor="token">GOLEMIO API KLÍČ</label><div className="search"><input id="token" type={showToken?'text':'password'} autoComplete="off" spellCheck={false} value={token} onChange={e=>setToken(e.target.value)} placeholder="X-Access-Token"/><button onClick={()=>setShowToken(v=>!v)}>{showToken?'Skrýt':'Ukázat'}</button></div><label className="rememberOption"><input type="checkbox" checked={rememberToken} onChange={e=>setRememberToken(e.target.checked)}/><span>Zapamatovat API klíč v tomto prohlížeči</span></label>
+ <p className="hint">{rememberToken?'Klíč se ukládá do místního úložiště prohlížeče (localStorage) a zůstane i po obnovení stránky. Není šifrovaný a může být dostupný skriptům či rozšířením s přístupem k webu. Na sdíleném zařízení tuto volbu vypni.':'Klíč zůstane pouze v paměti stránky a po obnovení zmizí.'} Nikdy ho neukládáme do URL ani do GitHubu. API požadavky ho posílají pouze službě Golemio.</p>
+ {storageError&&<p className="warn" role="alert">{storageError}</p>}
+ <button className="quiet full" onClick={forgetToken} disabled={!token&&!rememberToken}>Zapomenout klíč z tohoto zařízení</button>
+ <button className="primary full" onClick={()=>setSettings(false)}>Hotovo</button></div></div>}
  </main>;
 }
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
