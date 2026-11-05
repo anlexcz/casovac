@@ -1,10 +1,12 @@
 import {useLayoutEffect,useRef} from 'react';
 import type {Stop} from './tripData';
 import {formatStopTime} from './tripData';
+import {continuousStops} from './chainStops';
 
 type Props={
  stops:Stop[];index:number|null;tripId:string;remaining:number|null;terminalWaiting:boolean;
  expanded:boolean;onExpand:()=>void;onChoose:(index:number)=>void;animate:boolean;
+ continuation:{line:string;order:string;stops:Stop[]}|null;
 };
 function signed(remaining:number|null){
  if(remaining===null)return '—';
@@ -15,14 +17,15 @@ type Snapshot={
  trip:string;index:number;rects:Map<number,DOMRect>;
  previousName:string;previousTime:string;previousOffset:string;previousClock:string;
 };
-export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate}:Props){
+export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate,continuation}:Props){
  const stack=useRef<HTMLDivElement|null>(null);
  const previous=useRef<Snapshot|null>(null);
  const currentIndex=index??-1;
  const valid=currentIndex>=0&&currentIndex<stops.length;
  const current=valid?stops[currentIndex]:null;
- const end=expanded?stops.length:Math.min(stops.length,currentIndex+7);
- const shown=valid?stops.slice(currentIndex,end):[];
+ const allStops=continuousStops(stops,continuation?.stops??null,!!continuation);
+ const end=expanded?allStops.length:Math.min(allStops.length,currentIndex+7);
+ const shown=valid?allStops.slice(currentIndex,end):[];
  const clock=terminalWaiting?'clockTerminal':remaining===null?'clockUnknown':remaining>0?'clockEarly':'clockReady';
  useLayoutEffect(()=>{
   const root=stack.current;
@@ -88,9 +91,9 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
  },[index,tripId,stops,expanded,animate,clock==='clockTerminal']);
  if(!current)return null;
  return <div className="boardStack" ref={stack}>
-  {shown.map((stop,i)=>{
-   const n=currentIndex+i,primary=i===0;
-   return <div key={stop.sequence+'-'+n}
+  {shown.map((entry,i)=>{
+   const {stop,n,continuation:isNext}=entry,primary=i===0;
+   return <div key={(isNext?'next-':'current-')+n}
     data-stop-index={n} className={primary?'activeDeparture '+clock:'upcomingStop'}>
     {primary?<>
      <span className="activeStopName">{stop.name}</span>
@@ -98,6 +101,15 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
       <span className="liveOffset" aria-label="Časový rozdíl vůči jízdnímu řádu">{signed(remaining)}</span>
       <time className="scheduledTime" aria-label="Čas podle jízdního řádu">{formatStopTime(stop.departure||stop.arrival)}</time>
      </span>
+    </>:isNext?<>
+     {n===stops.length&&<div className="chainLabel" aria-label={'Pokračování linkou '+continuation?.line}>
+      <span className="chainLine">{continuation?.line}</span>
+      Pokračování jako {continuation?.line}/{continuation?.order}
+     </div>}
+     <div className="upcomingButton chainUpcoming">
+      <span className="upcomingName">{stop.name}</span>
+      <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
+     </div>
     </>:<button type="button" className="upcomingButton" onClick={()=>onChoose(n)}
        title="Vybrat zastávku">
      <span className="upcomingName">{stop.name}</span>
@@ -105,8 +117,8 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
     </button>}
    </div>;
   })}
-  {stops.length-currentIndex-1>6&&<button type="button" className="moreStops" onClick={onExpand}>
-   {expanded?'Zobrazit méně':'Zobrazit dalších '+(stops.length-currentIndex-7)+' zastávek'}
+  {allStops.length-currentIndex-1>6&&<button type="button" className="moreStops" onClick={onExpand}>
+   {expanded?'Zobrazit méně':'Zobrazit dalších '+(allStops.length-currentIndex-7)+' zastávek'}
    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d={expanded?'m6 15 6-6 6 6':'m6 9 6 6 6-6'} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
   </button>}
  </div>;
