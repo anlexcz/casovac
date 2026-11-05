@@ -174,7 +174,7 @@ function App(){
   };
  },[tripId,remote.sourceTimestamp,remote.vehicleProgress,vehicleCoords?.[0],vehicleCoords?.[1]]);
  const departureDetection=useDepartureDetection({tripId,stops:trip.stops,raw:trip.raw,gps:compatible?gps:null,
-  vehicle:vehicleCoords,vehicleAge:age,now,baseIndex:remote.index??pos.baseIndex,manualIndex:manual});
+  vehicle:vehicleCoords,vehicleAge:age,paired:compatible,now,baseIndex:remote.index??pos.baseIndex,manualIndex:manual});
  useEffect(()=>{
   if(trip.tripId&&trip.stops.length&&trip.raw)recorder.trip(trip.tripId,trip.stops,trip.raw);
  // Record GTFS once per trip, not once per render.
