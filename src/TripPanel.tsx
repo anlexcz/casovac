@@ -8,23 +8,50 @@ const first=(o:unknown,paths:string[]):unknown=>paths.map(p=>get(o,p)).find(v=>v
 const text=(v:unknown)=>v===undefined||v===null?'':String(v);
 const numeric=(v:unknown):number|null=>v!==null&&v!==undefined&&Number.isFinite(Number(v))?Number(v):null;
 function distance(a:number,b:number,c:number,d:number){const rad=Math.PI/180;const x=(d-b)*rad*Math.cos((a+c)/2*rad);const y=(c-a)*rad;return Math.round(Math.hypot(x,y)*6371000);}
-function parseTrip(raw:unknown):Stop[]{
+function stopArray(raw:unknown):unknown[]{
  const payload=first(raw,['data','result','trip'])??raw;
- const items=first(payload,['stop_times','stopTimes','stop_times.data','stops','properties.stop_times','trip.stop_times','data.stop_times','stops.features','stop_times.features','stop_times.features.data','stopTimes.features']);
- if(!Array.isArray(items))return [];
+ const queue:unknown[]=[payload];
+ const seen=new Set<unknown>();
+ for(let iterations=0;queue.length&&iterations<32;iterations++){
+  const node=queue.shift();
+  if(node===null||node===undefined||seen.has(node))continue;
+  seen.add(node);
+  if(Array.isArray(node)){
+   if(node.length&&node.some(v=>typeof v==='object'&&v!==null&&(
+    first(v,['stop_id','stopId','stop_sequence','stopSequence','arrival_time','departure_time','properties.stop_id','properties.stop_sequence','stop.id','stop_name','properties.stop_name'])!==undefined
+   )))return node;
+   continue;
+  }
+  if(typeof node==='object'){
+   for(const key of ['stop_times','stopTimes','stop_times_data','stoptimes','stops','features','data','result','items','records']){
+    if(key in (node as Obj))queue.push((node as Obj)[key]);
+   }
+  }
+ }
+ return [];
+}
+function parseTrip(raw:unknown):Stop[]{
+ const items=stopArray(raw);
  return items.map((s:unknown,i)=>{
  const stop=first(s,['stop','stop_info','stop_data','properties.stop'])??{};
- const loc=first(stop,['geometry.coordinates','coordinates']);
+ const loc=first(stop,['geometry.coordinates','coordinates'])??first(s,['geometry.coordinates']);
  const coords=Array.isArray(loc)?loc:[];
- return {id:text(first(s,['stop_id','stopId','stop.id','stop.stop_id','stop.properties.stop_id','stop.properties.id','properties.stop_id','properties.stop.id'])??first(stop,['id','stop_id'])),
+ return {id:text(first(s,['stop_id','stopId','stop.id','stop.stop_id','stop.properties.stop_id','stop.properties.id','properties.stop_id','properties.stop.id','properties.id'])??first(stop,['id','stop_id'])),
  name:text(first(s,['stop_name','stopName','stop.name','stop.properties.stop_name','stop.properties.name','properties.stop_name','properties.stop.name'])??first(stop,['name','stop_name']))||'Neznámá zastávka',
  sequence:numeric(first(s,['stop_sequence','stopSequence','sequence','properties.stop_sequence']))??i+1,
  arrival:text(first(s,['arrival_time','arrivalTime','arrival.time','arrival','properties.arrival_time'])),
  departure:text(first(s,['departure_time','departureTime','departure.time','departure','properties.departure_time'])),
- lat:numeric(first(s,['stop_lat','lat','stop.lat','stop.geometry.coordinates.1','stop.properties.stop_lat'])??coords[1]),
- lon:numeric(first(s,['stop_lon','lon','stop.lon','stop.geometry.coordinates.0','stop.properties.stop_lon'])??coords[0])
+ lat:numeric(first(s,['stop_lat','lat','stop.lat','stop.geometry.coordinates.1','stop.properties.stop_lat','properties.stop_lat'])??coords[1]),
+ lon:numeric(first(s,['stop_lon','lon','stop.lon','stop.geometry.coordinates.0','stop.properties.stop_lon','properties.stop_lon'])??coords[0])
  };
  }).sort((a,b)=>a.sequence-b.sequence);
+}
+function preview(value:unknown):unknown{
+ if(Array.isArray(value))return {type:'array',length:value.length,first:value.slice(0,2)};
+ if(value&&typeof value==='object'){
+  const obj=value as Obj;return {type:'object',keys:Object.keys(obj),sample:Object.fromEntries(Object.entries(obj).filter(([k])=>!['shapes','geometry'].includes(k)).slice(0,5).map(([k,v])=>[k,Array.isArray(v)?{type:'array',length:v.length,first:v.slice(0,2)}:v]))};
+ }
+ return value;
 }
 function fmtTime(value:string){if(!value)return '—';if(/^\d{1,2}:\d\d(:\d\d)?$/.test(value))return value;const d=new Date(value);return Number.isNaN(d.valueOf())?value:d.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
 export default function TripPanel({tripId,token,gps,nextStopId,now}:Props){
@@ -47,7 +74,7 @@ export default function TripPanel({tripId,token,gps,nextStopId,now}:Props){
  if(!fallback.ok){setError('Detail tripu neobsahuje stop_times; samostatný endpoint vrátil HTTP '+fallback.status+'.');return;}
  const stopData:unknown=await fallback.json();if(controller.signal.aborted)return;
  setStopTimesRaw(stopData);setStopsSource('Samostatný GTFS stop_times endpoint');
- if(!parseTrip(stopData).length)setError('Samostatný endpoint odpověděl, ale seznam zastávek nebyl rozpoznán. Zkontroluj stručnou diagnostiku.');
+ if(!parseTrip(stopData).length)setError('Zastávkové časy nebyly rozpoznány. Diagnostika nyní ukazuje strukturu pole stop_times a první dva záznamy.');
  }catch(e){if(!controller.signal.aborted)setError(String(e));}finally{if(!controller.signal.aborted)setLoading(false);}})();
  return ()=>controller.abort();
  },[tripId,token]);
@@ -66,6 +93,6 @@ export default function TripPanel({tripId,token,gps,nextStopId,now}:Props){
  <label htmlFor="manualStop">RUČNÍ KONTROLA ZASTÁVKY (NEOVLIVŇUJE GOLEMIO)</label>
  <select id="manualStop" value={manual??''} onChange={e=>setManual(e.target.value===''?null:Number(e.target.value))}><option value="">Automaticky dle ID další zastávky</option>{stops.map((s,i)=><option key={i} value={i}>{s.sequence}. {s.name}</option>)}</select>
  <div className="stopList">{stops.map((s,i)=><div className={'stopRow '+(i===position?'current':'')} key={i}><span className="stopNum">{s.sequence}</span><span className="stopName">{s.name}<small>{s.id}</small></span><span className="stopTime">{fmtTime(s.departure||s.arrival)}</span>{gpsReliable&&s.lat!==null&&s.lon!==null&&<span className="stopDistance">{distance(gps!.lat,gps!.lon,s.lat,s.lon)} m</span>}</div>)}</div></>}
- <button className="quiet" onClick={()=>setDebug(v=>!v)}>{debug?'Skrýt':'Zobrazit'} diagnostiku GTFS Lookup</button>{debug&&<pre>{JSON.stringify({tripId,source:stopsSource,error,tripFields:raw&&typeof raw==='object'?Object.keys(raw):[],stopTimesFields:stopTimesRaw&&typeof stopTimesRaw==='object'?Object.keys(stopTimesRaw):[],stopTimesPreview:Array.isArray(stopTimesRaw)?stopTimesRaw.slice(0,2):null,tripMetadata:raw&&typeof raw==='object'?Object.fromEntries(Object.entries(raw as Obj).filter(([k])=>k!=='shapes'&&k!=='stop_times'&&k!=='stops')):raw},null,2).slice(0,14000)}</pre>}
+ <button className="quiet" onClick={()=>setDebug(v=>!v)}>{debug?'Skrýt':'Zobrazit'} diagnostiku GTFS Lookup</button>{debug&&<pre>{JSON.stringify({tripId,source:stopsSource,error,tripFields:raw&&typeof raw==='object'?Object.keys(raw):[],tripStopTimes:preview(get(raw,'stop_times')),fallbackStopTimes:preview(stopTimesRaw),parsedStops:stops.slice(0,2)},null,2).slice(0,12000)}</pre>}
  </section>;
 }
