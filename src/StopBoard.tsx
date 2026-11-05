@@ -13,7 +13,7 @@ function signed(remaining:number|null){
 }
 type Snapshot={
  trip:string;index:number;rects:Map<number,DOMRect>;
- previousName:string;previousTime:string;previousClock:string;
+ previousName:string;previousTime:string;previousOffset:string;previousClock:string;
 };
 export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate}:Props){
  const stack=useRef<HTMLDivElement|null>(null);
@@ -62,9 +62,14 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
     ghost.style.height=oldRect.height+'px';
     const name=document.createElement('span');
     name.className='activeStopName';name.textContent=old.previousName;
+    const numbers=document.createElement('span');
+    numbers.className='departureNumbers';
+    const offset=document.createElement('span');
+    offset.className='liveOffset';offset.textContent=old.previousOffset;
     const time=document.createElement('span');
     time.className='scheduledTime';time.textContent=old.previousTime;
-    ghost.append(name,time);
+    numbers.append(offset,time);
+    ghost.append(name,numbers);
     root.appendChild(ghost);
     const movement=ghost.animate([
      {transform:'translateY(0)',opacity:1},
@@ -77,6 +82,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
   previous.current=index===null||!current?null:{
    trip:tripId,index,rects,previousName:current.name,
    previousTime:formatStopTime(current.departure||current.arrival),
+   previousOffset:signed(remaining),
    previousClock:clock
   };
  },[index,tripId,stops,expanded,animate,clock==='clockTerminal']);
