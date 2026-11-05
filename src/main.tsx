@@ -4,6 +4,8 @@ import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
 import {selectTrip,isBeforeTrip,stateOf,terminalTrip} from './tripSelection';
 import {useTripData,countdownSeconds} from './tripData';
+import {useChooserStops,chooserStop} from './chooserStops';
+import type {ChooserTarget} from './chooserStops';
 import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
 import {useRecorder} from './recorder';
@@ -104,17 +106,39 @@ function App(){
   const delay=setTimeout(()=>void load(),250),interval=setInterval(()=>void load(),20000);
   return()=>{alive=false;abort.abort();clearTimeout(delay);clearInterval(interval);};
  },[editing,lookupLine,token]);
- const available=new Map<string,{line:string;order:string;car:string;stop:string}>();
- if(lookup.line===lookupLine&&!lookup.loading&&!lookup.error)for(const f of lookup.items){
-  const line=String(path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name')??'');
-  const raw=orderOf(f);
-  if(normalize(line)!==normalize(lookupLine)||raw===null||raw===undefined||!/^\d+$/.test(String(raw)))continue;
-  const order=normalize(raw),key=normalize(line)+'/'+order;
-  const stop=path(f,'properties.last_position.next_stop.name')??path(f,'properties.last_position.last_stop.name');
-  const item={line,order,car:vehicleId(f),stop:typeof stop==='string'&&stop?stop:'Poloha neznámá'};
-  const previous=available.get(key);
-  if(!previous||previous.car==='—'&&item.car!=='—')available.set(key,item);
+ const available=new Map<string,{line:string;order:string;car:string;target:ChooserTarget}>();
+ if(lookup.line===lookupLine&&!lookup.loading&&!lookup.error){
+  const groups=new Map<string,Feature[]>();
+  for(const f of lookup.items){
+   const line=String(path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name')??'');
+   const raw=orderOf(f);
+   if(normalize(line)!==normalize(lookupLine)||raw===null||raw===undefined||!/^\d+$/.test(String(raw)))continue;
+   const key=normalize(line)+'/'+normalize(raw);
+   groups.set(key,[...(groups.get(key)??[]),f]);
+  }
+  for(const [key,items] of groups){
+   const [line,order]=key.split('/');
+   const chosen=selectTrip(items,line,order,now).feature??items[0];
+   const car=vehicleId(chosen);
+   const state=stateOf(chosen);
+   const next=path(chosen,'properties.last_position.next_stop');
+   const last=path(chosen,'properties.last_position.last_stop');
+   const nextObj=next&&typeof next==='object'?next as Obj:null;
+   const nextId=String(nextObj?.id??(typeof next==='string'?next:''));
+   const seq=nextObj?.sequence;
+   const future=items.filter(f=>vehicleId(f)===car&&stateOf(f).startsWith('before_track'))
+    .sort((a,b)=>Number(path(a,'properties.trip.start_timestamp')??0)-Number(path(b,'properties.trip.start_timestamp')??0))[0];
+   const atTerminal=state.startsWith('after_track')||state.startsWith('before_track')||(!next&&!!future);
+   const rawName=nextObj?.name??(last&&typeof last==='object'?(last as Obj).name:undefined);
+   const target:ChooserTarget={
+    tripId:selectedTripId(chosen),fallbackTripId:future?selectedTripId(future):'',
+    nextId,nextSequence:seq!==undefined&&seq!==null&&Number.isFinite(Number(seq))?Number(seq):null,
+    directName:typeof rawName==='string'?rawName:'',atTerminal
+   };
+   available.set(key,{line,order,car,target});
+  }
  }
+ const stopNames=useChooserStops([...available.values()].map(v=>v.target),token.trim(),editing&&!!lookupLine);
  const lookupOrder=parseOrder(query);
  const results=[...available.values()].filter(item=>!lookupOrder||normalize(item.order)===normalize(lookupOrder[1])).sort((a,b)=>Number(a.order)-Number(b.order));
  const lookupReady=lookup.line===lookupLine&&!lookup.loading&&!lookup.error;
@@ -371,15 +395,15 @@ function App(){
   {!active&&!editing&&<section className="panel searchPanel compactSearch"><button className="primary full" onClick={()=>setEditing(true)}>Vybrat sledovaný spoj</button></section>}
   {editing&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setEditing(false);}}>
    <section className="modal chooserModal" role="dialog" aria-modal="true" aria-label="Vybrat sledovaný spoj">
-    <div className="row chooserHeading"><div><h2>Vybrat sledovaný spoj</h2><p className="hint">Linka nebo linka/pořadí</p></div><button className="iconButton" onClick={()=>setEditing(false)} aria-label="Zavřít">✕</button></div>
+    <div className="row chooserHeading"><div><h2>Vybrat spoj</h2></div><button className="iconButton" onClick={()=>setEditing(false)} aria-label="Zavřít">✕</button></div>
     <input id="orderInput" autoFocus aria-label="Linka nebo linka/pořadí" placeholder="Např. 25 nebo 25/5" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&parseOrder(query))start();}}/>
     {!token.trim()?<p className="hint">Pro vyhledávání je potřeba API klíč Golemio v nastavení.</p>:
      !lookupLine?<p className="hint">Zadej číslo linky nebo konkrétní pořadí.</p>:
      <div className="chooserResults">
-      <p className="chooserCaption">{!lookupReady&&!lookup.error?'Načítám dostupná pořadí…':lookup.error?'Nepodařilo se načíst data':lookupOrder?'Výsledek vyhledávání':'Dostupná pořadí linky '+lookupLine}</p>
+      <p className="chooserCaption">{!lookupReady&&!lookup.error?'Načítám dostupná pořadí…':lookup.error?'Nepodařilo se načíst data':lookupOrder?'Výsledek vyhledávání':''LINKA '+lookupLine+' · '+results.length+' POŘADÍ'}</p>
       {lookup.line===lookupLine&&lookup.error&&<p className="hint" role="status">{lookup.error}</p>}
       {lookupReady&&results.map(item=><button type="button" className="chooserRow" key={item.line+'/'+item.order} onClick={()=>start(item.line+'/'+item.order)}>
-       <span className="chooserId"><span>{item.line}/</span><strong>{item.order}</strong></span><span className="chooserVehicle">#{item.car}</span><span className="chooserStop">{item.stop}</span>
+       <span className="chooserId"><span>{item.line}/</span><strong>{item.order}</strong></span><span className="chooserVehicle">#{item.car}</span><span className="chooserStop"><svg className="chooserStopIcon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="5" y="3" width="14" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M5 10h14M8 7h2m4 0h2M8 19l-2 3m10-3 2 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg><span>{chooserStop(item.target,stopNames)}</span></span>
       </button>)}
       {lookupReady&&lookupOrder&&results.length===0&&<div className="chooserMissing"><strong>Pořadí {lookupOrder[0]}/{lookupOrder[1]} není momentálně dostupné.</strong><p className="hint">Můžeš opravit zadání nebo pořadí sledovat a počkat na data.</p><button className="primary full" onClick={()=>start()}>Sledovat {lookupOrder[0]}/{lookupOrder[1]} a čekat na data</button></div>}
       {lookupReady&&!lookupOrder&&results.length===0&&<p className="hint">Aktuálně nejsou dostupná žádná pořadí. Konkrétní pořadí můžeš zadat ručně.</p>}
