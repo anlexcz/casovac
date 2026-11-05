@@ -82,7 +82,6 @@ export default function TripPanel({tripId,token,gps,nextStopId,now,vehicleCoords
  },[tripId,token]);
  const stops=useMemo(()=>{const secondary=parseTrip(stopTimesRaw);return secondary.length?secondary:parseTrip(raw);},[raw,stopTimesRaw]);
  const nextIndex=stops.findIndex(s=>s.id&&s.id===nextStopId);
- const position=manual??(nextIndex>=0?nextIndex:null);
  const gpsAge=gps?Math.max(0,Math.floor((now-gps.timestamp)/1000)):null;
  const gpsReliable=!!gps&&gps.accuracy<=35&&gpsAge!==null&&gpsAge<=15;
  const vehicleDistance=vehicleCoords&&gps?distance(gps.lat,gps.lon,vehicleCoords[1],vehicleCoords[0]):null;
