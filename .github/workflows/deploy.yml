@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
 permissions:
   contents: read
   pages: write
@@ -21,12 +23,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build daily PID GTFS lookup (static assets)
+        run: python scripts/build_gtfs_lookup.py
       - run: npm install --no-audit --no-fund
       - run: npm run build
       - name: Verify compiled site
         run: |
           test -s dist/index.html
           test -d dist/assets
+          test -s dist/data/stops.json
+          test -s dist/data/tram-trip-first-stops.json
       - uses: actions/configure-pages@v5
         with:
           enablement: true
