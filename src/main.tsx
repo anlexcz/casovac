@@ -97,7 +97,7 @@ function App(){
    try{
     const url=new URL(API);url.searchParams.set('routeShortName',lookupLine);
     url.searchParams.set('includeNotTracking','true');url.searchParams.set('limit','1000');
-    const body:unknown=await golemioJson<unknown>(url.toString(),token.trim(),12000);
+    const body:unknown=await golemioJson<unknown>(url.toString(),token.trim(),45000);
     if(!body||typeof body!=='object'||!Array.isArray((body as Obj).features))throw Error('Neplatná odpověď');
     if(alive)setLookup({line:lookupLine,items:(body as {features:Feature[]}).features,error:'',loading:false});
    }catch(e){if(alive&&!abort.signal.aborted)setLookup(previous=>({
@@ -105,7 +105,7 @@ function App(){
     error:e instanceof Error?e.message:String(e),loading:false
    }));}
   }
-  const delay=setTimeout(()=>void load(),550),interval=setInterval(()=>void load(),45000);
+  const delay=setTimeout(()=>void load(),250),interval=setInterval(()=>void load(),45000);
   return()=>{alive=false;abort.abort();clearTimeout(delay);clearInterval(interval);};
  },[editing,lookupLine,token]);
  const available=new Map<string,{line:string;order:string;car:string;target:ChooserTarget}>();
