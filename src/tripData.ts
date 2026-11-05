@@ -1,0 +1,104 @@
+import {useEffect,useMemo,useState} from 'react';
+
+export type Stop = {id:string;name:string;sequence:number;arrival:string;departure:string;lat:number|null;lon:number|null};
+type RecordValue=Record<string,unknown>;
+const get=(value:unknown,path:string):unknown=>path.split('.').reduce<unknown>((v,key)=>v&&typeof v==='object'?(v as RecordValue)[key]:undefined,value);
+const first=(object:unknown,keys:string[])=>keys.map(key=>get(object,key)).find(value=>value!==undefined&&value!==null&&value!=='');
+const txt=(value:unknown)=>value===undefined||value===null?'':String(value);
+const num=(value:unknown):number|null=>value===undefined||value===null||value===''||!Number.isFinite(Number(value))?null:Number(value);
+
+function findStopArray(input:unknown):unknown[]{
+  const queue:unknown[]=[input];const seen=new Set<unknown>();
+  for(let i=0;queue.length&&i<40;i++){
+    const value=queue.shift();if(value===null||value===undefined||seen.has(value))continue;seen.add(value);
+    if(Array.isArray(value)){
+      if(value.length&&value.some(item=>typeof item==='object'&&item!==null&&first(item,['stop_id','stop_sequence','arrival_time','departure_time','properties.stop_id','properties.stop_sequence','stop.name','stop_name','properties.stop_name'])!==undefined))return value;
+      continue;
+    }
+    if(typeof value==='object')for(const key of ['stop_times','stopTimes','stoptimes','stops','features','data','result','items','trip','records'])if(key in (value as RecordValue))queue.push((value as RecordValue)[key]);
+  }
+  return [];
+}
+export function parseStops(data:unknown):Stop[]{
+  const list=findStopArray(data);
+  return list.map((item,i)=>{
+    const stop=first(item,['stop','properties.stop','stop_info','stop_data'])??{};
+    const coords=first(stop,['geometry.coordinates','coordinates'])??get(item,'geometry.coordinates');
+    const point=Array.isArray(coords)?coords:[];
+    return {
+      id:txt(first(item,['stop_id','stopId','stop.id','properties.stop_id','properties.stop.id','properties.id'])??first(stop,['id','stop_id'])),
+      name:txt(first(item,['stop_name','stopName','stop.name','properties.stop_name','properties.stop.name'])??first(stop,['name','stop_name']))||'Neznámá zastávka',
+      sequence:num(first(item,['stop_sequence','stopSequence','sequence','properties.stop_sequence']))??i+1,
+      arrival:txt(first(item,['arrival_time','arrivalTime','arrival.time','properties.arrival_time'])),
+      departure:txt(first(item,['departure_time','departureTime','departure.time','properties.departure_time'])),
+      lat:num(first(item,['stop_lat','lat','stop.lat','properties.stop_lat'])??point[1]),
+      lon:num(first(item,['stop_lon','lon','stop.lon','properties.stop_lon'])??point[0])
+    };
+  }).sort((a,b)=>a.sequence-b.sequence);
+}
+export type TripData={tripId:string;stops:Stop[];headsign:string;route:string;raw:unknown;error:string;loading:boolean;source:string};
+export function useTripData(tripId:string,token:string):TripData{
+  const [result,setResult]=useState<Omit<TripData,'tripId'>>({stops:[],headsign:'',route:'',raw:null,error:'',loading:false,source:''});
+  useEffect(()=>{
+    if(!tripId||tripId==='—'||!token){
+      setResult({stops:[],headsign:'',route:'',raw:null,error:'',loading:false,source:''});return;
+    }
+    const abort=new AbortController();
+    setResult({stops:[],headsign:'',route:'',raw:null,error:'',loading:true,source:''});
+    (async()=>{
+      try{
+        const url=new URL('https://api.golemio.cz/v2/public/gtfs/trips/'+encodeURIComponent(tripId));
+        url.searchParams.append('scopes[]','info');
+        url.searchParams.append('scopes[]','stop_times');
+        // Geometry is not required for the public dashboard.
+        const headers={'X-Access-Token':token};
+        const response=await fetch(url,{headers,cache:'no-store',signal:abort.signal});
+        if(!response.ok)throw new Error('Detail tripu: HTTP '+response.status);
+        const data:unknown=await response.json();
+        if(abort.signal.aborted)return;
+        const obj=data as RecordValue;
+        let stops=parseStops(data);
+        let source='GTFS Lookup / trip';
+        let fallbackError='';
+        if(!stops.length){
+          const fallback=await fetch('https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(tripId),{headers,cache:'no-store',signal:abort.signal});
+          if(fallback.ok){const item:unknown=await fallback.json();stops=parseStops(item);source='GTFS stop_times';}
+          else fallbackError='Záložní stop_times HTTP '+fallback.status;
+        }
+        if(!abort.signal.aborted)setResult({
+          stops,headsign:txt(obj.trip_headsign),route:txt(obj.route_short_name),raw:data,
+          source,loading:false,error:stops.length?'':(fallbackError||'Jízdní řád neobsahuje rozpoznané zastávky')
+        });
+      }catch(e){
+        if(!abort.signal.aborted)setResult({stops:[],headsign:'',route:'',raw:null,source:'',loading:false,error:e instanceof Error?e.message:String(e)});
+      }
+    })();
+    return()=>abort.abort();
+  },[tripId,token]);
+  return useMemo(()=>({...result,tripId}),[result,tripId]);
+}
+export function formatStopTime(value:string):string{
+  const match=/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  if(match)return match[1].padStart(2,'0')+':'+match[2];
+  const date=new Date(value);
+  return value&&!Number.isNaN(date.getTime())?date.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'}):'—';
+}
+// GTFS permits times above 24:00. Pick the most plausible service day near now.
+export function countdownSeconds(value:string,now:number):number|null{
+  const match=/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  if(!match)return null;
+  const hours=Number(match[1]),minutes=Number(match[2]),seconds=Number(match[3]??0);
+  if(minutes>=60||seconds>=60)return null;
+  const d=new Date(now);d.setHours(0,0,0,0);
+  const candidate=[-1,0,1].map(day=>{
+    const date=new Date(d.getTime());date.setDate(date.getDate()+day);date.setHours(hours,minutes,seconds,0);
+    return Math.round((date.getTime()-now)/1000);
+  }).sort((a,b)=>Math.abs(a)-Math.abs(b))[0];
+  // Prevent misleading countdown when the selected schedule is far away.
+  return Math.abs(candidate)<=21600?candidate:null;
+}
+export function formatCountdown(seconds:number|null):string{
+  if(seconds===null)return '--:--';
+  const abs=Math.abs(seconds),mins=Math.floor(abs/60),secs=abs%60;
+  return (seconds<0?'-':'')+String(mins).padStart(2,'0')+':'+String(secs).padStart(2,'0');
+}
