@@ -9,6 +9,9 @@ import {remoteEstimate} from './remoteTracking';
 import type {RemoteHistory} from './remoteTracking';
 import {distanceMeters} from './position';
 import {useOnboardMode} from './onboard';
+import {readLastSeen,saveLastSeen,extractRecordedVehicle} from './lastSeen';
+import type {LastSeen} from './lastSeen';
+import {observationTimestamp} from './remoteTracking';
 import type {GpsFix} from './position';
 import './style.css';
 
@@ -24,7 +27,7 @@ const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v
 const text=(value:unknown):string=>value===undefined||value===null?'—':String(value);
 const selectedTripId=(f:Feature)=>text(path(f,'properties.trip.gtfs.trip_id')??path(f,'properties.trip.trip_id'));
 const vehicleId=(f:Feature)=>text(path(f,'properties.trip.vehicle_registration_number')??path(f,'properties.trip.vehicle.id')??path(f,'properties.trip.vehicle_id'));
-const orderOf=(f:Feature)=>path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??path(f,'properties.trip.order');
+const orderOf=(f:Feature)=>path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??path(f,'properties.trip.order')??path(f,'properties.trip.gtfs.run_number');
 const normalize=(v:unknown)=>String(v??'').replace(/^0+/,'')||'0';
 const parseOrder=(q:string):[string,string]|null=>{
  const match=/^(\d{1,3})\s*\/\s*(\d{1,4})$/.exec(q.trim());
@@ -44,6 +47,9 @@ function App(){
  const [features,setFeatures]=useState<Feature[]>([]);
  const [lastFetch,setLastFetch]=useState<number|null>(null);
  const [queryMode,setQueryMode]=useState('active');
+ const [lastSeen,setLastSeen]=useState<LastSeen|null>(null);
+ const [relatedVehicle,setRelatedVehicle]=useState<{vehicle:string;route:string;order:string;state:string;time:number}|null>(null);
+ const previousScanRef=useRef(0);
  const [terminalCandidates,setTerminalCandidates]=useState<unknown[]>([]);
  const [loading,setLoading]=useState(false);
  const [error,setError]=useState('');
@@ -64,6 +70,12 @@ function App(){
 
  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
  useEffect(()=>{save(ROUTE_KEY,query.trim());},[query]);
+ useEffect(()=>{
+  if(!active)return;
+  const storedValue=readLastSeen(active[0],active[1]);
+  const recorded=extractRecordedVehicle(recorder.session,active[0],active[1]);
+  setLastSeen(storedValue&&recorded?storedValue.lastSeenAt>=recorded.lastSeenAt?storedValue:recorded:storedValue??recorded);
+ },[active?.[0],active?.[1],recorder.session?.id]);
  useEffect(()=>{if(rememberToken)save(TOKEN_KEY,token.trim());else save(TOKEN_KEY,'');},[rememberToken,token]);
  useEffect(()=>{
   save(GPS_KEY,gpsWanted?'1':'');
@@ -118,6 +130,39 @@ function App(){
        }
       }catch(e){if(controller.signal.aborted)throw e;}
      }
+     // If we have previously identified the physical car but the line/order
+     // disappears during terminal layover, look for that exact car across routes.
+     // Never mistake an unrelated car with the same order for a match.
+     const known=readLastSeen(active![0],active![1])??
+      extractRecordedVehicle(recorder.session,active![0],active![1]);
+     let related:{vehicle:string;route:string;order:string;state:string;time:number}|null=null;
+     if(!matching.length&&known?.vehicle&&Date.now()-previousScanRef.current>=60000){
+      previousScanRef.current=Date.now();
+      try{
+       const globalUrl=new URL(API);
+       globalUrl.searchParams.set('includeNotTracking','true');
+       globalUrl.searchParams.set('limit','3000');
+       const broader=await fetch(globalUrl,{headers,signal:controller.signal,cache:'no-store'});
+       if(broader.ok){
+        const body:unknown=await broader.json();
+        const all=body&&typeof body==='object'&&Array.isArray((body as Obj).features)?
+         (body as {features:Feature[]}).features:[];
+        const sameCar=all.filter(item=>vehicleId(item)===known.vehicle);
+        if(sameCar.length===1){
+         const car=sameCar[0];
+         const carRoute=String(path(car,'properties.trip.gtfs.route_short_name')??path(car,'properties.trip.route_short_name')??'');
+         const carOrder=String(orderOf(car)??'');
+         related={vehicle:known.vehicle,route:carRoute,order:carOrder,
+          state:String(path(car,'properties.last_position.state_position')??''),
+          time:Date.now()};
+         if(carRoute===active![0]&&normalize(carOrder)===normalize(active![1])){
+          fetched=[...fetched,car];matching=[car];queryMode='knownVehicle';
+         }else queryMode='knownVehicleOnOtherTrip';
+        }else queryMode='globalScanNoMatch';
+       }else queryMode='globalScanHTTP'+broader.status;
+      }catch(e){if(controller.signal.aborted)throw e;queryMode='globalScanError';}
+     }
+     if(related)setRelatedVehicle(related);
      // The initial response and its non-tracking fallback are kept separate for
      // diagnostics: a vehicle may exist in one but not in the other.
      const terminalCandidatesFound=fetched.map(feature=>({
@@ -138,6 +183,20 @@ function App(){
      recordApiRef.current({line:active![0],order:active![1],responseStatus:response.status,
       requestStartedAt,responseAt:Date.now(),matchingCount:matching.length,vehicle:selected,gps:gpsRef.current,
       source:selected?'unique_order':'ambiguous_or_missing',candidateVehicles:candidates,queryMode});
+     if(selected){
+      const loc=selected.geometry?.coordinates;
+      const coords=Array.isArray(loc)&&loc.length>=2?loc:null;
+      const p=path(selected,'properties.last_position') as Obj|undefined;
+      const value:LastSeen={line:active![0],order:active![1],vehicle:vehicleId(selected),
+       tripId:selectedTripId(selected),lastSeenAt:Date.now(),lastPositionAt:observationTimestamp(selected),
+       lon:coords&&Number.isFinite(Number(coords[0]))?Number(coords[0]):null,
+       lat:coords&&Number.isFinite(Number(coords[1]))?Number(coords[1]):null,
+       lastStop:String(path(p,'last_stop.name')??''),nextStop:String(path(p,'next_stop.name')??''),
+       state:String(path(p,'state_position')??''),
+       route:String(path(selected,'properties.trip.gtfs.route_short_name')??active![0])};
+      if(value.vehicle!=='—'){saveLastSeen(value);setLastSeen(value);}
+      setRelatedVehicle(null);
+     }
      setFeatures(fetched);setQueryMode(queryMode);setTerminalCandidates(terminalCandidatesFound);setLastFetch(Date.now());setError('');
     }
    }catch(e){if(alive&&!controller.signal.aborted){const message=e instanceof Error?e.message:String(e);setError(message);recordErrorRef.current(active![0],active![1],'fetch_error',message);}}
@@ -200,7 +259,7 @@ function App(){
  const terminalName=terminalWaiting?firstStop?.name??null:null;
  const terminalCountdown=terminalWaiting?firstDeparture:null;
  const stopMode=manual!==null?'RUČNÍ VÝBĚR':terminalWaiting?'ČEKÁ NA ODJEZD Z KONEČNÉ':!compatible?(remote.vehicleState==='at_stop'&&remote.index!==null?'V ZASTÁVCE · GOLEMIO':remote.status==='confirmed'?'GOLEMIO · POTVRZENO':remote.status==='estimated'?'VZDÁLENÝ ODHAD':remote.status==='off-route'?'MIMO TRASU':remote.status==='stale'?'NEAKTUÁLNÍ DATA':'VZDÁLENÉ SLEDOVÁNÍ'):departureDetection.phase==='left'?'ODJEZD POTVRZEN GPS':departureDetection.phase==='verifying'?'OVĚŘUJI ODJEZD':departureDetection.phase==='at-stop'?'V ZASTÁVCE':pos.confirmedIndex!==null?'OVĚŘENO GPS':'GPS · ČEKÁM NA ZASTÁVKU';
- const state=active?(error?'Chyba připojení':age===null?'Připojování':age>=50?'Zastaralá data':chosen?'Sledování aktivní':'Pořadí nenalezeno'):'Připraveno';
+ const state=active?(error?'Chyba připojení':age===null?'Připojování':age>=50?'Zastaralá data':chosen?'Sledování aktivní':lastSeen?'Vůz dočasně mimo aktuální trip':'Pořadí nenalezeno'):'Připraveno';
  useEffect(()=>{
   const recordActive=recorder.session?.state==='recording'&&active&&
    recorder.session.target.line===active[0]&&recorder.session.target.order===active[1];
@@ -260,7 +319,7 @@ function App(){
   {active&&<section className="panel journeyPanel">
    <div className="journeyHeader">
     <div className="routeTile">{active[0]}</div>
-    <div className="journeyIdentity"><div className="journeyTitle">Pořadí {active[1]}</div><div className="journeySubtitle">{destination}</div><div className="journeySubtitle">Vůz {chosen?vehicleId(chosen):'—'}</div></div>
+    <div className="journeyIdentity"><div className="journeyTitle">Pořadí {active[1]}</div><div className="journeySubtitle">{destination}</div><div className="journeySubtitle">Vůz {chosen?vehicleId(chosen):lastSeen?.vehicle??'—'}</div></div>
     <span className={'liveDot '+(age!==null&&age<50&&chosen?'on':'')} title={state}></span>
    </div>
    {chosen&&trip.stops.length?<>
@@ -274,7 +333,16 @@ function App(){
      <div className="timerFooter"><span>Odjezd JŘ <b>{formatStopTime(departure)}</b></span><span>Zpoždění <b>{validDelay?(delay>=0?'+':'')+Math.round(delay/60)+' min':'—'}</b></span></div>
     </div>
     <p className="safetyLine">{!compatible?remote.reason:departureDetection.reason} Orientační časový údaj, nikoli pokyn k odjezdu.</p>
-   </>:<div className="emptyState">{trip.loading||loading?'Načítám údaje spoje…':chosen?(trip.error||'Vůz nalezen, ale jízdní řád tripu není dostupný.'):'Pořadí zatím nenalezeno ani mezi čekajícími vozy. Diagnostika ukáže kandidáty.'}</div>}
+   </>:<div className="emptyState">
+    {trip.loading||loading?'Načítám údaje spoje…':chosen?(trip.error||'Vůz nalezen, ale jízdní řád tripu není dostupný.'):
+     lastSeen?<><strong>Vůz {lastSeen.vehicle} · poslední potvrzený stav</strong>
+      <p>Poslední hlášení Časovače: {new Date(lastSeen.lastSeenAt).toLocaleTimeString('cs-CZ')}
+      {lastSeen.lastStop?' · '+lastSeen.lastStop:''}{lastSeen.nextStop?' → '+lastSeen.nextStop:''}.</p>
+      <p>{relatedVehicle?'Vůz se objevil u linky '+(relatedVehicle.route||'neznámé')+
+       ', pořadí '+(relatedVehicle.order||'neznámé')+'.':'V aktuálním výpisu Golemia není potvrzené pokračování pořadí.'}
+       {' '}Nelze potvrdit, že stále stojí na konečné.</p></>:
+       'Pořadí zatím nenalezeno ani mezi čekajícími vozy. Diagnostika ukáže kandidáty.'}
+   </div>}
   </section>}
 
   {active&&trip.stops.length>0&&<section className="panel timelinePanel"><div className="row"><h2>Zastávky</h2><span className="status">{trip.stops.length} zastávek</span></div>
@@ -291,9 +359,9 @@ function App(){
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
   <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
-   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} recorder={recorder}/>
+   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} lastSeen={lastSeen} relatedVehicle={relatedVehicle} recorder={recorder}/>
   </div>
-  <footer>ČASOVAČ 0.8 · Provozní pomůcka, nikoli oprávnění k odjezdu.</footer>
+  <footer>ČASOVAČ 0.9 · Provozní pomůcka, nikoli oprávnění k odjezdu.</footer>
   <button className="debugFab" onClick={()=>setDiagnostics(v=>!v)} aria-label={diagnostics?'Zavřít diagnostiku':'Otevřít diagnostiku'} title="Diagnostika">{diagnostics?'×':'⌘'}</button>
 
   {settings&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSettings(false);}}>
