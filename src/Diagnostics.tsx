@@ -23,6 +23,7 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
  const stops:Stop[]=trip.stops;
  const [copyState,setCopyState]=useState('');
  const [includePhone,setIncludePhone]=useState(false);
+ const [scenario,setScenario]=useState<'gps-off'|'gps-remote'|'gps-onboard'>('gps-off');
  const [note,setNote]=useState('');
  const coordinates=chosen?.geometry?.coordinates;
  const vehicle:[number,number]|null=Array.isArray(coordinates)&&coordinates.length>=2&&Number.isFinite(Number(coordinates[0]))&&Number.isFinite(Number(coordinates[1]))?[Number(coordinates[0]),Number(coordinates[1])]:null;
@@ -35,17 +36,25 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
   <div className="row"><h2>Záznam testovací jízdy</h2><span className={'status '+(recorder.session?.state==='recording'?'good':'')}>{recorder.session?.state==='recording'?'Zaznamenávám':recorder.session?'Ukončeno':'Připraveno'}</span></div>
   <p className="hint">Ukládá každou odpověď Golemia pro sledované pořadí, včetně opakovaných identických hlášení, času požadavku a případných chyb. Interval 20 s. Zůstává pouze v tomto prohlížeči.</p>
   {recorder.session?<div className="details">
-    <div><small>SLEDOVANÉ POŘADÍ</small><strong>{recorder.session.target.line}/{recorder.session.target.order}</strong></div>
+    <div><small>SLEDOVANÉ POŘADÍ / TEST</small><strong>{recorder.session.target.line}/{recorder.session.target.order} · {recorder.session.options.testScenario??'nezadáno'}</strong></div>
     <div><small>ZÁZNAMŮ</small><strong>{recorder.session.events.length} / {recorder.session.limits.maxEvents}</strong></div>
     <div><small>ZAČÁTEK</small><strong>{new Date(recorder.session.startedAt).toLocaleString('cs-CZ')}</strong></div>
     <div><small>POSLEDNÍ VZOREK</small><strong>{recorder.session.events.length?new Date(recorder.session.events[recorder.session.events.length-1].receivedAt).toLocaleTimeString('cs-CZ'):'—'}</strong></div>
-   </div>:<label className="rememberOption"><input type="checkbox" checked={includePhone} onChange={e=>setIncludePhone(e.target.checked)}/><span>Do JSON zahrnout i souřadnice GPS telefonu (volitelné; může prozradit soukromá místa). Bez zaškrtnutí se ukládá pouze stav GPS a vzdálenost od tramvaje.</span></label>}
+   </div>:<div className="recorderSetup">
+    <label htmlFor="testScenario">TESTOVACÍ SITUACE</label>
+    <select id="testScenario" value={scenario} onChange={e=>setScenario(e.target.value as 'gps-off'|'gps-remote'|'gps-onboard')}>
+     <option value="gps-off">1 · Vypnutá GPS telefonu</option>
+     <option value="gps-remote">2 · GPS zapnutá, telefon mimo tramvaj</option>
+     <option value="gps-onboard">3 · GPS zapnutá, telefon v tramvaji</option>
+    </select>
+    <label className="rememberOption"><input type="checkbox" checked={includePhone} onChange={e=>setIncludePhone(e.target.checked)}/><span>Do JSON zahrnout i souřadnice GPS telefonu (volitelné; může prozradit soukromá místa). Bez zaškrtnutí se ukládá pouze stav GPS a vzdálenost od tramvaje.</span></label>
+   </div>}
   {recorder.session?.state==='recording'&&<>
    <p className="hint">Při obnovení stránky záznam zůstane uložený. Pro další sběr musí být aktivní sledování stejného pořadí. Při zablokování prohlížeče na pozadí mohou jednotlivé vzorky chybět.</p>
    <div className="search"><input aria-label="Poznámka do záznamu" placeholder="Poznámka: konečná, semafor, odklon…" value={note} onChange={e=>setNote(e.target.value)}/><button className="quiet" disabled={!note.trim()} onClick={()=>{recorder.note(note);setNote('');}}>Přidat</button></div>
   </>}
   <div className="recorderActions">
-   {!recorder.session&&<button className="primary" disabled={!recorder.ready||!active} onClick={()=>{if(active)recorder.start(active[0],active[1],includePhone);}}>● Spustit záznam</button>}
+   {!recorder.session&&<button className="primary" disabled={!recorder.ready||!active} onClick={()=>{if(active)recorder.start(active[0],active[1],includePhone,scenario);}}>● Spustit záznam</button>}
    {recorder.session?.state==='recording'&&<button className="primary" onClick={recorder.stop}>■ Ukončit záznam</button>}
    {recorder.session&&<button className="quiet" onClick={recorder.download}>↓ Stáhnout JSON ({recorder.session.events.length})</button>}
    {recorder.session?.state==='stopped'&&<button className="quiet" onClick={()=>{if(window.confirm('Smazat uložený záznam? Nejprve jej stáhni.'))recorder.discard();}}>Smazat záznam</button>}
