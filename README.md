@@ -1,4 +1,4 @@
-# Časovač 0.7
+# Časovač 0.8
 
 Mobilní webová pomůcka pro sledování tramvajového pořadí PID. React, TypeScript, Vite a GitHub Pages.
 
@@ -156,3 +156,15 @@ Změny v 0.7:
 **Doporučený postup:** Pro každý scénář vytvořit nový záznam, sledovat stejné pořadí po 20–30 minutách a exportovat tři oddělené JSON soubory. Testy s GPS jsou nezávislé na tom, zda telefon skutečně v tramvaji je; aplikace režim vyhodnocuje sama, volba scénáře slouží jako popisek experimentu. Pro test na palubě lze zapnout export souřadnic telefonu, ale jde o citlivá data. Při řízení tramvaje s aplikací nemanipulovat; ovládání a ukládání provádět před jízdou nebo mimo řízení.
 
 **Zbývající omezení:** Pokud je vozidlo mimo seznam obou dotazů, aplikace ho nemůže spolehlivě identifikovat pouze podle jízdního řádu. Stáří dat a chybné či opožděné polohy se musí dál ověřit na delších záznamech. Pobyt na konečné zatím nemá samostatnou plnohodnotnou obrazovku; doplněn je první datový fallback.
+
+## Časovač 0.8: stabilní GPS na palubě, konečné a záznam rozhodování
+
+Nová logika `src/onboard.ts` zohledňuje, že polohy vozidla z Golemia mohou být o desítky sekund starší než GPS telefonu.
+- **Prvotní párování je přísné:** telefon musí mít aktuální přesnou GPS do 250 m od hlášeného vozidla, při starší poloze vozidla do 100 m. Blízkost samotné tramvajové trasy k párování nestačí.
+- **Udržení už potvrzeného párování:** pokud Golemio zaostává, lze dočasně přijmout vzdálenost telefonu až 750 m, pouze když telefon zůstává do 65 m od geometrie sledovaného tripu, hlášení je 25–125 s staré a telefon byl v posledních 150 s opravdu u vozidla. Zamezí se výpadkům palubního režimu kvůli jedné zpožděné zprávě.
+- **Rozpojení:** 1 000 m od tramvaje znamená okamžité vzdálené sledování bez ohledu na trasu. Také dlouhodobá neshoda nebo zastaralá/nepřesná GPS vrací vzdálený režim.
+- **Ověření odjezdu:** `src/departure.ts` nyní přijímá rozhodnutí modulu párování namísto druhé, nesouvisející, pevné kontroly do 250 m. Ostatní podmínky (50 m, 9 km/h, pohyb po trase, 3 fixy/4 s) zůstávají.
+- **Hledání vozu na konečné:** když základní dotaz nevrátí pořadí, aplikace zkusí `includeNotTracking=true`. Pokud se podaří určit vůz a GTFS trip, leží do 150 m od jeho první zastávky a má plánovaný odjezd v následujících 120 minutách, zobrazí stav **Čeká na odjezd z konečné** a plánovaný odpočet. Jde o odvozený, nikoli API výslovně potvrzený terminálový stav; podmínkou je také přítomnost `at_stop` nebo výsledek rozšířeného dotazu. Pokud je dostupná jen identita vozu bez tripu, zobrazí se vůz a vysvětlení, že chybí jízdní řád, nikoli smyšlená zastávka.
+- **Diagnostika:** ukazuje výsledek párování GPS, vzdálenosti telefonu od vozidla a trasy, zdroj dotazu, seznam kandidátů i stav čekání na konečné. Záznamový režim navíc exportuje samostatné události `decision` při změnách zastávky, režimu GPS nebo detekce odjezdu; neukládá tyto události každou sekundu.
+
+**Co zůstává k ověření:** konkrétní Golemio odpověď pro vůz na konečné a přesnost propojení mezi navazujícími tripy; web zůstává orientační pomůckou. Nejde o bezpečnostní pokyn pro řidiče.
