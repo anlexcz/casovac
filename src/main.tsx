@@ -97,7 +97,7 @@ function App(){
    try{
     const url=new URL(API);url.searchParams.set('routeShortName',lookupLine);
     url.searchParams.set('includeNotTracking','true');url.searchParams.set('limit','1000');
-    const body:unknown=await golemioJson<unknown>(url.toString(),token.trim(),45000);
+    const body:unknown=await golemioJson<unknown>(url.toString(),token.trim(),20000);
     if(!body||typeof body!=='object'||!Array.isArray((body as Obj).features))throw Error('Neplatná odpověď');
     if(alive)setLookup({line:lookupLine,items:(body as {features:Feature[]}).features,error:'',loading:false});
    }catch(e){if(alive&&!abort.signal.aborted)setLookup(previous=>({
@@ -372,7 +372,14 @@ function App(){
   if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v Nastavení.');return;}
   setQuery(parsed[0]+'/'+parsed[1]);
   setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);
-  setFeatures([]);setLastFetch(null);setError('');
+  // Reuse the already retrieved line snapshot immediately on selection.
+  // The running timer shares its Golemio URL and its 20-second cache.
+  if(lookup.line===parsed[0]&&lookup.items.length){
+   setFeatures(lookup.items);setLastFetch(Date.now());
+  }else{
+   setFeatures([]);setLastFetch(null);
+  }
+  setError('');
   save(ACTIVE_KEY,JSON.stringify({line:parsed[0],order:parsed[1],expires:Date.now()+ACTIVE_TTL}));
   setActive(parsed);
  }
