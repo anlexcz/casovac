@@ -420,8 +420,10 @@ function App(){
   {error&&<div className="alert" role="status">{error}</div>}
   {active&&<section className="panel journeyPanel compactJourney">
     <div className="compactIdentity">
-      <div className="routeTile" aria-label={'Linka '+active[0]}>{active[0]}</div>
-      <div className="orderTile" aria-label={'Pořadí '+active[1]}>{active[1]}</div>
+      <div className={'serviceBadge '+(active[0].length>=3?'serviceBadgeThree':'')} aria-label={'Linka '+active[0]+', pořadí '+active[1]}>
+       <div className="routeTile">{active[0]}</div>
+       <div className={'orderTile '+(active[1].length>=2?'orderTileTwo':'')}>{active[1]}</div>
+      </div>
       <div className="identityDetails">
        <div className="routeDirection">
         <svg viewBox="0 0 24 24" aria-hidden="true" className="identityIcon"><path d="M4 12h16m-7-7 7 7-7 7" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
