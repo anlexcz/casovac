@@ -1,75 +1,61 @@
 import {useEffect,useState} from 'react';
-import {parseStops} from './tripData';
-import type {Stop} from './tripData';
-import {golemioJson,GolemioLimitError} from './golemioClient';
 
-export type ChooserTarget={tripId:string;nextId:string;nextSequence:number|null;fallbackTripId:string;directName:string;atTerminal:boolean};
-const cache=new Map<string,Stop[]>();
-const pending=new Map<string,Promise<Stop[]>>();
-const good=(v:string)=>!!v&&v!=='—'&&v!=='Neznámá zastávka';
-async function getStops(id:string,token:string):Promise<Stop[]>{
- if(cache.has(id))return cache.get(id)!;
- const existing=pending.get(id);
- if(existing)return existing;
- const promise=(async()=>{
-  const url=new URL('https://api.golemio.cz/v2/public/gtfs/trips/'+encodeURIComponent(id));
-  url.searchParams.append('scopes[]','info');url.searchParams.append('scopes[]','stop_times');
-  const body=await golemioJson<unknown>(url.toString(),token,30*60*1000,'low');
-  let stops=parseStops(body);
-  if(!stops.length){
-   const fallback='https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(id);
-   try{stops=parseStops(await golemioJson<unknown>(fallback,token,30*60*1000,'low'));}
-   catch(e){if(e instanceof GolemioLimitError)throw e;}
-  }
-  if(stops.some(s=>good(s.name)))cache.set(id,stops);
-  return stops;
- })().finally(()=>pending.delete(id));
- pending.set(id,promise);
- return promise;
+/** Only static, public PID GTFS data. No per-vehicle Golemio lookup. */
+export type ChooserTarget={
+ tripId:string;nextId:string;nextSequence:number|null;
+ fallbackTripId:string;directName:string;atTerminal:boolean;
+};
+type Names=Record<string,string>;
+type Lookup={stops:Names;first:Names};
+const empty:Lookup={stops:{},first:{}};
+let cached:Lookup|null=null;
+let pending:Promise<Lookup>|null=null;
+const url=(name:string)=>import.meta.env.BASE_URL+'data/'+name;
+async function readMap(name:string):Promise<Names>{
+ const response=await fetch(url(name),{cache:'default'});
+ if(!response.ok)throw new Error('PID GTFS lookup: '+response.status);
+ const body:unknown=await response.json();
+ if(!body||typeof body!=='object'||Array.isArray(body))throw new Error('PID GTFS: invalid lookup');
+ return body as Names;
 }
-export function useChooserStops(targets:ChooserTarget[],token:string,enabled:boolean):Record<string,Stop[]>{
- const [revision,setRevision]=useState(0);
- const keys=[...new Set(targets.flatMap(t=>[t.tripId,t.fallbackTripId]).filter(id=>id&&id!=='—'))];
- const key=keys.slice().sort().join('|');
+function loadLookup():Promise<Lookup>{
+ if(cached)return Promise.resolve(cached);
+ if(pending)return pending;
+ pending=Promise.all([readMap('stops.json'),readMap('tram-trip-first-stops.json')])
+  .then(([stops,first])=>{
+   if(Object.keys(stops).length<100||Object.keys(first).length<100)throw Error('PID GTFS: incomplete data');
+   cached={stops,first};
+   return cached;
+  }).finally(()=>{pending=null;});
+ return pending;
+}
+// Keeping the hook's argument signature makes the replacement local to this
+// module. The trip IDs and API token no longer cause any network activity.
+export function useChooserStops(_targets:ChooserTarget[],_token:string,enabled:boolean):Lookup{
+ const [data,setData]=useState<Lookup>(()=>cached??empty);
  useEffect(()=>{
-  if(!enabled||!token||!keys.length)return;
+  if(!enabled)return;
   let alive=true;
-  // Only a small, bounded number of decorations per opened line.
-  // Previously each of 30+ orders caused a separate network lookup and starved
-  // the actual vehicle selector and the running timer.
-  const ids=keys.filter(id=>!cache.has(id)).slice(0,4);
-  const run=async()=>{
-   // Sequential, low-priority enrichment. A list of 30 vehicles must not
-   // trigger 30 simultaneous trip lookups while the main timer is polling.
-   for(const id of ids){
-    if(!alive)break;
-    try{await getStops(id,token);}
-    catch(e){if(e instanceof GolemioLimitError)break;}
-    if(alive)setRevision(v=>v+1);
-   }
-  };
-  void run();
+  void loadLookup().then(value=>{if(alive)setData(value);}).catch(()=>{
+   // The vehicle list stays usable even if a static GTFS refresh is unavailable.
+  });
   return()=>{alive=false;};
-  // Target trip IDs, not telemetry changes, control lookup work.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[key,token,enabled]);
- void revision;
- return Object.fromEntries(keys.map(id=>[id,cache.get(id)??[]]));
+ },[enabled]);
+ return data;
 }
-export function chooserStop(target:ChooserTarget,known:Record<string,Stop[]>):string{
- const current=known[target.tripId]??[];
- const next=target.nextSequence!==null?current.find(s=>s.sequence===target.nextSequence):undefined;
- const byId=target.nextId?current.find(s=>s.id===target.nextId):undefined;
- if(!target.atTerminal){
-  for(const name of [target.directName,next?.name,byId?.name])if(name&&good(name))return name;
- }
- const future=known[target.fallbackTripId]??[];
- const first=future.find(s=>good(s.name));
- if(first)return first.name;
+const good=(name:unknown):name is string=>
+ typeof name==='string'&&name.trim()!==''&&name!=='—'&&name!=='Neznámá zastávka';
+export function chooserStop(target:ChooserTarget,known:Lookup):string{
+ const byId=(id:string)=>id?known.stops[id]:'';
+ const first=(id:string)=>id?byId(known.first[id]??''):'';
  if(target.atTerminal){
-  const firstCurrent=current.find(s=>good(s.name));
-  if(firstCurrent)return firstCurrent.name;
+  const terminal=first(target.fallbackTripId)||first(target.tripId);
+  if(good(terminal))return terminal;
  }
- for(const name of [target.directName,next?.name,byId?.name])if(name&&good(name))return name;
+ const next=byId(target.nextId);
+ for(const name of [next,target.directName]){
+  if(good(name))return name;
+ }
+ // If a future trip is known, its first stop is a terminal fallback only.
  return '—';
 }
