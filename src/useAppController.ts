@@ -17,10 +17,11 @@ import {readLastSeen,saveLastSeen,extractRecordedVehicle} from './lastSeen';
 import type {LastSeen} from './lastSeen';
 import {observationTimestamp} from './remoteTracking';
 import type {GpsFix} from './position';
+import {path,text,selectedTripId,vehicleId,orderOf,normalize} from './featureUtils';
+import type {Feature,Obj} from './featureUtils';
+export {vehicleId} from './featureUtils';
 
 
-type Obj=Record<string,unknown>;
-type Feature=import('./featureUtils').Feature;
 const API='https://api.golemio.cz/v2/vehiclepositions';
 const TOKEN_KEY='casovac:golemio-token:v1';
 const ROUTE_KEY='casovac:last-order:v1';
@@ -37,12 +38,6 @@ const recentTracking=():[string,string]|null=>{try{
  }catch{return null;}};
 const stored=(key:string):string=>{try{return localStorage.getItem(key)??'';}catch{return '';}};
 const save=(key:string,value:string)=>{try{if(value)localStorage.setItem(key,value);else localStorage.removeItem(key);return true;}catch{return false;}};
-const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Obj)[k]:undefined,obj);
-const text=(value:unknown):string=>value===undefined||value===null?'—':String(value);
-const selectedTripId=(f:Feature)=>text(path(f,'properties.trip.gtfs.trip_id')??path(f,'properties.trip.trip_id'));
-export const vehicleId=(f:Feature)=>text(path(f,'properties.trip.vehicle_registration_number')??path(f,'properties.trip.vehicle.id')??path(f,'properties.trip.vehicle_id'));
-const orderOf=(f:Feature)=>path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??path(f,'properties.trip.order')??path(f,'properties.trip.gtfs.run_number');
-const normalize=(v:unknown)=>String(v??'').replace(/^0+/,'')||'0';
 export const parseOrder=(q:string):[string,string]|null=>{
  const match=/^(\d{1,3})\s*\/\s*(\d{1,4})$/.exec(q.trim());
  return match?[match[1],match[2]]:null;
