@@ -18,6 +18,8 @@ const path=(value:unknown,keys:string):unknown=>
 const normalize=(value:unknown)=>String(value??'').replace(/^0+/,'')||'0';
 const vehicle=(f:Feature)=>String(path(f,'properties.trip.vehicle_registration_number')??
  path(f,'properties.trip.vehicle.id')??path(f,'properties.trip.vehicle_id')??'');
+const orderOf=(f:Feature)=>path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??
+ path(f,'properties.trip.order')??path(f,'properties.trip.gtfs.run_number');
 const summarize=(f:Feature,source:string):ChainTrip=>({
  line:String(path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name')??''),
  order:String(path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??
@@ -45,7 +47,7 @@ export function useChainDiagnostics(args:{
  const primaryFeaturesRef=useRef(args.primaryFeatures);
  primaryFeaturesRef.current=args.primaryFeatures;
  useEffect(()=>{
-  if(!enabled||!paired||!known||known==='—'||!token){
+  if(!enabled||!paired||!line||!order||!token){
    setSnapshot(null);
    return;
   }
@@ -72,7 +74,7 @@ export function useChainDiagnostics(args:{
     const all=(response as {features:Feature[]}).features;
     const primary=primaryFeaturesRef.current.filter(f=>normalize(vehicle(f))===normalize(known))
      .map(f=>summarize(f,'původní linka'));
-    const related=all.filter(f=>normalize(vehicle(f))===normalize(known))
+    const related=all.filter(f=>normalize(orderOf(f))===normalize(order)||!!known&&normalize(vehicle(f))===normalize(known))
      .map(f=>summarize(f,'návazná linka'));
     const next:ChainSnapshot={
      target:line+'/'+order,vehicle:known,time:Date.now(),relatedLine:paired,
