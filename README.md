@@ -100,3 +100,43 @@ Každý úspěšný dotaz se ukládá jako samostatný vzorek i tehdy, když Gol
 **Uložení a soukromí:** záznam je uložen pouze místně v IndexedDB. Po obnovení stránky zůstane, ale pro další nové dotazy musí uživatel opět spustit sledování. Záznam je omezen na 2400 událostí a poté se automaticky zastaví bez mazání dat. Export přes tlačítko vytvoří JSON; API token se nesmí v exportu objevit. Souřadnice GPS telefonu se **standardně nezaznamenávají**. Samostatná volba před začátkem testu je může výslovně přidat. I při výchozím nastavení JSON obsahuje veřejně hlášené souřadnice vozidla; při sdílení souboru to zohledni.
 
 **Omezení webu:** mobilní prohlížeče mohou na pozadí nebo se zamknutým displejem pozastavit časovače i síťové požadavky, takže není garantován nepřetržitý 20sekundový interval. Zaznamenané časové mezery jsou součástí testovacího výsledku.
+
+## Diagnostika 2026-11-05: vůz na konečné není spárován s pořadím (bez změny aplikace)
+
+**Výchozí pozorování od uživatele:** tramvaj je na konečné, její existenci i polohu lze ověřit v Mapě PID a do odjezdu zbývá určitý čas. V Časovači při sledování `25/5` kolem 11:44 API normálně odpovídalo (aktualizace 11:44:24), ale zobrazilo **8 vozů a 0 shod pořadí**. Ruční nabídka obsahovala pořadí `1, 2, 3, 4, 7, 8, 9, 10`; **pořadí 5 chybělo**. Proto se ukazoval prázdný trip, 0 zastávek, neznámá poloha a chybějící predikce. Pobyt na konečné je pro tento případ potvrzeným provozním kontextem; neznámá zůstává konkrétní reprezentace tohoto stavu ve vrácených datech.
+
+### Podstatný nález v dokumentaci: includeNotTracking
+
+Endpoint `GET /v2/vehiclepositions` podporuje parametr **`includeNotTracking=true`**. Dokumentovaný model `VehiclePositionsTripsModel.GetAll()` jej podporuje spolu s `routeShortName`, `cisTripNumber`, `includePositions` a `tripId`:
+- https://operator-ict.gitlab.io/golemio/code/modules/vehicle-positions/classes/output_gateway_models_vehiclepositionstripsmodel.vehiclepositionstripsmodel.html
+- https://api.golemio.cz/pid/docs/openapi/
+- Historické odborné rozpracování významu `includeNotTracking`: https://dspace.cvut.cz/server/api/core/bitstreams/a5742075-a729-4423-a1f5-7e95c60efd0a/content (kapitola 2.2.2.3).
+
+Tento parametr zahrnuje také **spoje mimo právě aktivní výjezd**, tedy před začátkem nebo po skončení tripu. Starší analýza uvádí přibližně hodinu před odjezdem a 10 minut po konci, ale **nejde o potvrzenou garanci aktuálního systému v roce 2026**. Zvlášť důležité: Časovač nyní volá pouze `/v2/vehiclepositions?routeShortName=25&limit=1000`, parametr `includeNotTracking` chybí. **To je velmi silná konkrétní hypotéza pro chybějící vůz na konečné.** K definitivnímu potvrzení je zapotřebí zachytit srovnávací odpověď obou variant dotazu ve stejném okamžiku, protože bez vlastního API tokenu nebylo možné aktuální konkrétní odpověď pro `25/5` reprodukovat.
+
+### Řetězec ztráty informace v implementaci
+
+1. `src/main.tsx` stáhne pouze aktivně hlášená vozidla vybrané linky, vybere kandidáty podle `properties.trip.sequence_id` (fallback `properties.trip.cis.order` nebo `properties.trip.order`) a případně kontroluje `route_short_name`. Nehledá zvlášť přiřazený vůz na konečné ani budoucí trip.
+2. `chosen = null`, pokud shod není **právě jedna**. Nulová shoda i více shod jsou pro další části aplikace stejně nepoužitelné a nejsou odlišeny jako provozní stavy.
+3. `tripId` se získává **pouze** z `chosen`, a `useTripData()` bez něj nevyhledá jízdní řád. `remoteEstimate()` bez vozidla a zastávek automaticky vrátí `unknown`. Chybějící GPS není příčinou; prázdná diagnostika je následkem nulového párování.
+4. Diagnostika označuje aktualizaci jako `Online` podle stáří **API odpovědi**, nikoliv úspěšného spárování konkrétního pořadí. Z technického hlediska stránka pracuje správně, z pohledu uživatele však zavádí dojem, že hledaná tramvaj je sledována.
+5. Ruční výběr v `src/Diagnostics.tsx` nabízí pouze přijaté `features`, takže nelze vybrat vůz chybějící v základním dotazu.
+6. **Důležitá slabina sběru dat:** `src/recorder.ts` při 0 shodách zapisuje `matchingCount:0` a `vehicle:null`, ale **nezapisuje kompletní seznam ostatních kandidátů**. Testovací JSON tak nebude stačit k odhalení chybné `sequence_id`, změny `trip_id` nebo mezery v odpovědi. Diagnostika v budoucnu potřebuje zachovat alespoň přiměřeně omezený, očištěný seznam kandidátů a stavových polí.
+
+### Další relevantní datové zdroje
+
+- `/v2/vehiclepositions` s `includeNotTracking=true`: primární kandidát na zahrnutí vozidel před začátkem či po ukončení výjezdu.
+- `/v2/public/vehiclepositions/{vehicle_id}` a varianta `.../{vehicle_id};gtfsTripId={gtfs_trip_id}`: ověřit možnosti vyhledávání podle fyzického vozidla v novějším Public Vehicle Positions API. Tyto URL jsou zahrnuty v dokumentaci monitorovaných veřejných API (2026), ale jejich chování pro přestávky na konečné nebylo ověřeno. Dokumentace: https://api.golemio.cz/pid/docs/openapi/
+- GTFS jízdní řád / stop_times: získat plánovaný začátek **následujícího** tripu včetně odjezdové konečné; samotný GTFS však neurčuje se stoprocentní jistotou skutečně přiřazený vůz.
+- Mapa PID: vhodná kontrola očekávaného chování, nikoli automaticky důkaz, že konkrétní výstup `/v2/vehiclepositions` bez `includeNotTracking` obsahuje dané pořadí.
+
+### Přesný plán dalšího diagnostického testu (implementovat později)
+
+1. Ve stejnou chvíli porovnat dotazy `GET /v2/vehiclepositions?routeShortName=25&limit=1000` a `GET /v2/vehiclepositions?routeShortName=25&limit=1000&includeNotTracking=true`. V exportu logovat počet výsledků, u všech kandidátů `vehicle_registration_number`, `sequence_id`, `trip_id`, linku, časy a případné příznaky stavu. Token neukládat.
+2. Pokud se pořadí 5 v rozšířené odpovědi objeví, ověřit, zda má existující/nový `trip_id`, zda jde o stejný vůz, a zda odpověď uvádí čas budoucího odjezdu. Nepředpokládat, že jsou všechny hodnoty vyplněny.
+3. Pokud ne, ověřit alternativní Public Vehicle Positions endpoint podle čísla skutečně známého vozidla a případně samostatné jízdní řády/odjezdy pro konečnou; kontrolovat i to, zda `routeShortName` a `sequence_id` během přestávky stále odpovídají předchozí či následující jízdě.
+4. Pro aplikační logiku oddělit **identitu vozidla**, **služební pořadí**, **aktuální trip**, **stav na konečné** a **plánovaný další odjezd**. Tyto entity nemusejí být ve stejné chvíli vyplněné. Návaznost přes konečnou podporovat jen při prokazatelném spárování, nikoliv podle nejbližší tramvaje.
+5. V UI zobrazovat `Stojí na konečné · odjezd HH:mm` jen při potvrzené vazbě na vozidlo a jízdní řád. Při dočasně chybějícím tripu ukázat například `Vůz nalezen, čeká na začátek spoje` nebo `Pořadí momentálně bez aktivního tripu`; při nenalezeném voze odlišit `Vůz v aktuální odpovědi nenalezen`.
+6. Nepouštět predikci pohybu/odjezdu jen z uplynutí jízdního řádu, zejména při pobytu na konečné.
+
+**Stav:** pouze diagnostický nález a návrh; **žádné změny funkčního kódu, API dotazů nebo UI nebyly provedeny**.
