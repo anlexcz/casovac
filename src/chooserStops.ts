@@ -1,26 +1,25 @@
 import {useEffect,useState} from 'react';
 import {parseStops} from './tripData';
 import type {Stop} from './tripData';
+import {golemioJson,GolemioLimitError} from './golemioClient';
 
 export type ChooserTarget={tripId:string;nextId:string;nextSequence:number|null;fallbackTripId:string;directName:string;atTerminal:boolean};
 const cache=new Map<string,Stop[]>();
 const pending=new Map<string,Promise<Stop[]>>();
 const good=(v:string)=>!!v&&v!=='—'&&v!=='Neznámá zastávka';
-async function getStops(id:string,token:string,signal?:AbortSignal):Promise<Stop[]>{
+async function getStops(id:string,token:string):Promise<Stop[]>{
  if(cache.has(id))return cache.get(id)!;
  const existing=pending.get(id);
  if(existing)return existing;
  const promise=(async()=>{
-  const headers={'X-Access-Token':token};
   const url=new URL('https://api.golemio.cz/v2/public/gtfs/trips/'+encodeURIComponent(id));
   url.searchParams.append('scopes[]','info');url.searchParams.append('scopes[]','stop_times');
-  const response=await fetch(url,{headers,cache:'no-store',signal});
-  if(!response.ok)throw Error('GTFS trip HTTP '+response.status);
-  const body:unknown=await response.json();
+  const body=await golemioJson<unknown>(url.toString(),token,30*60*1000);
   let stops=parseStops(body);
   if(!stops.length){
-   const fallback=await fetch('https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(id),{headers,cache:'no-store',signal});
-   if(fallback.ok)stops=parseStops(await fallback.json());
+   const fallback='https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(id);
+   try{stops=parseStops(await golemioJson<unknown>(fallback,token,30*60*1000));}
+   catch(e){if(e instanceof GolemioLimitError)throw e;}
   }
   if(stops.some(s=>good(s.name)))cache.set(id,stops);
   return stops;
@@ -35,21 +34,19 @@ export function useChooserStops(targets:ChooserTarget[],token:string,enabled:boo
  useEffect(()=>{
   if(!enabled||!token||!keys.length)return;
   let alive=true;
-  const controller=new AbortController();
   const ids=keys.filter(id=>!cache.has(id));
   const run=async()=>{
-   let position=0;
-   const workers=Array.from({length:Math.min(4,ids.length)},async()=>{
-    while(position<ids.length&&alive){
-     const id=ids[position++];
-     try{await getStops(id,token,controller.signal);}catch{/* Names are optional. Do not block the chooser. */}
-     if(alive)setRevision(v=>v+1);
-    }
-   });
-   await Promise.all(workers);
+   // Sequential, low-priority enrichment. A list of 30 vehicles must not
+   // trigger 30 simultaneous trip lookups while the main timer is polling.
+   for(const id of ids){
+    if(!alive)break;
+    try{await getStops(id,token);}
+    catch(e){if(e instanceof GolemioLimitError)break;}
+    if(alive)setRevision(v=>v+1);
+   }
   };
   void run();
-  return()=>{alive=false;controller.abort();};
+  return()=>{alive=false;};
   // Target trip IDs, not telemetry changes, control lookup work.
   // eslint-disable-next-line react-hooks/exhaustive-deps
  },[key,token,enabled]);
