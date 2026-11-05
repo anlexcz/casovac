@@ -55,3 +55,24 @@ V diagnostice otevři **Audit ID zastávek**. Srovnává:
 Kandidáti stejného základního kódu ani blízké GPS polohy **nejsou automaticky uznány jako shoda ID**. Srovnání slouží k nalezení skutečného problému parseru či rozdílného kódování. Pomocí tlačítka lze zkopírovat textový audit bez API tokenu a bez polohy telefonu.
 
 Zpráva je stavovým snímkem během sledování. Při další aktualizaci živých dat se kandidáti přepočítají. Jakmile se prokáže skutečná struktura kódů, lze vytvořit explicitní bezpečný převod.
+
+## Časovač 0.5: potvrzení opuštění zastávky
+
+Nová logika `src/departure.ts` sleduje aktuální zastávku během pobytu i rozjezdu a až po prokazatelném odjezdu přepne hlavní kartu a odpočet na následující zastávku.
+
+**Podmínky pro automatické přepnutí při použití GPS telefonu:**
+
+- telefon byl před odjezdem rozpoznán do 35 m od zastávky;
+- GPS je aktuální (max. 15 s) a přesná (max. 35 m), poloha telefonu souhlasí s vozidlem do 250 m, živá poloha vozidla není starší než 45 s;
+- jsou dostupné souřadnice zastávky a pořadová geometrie GTFS `shapes`;
+- minimální rychlost každého započteného vzorku je 9 km/h;
+- vzdálenost telefonu od opouštěné zastávky je alespoň 50 m **a** posun vpřed podél `shapes` je alespoň 50 m;
+- minimálně 3 samostatné vzorky GPS během nejméně 4 s;
+- od prvního ověřovacího vzorku vzrostla vzdálenost od zastávky alespoň o 15 m a také postup po trase alespoň o 15 m;
+- zásadní pokles vzdálenosti nebo výpadek přesnosti zruší rozpracované potvrzování.
+
+Při spuštění sledování **mezi zastávkami** se systém nesnaží zpětně předstírat potvrzený odjezd. Nejprve musí zaznamenat přiblížení k zastávce. Když není dostupná spolehlivá GPS či `shapes`, automatické GPS přepínání se neprovede; zbývá původní informační určení z živých dat a ruční oprava. Rozpracovaná detekce se nepřenáší přes restart stránky ani změnu tripu.
+
+V diagnostice je karta **Detekce odjezdu** s fází, vzdáleností, rychlostí, počtem měření, posunem po trase, odchylkou od trasy, důvodem čekání a posledním potvrzeným přepnutím. Prahy jsou prozatím testovací a mohou potřebovat úpravu po jízdních zkouškách.
+
+GPS měření v prohlížeči nemusejí chodit pravidelně a při zamčeném telefonu se mohou pozastavit. Odpočet stále není provozní pokyn k odjezdu.
