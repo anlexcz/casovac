@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
+import {selectTrip,isBeforeTrip,isActiveTrip,stateOf,tripStart,terminalTrip} from './tripSelection';
 import {useTripData,countdownSeconds} from './tripData';
 import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
@@ -22,6 +23,16 @@ const API='https://api.golemio.cz/v2/vehiclepositions';
 const TOKEN_KEY='casovac:golemio-token:v1';
 const ROUTE_KEY='casovac:last-order:v1';
 const GPS_KEY='casovac:gps-preferred:v1';
+const ACTIVE_KEY='casovac:active-order:v1';
+const ACTIVE_TTL=4*60*60*1000;
+const recentTracking=():[string,string]|null=>{try{
+ const raw=localStorage.getItem(ACTIVE_KEY);if(!raw)return null;
+ const v=JSON.parse(raw) as {line?:string;order?:string;expires?:number};
+ if(!v?.expires||v.expires<Date.now()||!/^\\d{1,3}$/.test(v.line??'')||!/^\\d{1,4}$/.test(v.order??'')){
+  localStorage.removeItem(ACTIVE_KEY);return null;
+ }
+ return [v.line!,v.order!];
+ }catch{return null;}};
 const stored=(key:string):string=>{try{return localStorage.getItem(key)??'';}catch{return '';}};
 const save=(key:string,value:string)=>{try{if(value)localStorage.setItem(key,value);else localStorage.removeItem(key);return true;}catch{return false;}};
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Obj)[k]:undefined,obj);
@@ -40,7 +51,7 @@ function App(){
  const [tokenVisible,setTokenVisible]=useState(false);
  const [settings,setSettings]=useState(false);
  const [query,setQuery]=useState(()=>stored(ROUTE_KEY));
- const [active,setActive]=useState<[string,string]|null>(null);
+ const [active,setActive]=useState<[string,string]|null>(()=>stored(TOKEN_KEY)?recentTracking():null);
  const [diagnostics,setDiagnostics]=useState(false);
  const [selectedTrip,setSelectedTrip]=useState('');
  const [manual,setManual]=useState<number|null>(null);
@@ -72,6 +83,14 @@ function App(){
 
  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
  useEffect(()=>{save(ROUTE_KEY,query.trim());},[query]);
+ useEffect(()=>{if(active&&token.trim()){
+  // Refresh only when a route is actively selected; do not keep extending on refresh.
+  const raw=stored(ACTIVE_KEY);let storedRoute:null|{line:string;order:string;expires:number}=null;
+  try{storedRoute=raw?JSON.parse(raw):null;}catch{/* expired or corrupt */}
+  if(!storedRoute||storedRoute.line!==active[0]||storedRoute.order!==active[1]||storedRoute.expires<Date.now()){
+   save(ACTIVE_KEY,JSON.stringify({line:active[0],order:active[1],expires:Date.now()+ACTIVE_TTL}));
+  }
+ }},[active,token]);
  useEffect(()=>{
   if(!active)return;
   const storedValue=readLastSeen(active[0],active[1]);
@@ -101,6 +120,7 @@ function App(){
    const requestStartedAt=Date.now();
    try{
     const url=new URL(API);url.searchParams.set('routeShortName',active![0]);url.searchParams.set('limit','1000');
+    url.searchParams.set('includeNotTracking','true');
     const headers={'X-Access-Token':token.trim()};
     const response=await fetch(url,{headers,signal:controller.signal,cache:'no-store'});
     if(!response.ok)throw Error('Golemio HTTP '+response.status);
@@ -108,30 +128,11 @@ function App(){
     if(!data||typeof data!=='object'||!Array.isArray((data as Obj).features))throw Error('Neplatná odpověď živých poloh');
     if(alive&&generation===requestRef.current){
      const standard=(data as {features:Feature[]}).features;
-     const filterOrder=(list:Feature[])=>list.filter(feature=>{
-      const candidateLine=path(feature,'properties.trip.gtfs.route_short_name')??path(feature,'properties.trip.route_short_name');
-      return normalize(orderOf(feature))===normalize(active![1])&&(candidateLine===undefined||String(candidateLine)===active![0]);
-     });
      let fetched=standard;
-     let matching=filterOrder(fetched);
-     let queryMode='active';
-     // Vehicles waiting on a terminal may not be actively tracking a trip.
-     // Only query the wider set when the normal response lacks the order.
-     if(!matching.length){
-      try{
-       const extended=new URL(url);
-       extended.searchParams.set('includeNotTracking','true');
-       const extra=await fetch(extended,{headers,signal:controller.signal,cache:'no-store'});
-       if(extra.ok){
-        const payload:unknown=await extra.json();
-        if(payload&&typeof payload==='object'&&Array.isArray((payload as Obj).features)){
-         fetched=(payload as {features:Feature[]}).features;
-         matching=filterOrder(fetched);
-         queryMode='includeNotTracking';
-        }
-       }
-      }catch(e){if(controller.signal.aborted)throw e;}
-     }
+     let selectedResult=selectTrip(fetched,active![0],active![1],Date.now(),
+      readLastSeen(active![0],active![1])?.vehicle);
+     let matching=selectedResult.matches;
+     let queryMode='includeNotTracking';
      // If we have previously identified the physical car but the line/order
      // disappears during terminal layover, look for that exact car across routes.
      // Never mistake an unrelated car with the same order for a match.
@@ -173,7 +174,8 @@ function App(){
        nextStop:path(feature,'properties.last_position.next_stop'),
        start:path(feature,'properties.trip.start_timestamp')
      }));
-     const selected=matching.length===1?matching[0]:null;
+     selectedResult=selectTrip(fetched,active![0],active![1],Date.now(),known?.vehicle);
+     const selected=selectedResult.feature;
      const candidates=!selected?fetched.map(feature=>({
        order:orderOf(feature),vehicle:vehicleId(feature),tripId:selectedTripId(feature),
        route:path(feature,'properties.trip.gtfs.route_short_name'),state:path(feature,'properties.last_position.state_position'),
@@ -208,11 +210,9 @@ function App(){
   return()=>{alive=false;clearInterval(timer);controller.abort();};
  },[active,token]);
 
- const matches=active?features.filter(f=>{
-  const line=path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name');
-  return normalize(orderOf(f))===normalize(active[1])&&(line===undefined||String(line)===active[0]);
- }):[];
- const chosen=selectedTrip?features.find(f=>selectedTripId(f)===selectedTrip)??null:matches.length===1?matches[0]:null;
+ const resolved=active?selectTrip(features,active[0],active[1],now,lastSeen?.vehicle):null;
+ const matches=resolved?.matches??[];
+ const chosen=selectedTrip?features.find(f=>selectedTripId(f)===selectedTrip)??null:resolved?.feature??null;
  const tripId=chosen?selectedTripId(chosen):'';
  const trip=useTripData(tripId,token.trim());
  const age=lastFetch===null?null:Math.max(0,Math.floor((now-lastFetch)/1000));
@@ -252,9 +252,19 @@ function App(){
  const firstStopDistance=firstStop&&vehicleCoords&&firstStop.lat!==null&&firstStop.lon!==null?
   distanceMeters(vehicleCoords[1],vehicleCoords[0],firstStop.lat,firstStop.lon):null;
  const firstDeparture=firstStop?countdownSeconds(firstStop.departure||firstStop.arrival,now):null;
- const terminalWaiting=!!chosen&&!!firstStop&&firstStopDistance!==null&&firstStopDistance<=150&&
-  firstDeparture!==null&&firstDeparture>=0&&firstDeparture<=7200&&
-  (queryMode==='includeNotTracking'||remote.vehicleState==='at_stop');
+ const lifecycle=chosen?stateOf(chosen):'unknown';
+ const preparatory=!!chosen&&isBeforeTrip(chosen)&&terminalTrip(chosen,now);
+ const firstStopWaiting=!!chosen&&!!firstStop&&firstStopDistance!==null&&firstStopDistance<=150&&
+  (remote.vehicleState==='at_stop'||isBeforeTrip(chosen))&&
+  (remote.previousIndex===0||remote.nextIndex===0||preparatory)&&
+  firstDeparture!==null&&firstDeparture>-1800&&firstDeparture<=7200;
+ // At the origin, at_stop can announce the following stop before actual departure.
+ // Prefer the local GPS detector when paired, otherwise wait for on_track.
+ const hasDeparted=compatible?
+  departureDetection.phase==='left'&&departureDetection.displayIndex!==null&&departureDetection.displayIndex>0:
+  remote.vehicleState==='on_track';
+ const terminalWaiting=manual===null&&!hasDeparted&&(preparatory||firstStopWaiting)&&
+  !!firstStop&& (isBeforeTrip(chosen!)||lifecycle==='at_stop');
  const terminalName=terminalWaiting?firstStop?.name??null:null;
  const terminalCountdown=terminalWaiting?firstDeparture:null;
  const displayedIndex=terminalWaiting?0:position;
@@ -292,10 +302,11 @@ function App(){
   if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v Nastavení.');return;}
   setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);
   setFeatures([]);setLastFetch(null);setError('');
+  save(ACTIVE_KEY,JSON.stringify({line:parsed[0],order:parsed[1],expires:Date.now()+ACTIVE_TTL}));
   setActive(parsed);
  }
  function forget(){
-  setRememberToken(false);setToken('');save(TOKEN_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setSettings(false);
+  setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setSettings(false);
  }
  function chooseTrip(id:string){setSelectedTrip(id);setManual(null);}
  function toggleGPS(){setGpsWanted(v=>!v);}
@@ -336,7 +347,7 @@ function App(){
     </div>
     {highlightedStop&&displayedIndex!==null?
      <StopBoard stops={trip.stops} index={displayedIndex} tripId={tripId} remaining={highlightedRemaining}
-      expanded={expanded} onExpand={()=>setExpanded(v=>!v)}
+      terminalWaiting={terminalWaiting} expanded={expanded} onExpand={()=>setExpanded(v=>!v)}
       onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}/>
      :<div className="compactEmpty">
        {loading||trip.loading?'Načítání…':chosen?trip.error||'Jízdní řád nedostupný':lastSeen?
