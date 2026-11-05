@@ -47,9 +47,9 @@ export function useRemoteProgress(input:{
   Math.max(0,Math.round((plannedNext-plannedCurrent)/1000)):null;
  // Median observed interval from at_stop to the next on_track observation
  // is around a minute, but that includes Golemio's reporting latency.
- // Switch earlier, once the last stop observation has aged ~30–40 s,
+ // Switch earlier, once the last stop observation has aged ~36–45 s,
  // not immediately when a planned timetable departure has elapsed.
- const threshold=interval!==null&&interval<=75?30:interval!==null&&interval<=135?36:42;
+ const threshold=interval!==null&&interval<=75?36:interval!==null&&interval<=135?40:45;
  const delay=delaySeconds(vehicle);
  const expected=plannedCurrent!==null&&delay!==null?plannedCurrent+delay*1000+10000:null;
  const likelyLeft=validData&&!terminalWaiting&&held&&after&&age!==null&&age>=threshold&&
