@@ -87,8 +87,6 @@ function App(){
  const [gpsError,setGpsError]=useState('');
  const requestRef=useRef(0);
  const handoffFallbackRef=useRef<{target:string;vehicle:string;feature:Feature;until:number}|null>(null);
- const handoffGuardRef=useRef(lastHandoff);
- handoffGuardRef.current=lastHandoff;
  const recorder=useRecorder();
  const gpsRef=useRef<GpsFix|null>(null);
  gpsRef.current=gps;
@@ -205,9 +203,10 @@ function App(){
      // Never treat this cached object as a fresh observation.
      const fallback=handoffFallbackRef.current;
      if(fallback&&fallback.target===active!.join('/')&&Date.now()<fallback.until){
-      const liveSameCar=standard.some(f=>vehicleId(f)===fallback.vehicle&&
-       String(path(f,'properties.trip.gtfs.route_short_name')??'')===active![0]);
-      if(!liveSameCar)fetched=[...standard,fallback.feature];
+      const liveSameOrder=standard.some(f=>normalize(orderOf(f))===normalize(active![1])&&
+       String(path(f,'properties.trip.gtfs.route_short_name')??'')===active![0]&&
+       (stateOf(f)==='at_stop'||stateOf(f)==='on_track'));
+      if(!liveSameOrder)fetched=[...standard,fallback.feature];
       else handoffFallbackRef.current=null;
      }else if(fallback&&fallback.target===active!.join('/'))handoffFallbackRef.current=null;
      let selectedResult=selectTrip(fetched,active![0],active![1],Date.now(),
@@ -256,10 +255,7 @@ function App(){
      }));
      selectedResult=selectTrip(fetched,active![0],active![1],Date.now(),known?.vehicle);
      const proposed=selectedResult.feature;
-     const handoffGuard=handoffGuardRef.current;
-     const selected=proposed&&handoffGuard&&
-      handoffGuard.to===active!.join('/')&&vehicleId(proposed)!==handoffGuard.vehicle?
-      null:proposed;
+     const selected=proposed;
      const candidates=!selected?fetched.map(feature=>({
        order:orderOf(feature),vehicle:vehicleId(feature),tripId:selectedTripId(feature),
        route:path(feature,'properties.trip.gtfs.route_short_name'),state:path(feature,'properties.last_position.state_position'),
@@ -297,8 +293,7 @@ function App(){
  const resolved=active?selectTrip(features,active[0],active[1],now,lastSeen?.vehicle):null;
  const matches=resolved?.matches??[];
  const candidateFeature=selectedTrip?features.find(f=>selectedTripId(f)===selectedTrip)??null:resolved?.feature??null;
- const chosen=candidateFeature&&lastHandoff&&active?.join('/')===lastHandoff.to&&
-  vehicleId(candidateFeature)!==lastHandoff.vehicle?null:candidateFeature;
+ const chosen=candidateFeature;
  const chainRecordRef=useRef(recorder.chain);
  chainRecordRef.current=recorder.chain;
  const chainRecord=useRef((value:unknown)=>{
@@ -395,7 +390,7 @@ function App(){
   if(!handoffReady||!active||!chosen||!plannedHandoff)return;
   const next=plannedHandoff.next;
   const currentVehicle=vehicleId(chosen);
-  if(currentVehicle!==next.vehicle||!next.line||!next.order||!next.tripId)return;
+  if(!next.line||!next.order||!next.tripId)return;
   const target:[string,string]=[next.line,next.order];
   const from=active.join('/');
   const reason=(alreadyMoved&&!departureEvidence.ok?'Navazující trip je již aktivní.':departureEvidence.reason)+' '+continuity.reason;
@@ -406,20 +401,20 @@ function App(){
   };
   const previous=readLastSeen(active[0],active[1]);
   const remembered:LastSeen={
-   line:next.line,order:next.order,vehicle:currentVehicle,tripId:next.tripId,
+   line:next.line,order:next.order,vehicle:next.vehicle||currentVehicle,tripId:next.tripId,
    lastSeenAt:Date.now(),lastPositionAt:previous?.lastPositionAt??null,
    lon:previous?.lon??null,lat:previous?.lat??null,
    lastStop:'',nextStop:'',state:next.state,route:next.line
   };
   saveLastSeen(remembered);
-  handoffFallbackRef.current={target:target.join('/'),vehicle:currentVehicle,feature:synthetic,until:Date.now()+180000};
-  setLastHandoff({from,to:target.join('/'),vehicle:currentVehicle,tripId:next.tripId,reason,time:Date.now()});
+  handoffFallbackRef.current={target:target.join('/'),vehicle:next.vehicle||currentVehicle,feature:synthetic,until:Date.now()+180000};
+  setLastHandoff({from,to:target.join('/'),vehicle:next.vehicle||currentVehicle,tripId:next.tripId,reason,time:Date.now()});
   recorder.follow(next.line,next.order,next.tripId,reason);
   setSelectedTrip('');setManual(null);setExpanded(false);
   setFeatures([synthetic]);setLastSeen(remembered);setLastFetch(Date.now());
   setQuery(target.join('/'));
   save(ACTIVE_KEY,JSON.stringify({line:next.line,order:next.order,expires:Date.now()+ACTIVE_TTL,
-   handoff:{from,to:target.join('/'),vehicle:currentVehicle,tripId:next.tripId,reason,time:Date.now()}}));
+   handoff:{from,to:target.join('/'),vehicle:next.vehicle||currentVehicle,tripId:next.tripId,reason,time:Date.now()}}));
   setActive(target);
  // A different active route context supersedes this effect.
  // eslint-disable-next-line react-hooks/exhaustive-deps
