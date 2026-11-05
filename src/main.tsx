@@ -8,6 +8,7 @@ import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
 import {useRecorder} from './recorder';
 import {remoteEstimate} from './remoteTracking';
+import {useRemoteProgress} from './remoteProgress';
 import type {RemoteHistory} from './remoteTracking';
 import {distanceMeters} from './position';
 import {useOnboardMode} from './onboard';
@@ -269,11 +270,15 @@ function App(){
  const hasDeparted=departedRef.current.confirmed;
  const terminalWaiting=manual===null&&!hasDeparted&&(preparatory||firstStopWaiting)&&
   !!firstStop&& (isBeforeTrip(chosen!)||lifecycle==='at_stop');
+ const remoteProgress=useRemoteProgress({tripId,stops:trip.stops,remote,vehicle:chosen,now,terminalWaiting});
  const terminalName=terminalWaiting?firstStop?.name??null:null;
  const terminalCountdown=terminalWaiting?firstDeparture:null;
- const displayedIndex=terminalWaiting?0:position;
+ const displayedIndex=terminalWaiting?0:manual??(compatible?position:remoteProgress.index);
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
- const highlightedRemaining=terminalWaiting?terminalCountdown:seconds;
+ const highlightedTime=highlightedStop?.departure||highlightedStop?.arrival||'';
+ const highlightedRemaining=terminalWaiting?terminalCountdown:
+  !compatible&&manual===null&&remoteProgress.predicted?
+   countdownSeconds(highlightedTime,now):seconds;
  const telemetryAge=remote.sourceAge;
  const statusColor=!chosen?'statusGray':error||age===null||age>90?'statusRed':
   telemetryAge===null?'statusGray':telemetryAge<=30?'statusGreen':telemetryAge<=90?'statusAmber':'statusRed';
@@ -289,7 +294,9 @@ function App(){
    reason:onboard.reason,remoteSource:remote.source,remoteState:remote.status,
    vehicleState:remote.vehicleState,lastStopSequence:remote.previousIndex===null?null:trip.stops[remote.previousIndex]?.sequence??null,
    nextStopSequence:remote.nextIndex===null?null:trip.stops[remote.nextIndex]?.sequence??null,
-   currentIndex:position,stopName:current?.name??null,departurePhase:departureDetection.phase,
+   currentIndex:displayedIndex,stopName:highlightedStop?.name??null,remotePrediction:remoteProgress.predicted,
+   predictionReason:remoteProgress.reason,predictionAgeSeconds:remoteProgress.atStopAge,
+   predictionThresholdSeconds:remoteProgress.threshold,departurePhase:departureDetection.phase,
    departureLastSwitch:departureDetection.lastSwitch,terminalWaiting,terminalName,
    sourceAgeSeconds:remote.sourceAge};
   const signature=JSON.stringify({...summary,gap:null,routeGap:null,sourceAgeSeconds:null,reason:null});
@@ -300,7 +307,7 @@ function App(){
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[recorder.session?.id,recorder.session?.state,tripId,chosen,queryMode,onboard.mode,
     compatible,remote.source,remote.status,remote.vehicleState,remote.previousIndex,
-    remote.nextIndex,position,departureDetection.phase,departureDetection.lastSwitch,terminalWaiting]);
+    remote.nextIndex,displayedIndex,remoteProgress.predicted,departureDetection.phase,departureDetection.lastSwitch,terminalWaiting]);
  function start(){
   const parsed=parseOrder(query);if(!parsed){setError('Zadej linku a pořadí, například 25/5.');return;}
   if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v Nastavení.');return;}
@@ -361,7 +368,7 @@ function App(){
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
   <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
-   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} lastSeen={lastSeen} relatedVehicle={relatedVehicle} recorder={recorder}/>
+   <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} remoteProgress={remoteProgress} lastSeen={lastSeen} relatedVehicle={relatedVehicle} recorder={recorder}/>
   </div>
 
   <button className="debugFab" onClick={()=>setDiagnostics(v=>!v)} aria-label={diagnostics?'Zavřít diagnostiku':'Otevřít diagnostiku'} title="Diagnostika">{diagnostics?'×':'⌘'}</button>
