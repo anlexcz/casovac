@@ -58,7 +58,7 @@ export function decodeRoute(raw:unknown):RoutePoint[]{
  return route;
 }
 function getNearestStop(gps:GpsFix,stops:Stop[],reference:number|null){
- const indexes=reference===null?stops.map((_,i)=>i):[reference,reference+1].filter(i=>i>=0&&i<stops.length);
+ const indexes=reference===null?stops.map((_,i)=>i):[reference-1,reference,reference+1].filter(i=>i>=0&&i<stops.length);
  const candidates=indexes.map(i=>{
   const stop=stops[i];
   return stop.lat===null||stop.lon===null?null:{index:i,distance:distanceMeters(gps.lat,gps.lon,stop.lat,stop.lon)};
