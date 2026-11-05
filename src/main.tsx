@@ -254,15 +254,19 @@ function App(){
  const firstDeparture=firstStop?countdownSeconds(firstStop.departure||firstStop.arrival,now):null;
  const lifecycle=chosen?stateOf(chosen):'unknown';
  const preparatory=!!chosen&&isBeforeTrip(chosen)&&terminalTrip(chosen,now);
- const firstStopWaiting=!!chosen&&!!firstStop&&firstStopDistance!==null&&firstStopDistance<=150&&
+ const firstStopWaiting=!!chosen&&!!firstStop&&
   (remote.vehicleState==='at_stop'||isBeforeTrip(chosen))&&
   (remote.previousIndex===0||remote.nextIndex===0||preparatory)&&
+  (remote.previousIndex===0||firstStopDistance===null||firstStopDistance<=200)&&
   firstDeparture!==null&&firstDeparture>-1800&&firstDeparture<=7200;
  // At the origin, at_stop can announce the following stop before actual departure.
  // Prefer the local GPS detector when paired, otherwise wait for on_track.
- const hasDeparted=compatible?
-  departureDetection.phase==='left'&&departureDetection.displayIndex!==null&&departureDetection.displayIndex>0:
-  remote.vehicleState==='on_track';
+ const departedRef=useRef<{tripId:string;confirmed:boolean}>({tripId:'',confirmed:false});
+ if(departedRef.current.tripId!==tripId)departedRef.current={tripId,confirmed:false};
+ if((departureDetection.phase==='left'&&departureDetection.displayIndex!==null&&departureDetection.displayIndex>0)||
+    (remote.vehicleState==='on_track'&&remote.nextIndex!==null&&remote.nextIndex>=1)||
+    (remote.previousIndex!==null&&remote.previousIndex>=1))departedRef.current.confirmed=true;
+ const hasDeparted=departedRef.current.confirmed;
  const terminalWaiting=manual===null&&!hasDeparted&&(preparatory||firstStopWaiting)&&
   !!firstStop&& (isBeforeTrip(chosen!)||lifecycle==='at_stop');
  const terminalName=terminalWaiting?firstStop?.name??null:null;
