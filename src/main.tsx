@@ -302,7 +302,6 @@ function App(){
  }
  function chooseTrip(id:string){setSelectedTrip(id);setManual(null);}
  function toggleGPS(){setGpsWanted(v=>!v);}
- const showStops=expanded?trip.stops.map((stop,index)=>({stop,index})):nearby;
  return <main className="appShell">
   <header className="topbar">
    <div><h1>ČASOVAČ<span className="dot">.</span></h1></div>
