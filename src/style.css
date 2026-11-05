@@ -66,3 +66,13 @@
  .timerFooter{font-size:11px}
  .journeyPanel,.timelinePanel{padding:15px}
 }
+
+/* Audit of live PID stop IDs against GTFS stop_times */
+.stopAudit{margin:18px 0;padding:15px;border:1px solid #4b5561;border-radius:12px;background:#171c22}
+.stopAudit h3{font-size:16px;margin:0}
+.stopAudit h4{font-size:12px;color:#b4c1cf;text-transform:uppercase;letter-spacing:.4px;margin:17px 0 8px}
+.stopAudit .details{margin:12px 0}
+.stopAudit .auditRow{font-size:13px;line-height:1.45;border-bottom:1px solid #323b45;margin:0;padding:7px 0;overflow-wrap:anywhere}
+.stopAudit code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:#dce3eb}
+.stopAudit button{margin-top:14px}
+.stopAudit pre{white-space:pre-wrap;overflow-wrap:anywhere}
