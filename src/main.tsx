@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
-import {selectTrip,isBeforeTrip,isActiveTrip,stateOf,tripStart,terminalTrip} from './tripSelection';
+import {selectTrip,isBeforeTrip,stateOf,terminalTrip} from './tripSelection';
 import {useTripData,countdownSeconds} from './tripData';
 import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
@@ -28,7 +28,7 @@ const ACTIVE_TTL=4*60*60*1000;
 const recentTracking=():[string,string]|null=>{try{
  const raw=localStorage.getItem(ACTIVE_KEY);if(!raw)return null;
  const v=JSON.parse(raw) as {line?:string;order?:string;expires?:number};
- if(!v?.expires||v.expires<Date.now()||!/^\\d{1,3}$/.test(v.line??'')||!/^\\d{1,4}$/.test(v.order??'')){
+ if(!v?.expires||v.expires<Date.now()||!/^\d{1,3}$/.test(v.line??'')||!/^\d{1,4}$/.test(v.order??'')){
   localStorage.removeItem(ACTIVE_KEY);return null;
  }
  return [v.line!,v.order!];
@@ -223,7 +223,7 @@ function App(){
  const pos=usePosition(trip.stops,tripId,nextStopId,gps,vehicleCoords,age,now);
  const remote=remoteEstimate({feature:chosen??null,stops:trip.stops,raw:trip.raw,tripId,fetchedAt:lastFetch,now,history:historyRef.current.previous});
  const sourceAge=remote.sourceAge;
- const onboard=useOnboardMode({tripId,wanted:gpsWanted,gps,vehicle:vehicleCoords,raw:trip.raw,
+ const onboard=useOnboardMode({vehicleId:chosen?vehicleId(chosen):'',wanted:gpsWanted,gps,vehicle:vehicleCoords,raw:trip.raw,
   now,sourceAge,apiAge:age});
  const compatible=onboard.paired;
  useEffect(()=>{
