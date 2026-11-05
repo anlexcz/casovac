@@ -1,3 +1,4 @@
+import type {OnboardDecision} from './onboard';
 import type {RemoteState} from './remoteTracking';
 import type {useRecorder} from './recorder';
 import type {DepartureTelemetry} from './departure';
@@ -15,11 +16,12 @@ type Props={
  manual:number|null;setManual:(index:number|null)=>void;
  selectedTrip:string;setSelectedTrip:(id:string)=>void;
  startGps:()=>void;stopGps:()=>void;nextStopId:string;departure:DepartureTelemetry;
- remote:RemoteState;onboard:boolean;recorder:ReturnType<typeof useRecorder>;
+ remote:RemoteState;onboard:boolean;onboardDecision:OnboardDecision;
+ terminalWaiting:boolean;terminalName:string|null;queryMode:string;terminalCandidates:unknown[];recorder:ReturnType<typeof useRecorder>;
 };
 const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
-export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,onboard,recorder}:Props){
+export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,recorder}:Props){
  const stops:Stop[]=trip.stops;
  const [copyState,setCopyState]=useState('');
  const [includePhone,setIncludePhone]=useState(false);
@@ -64,7 +66,16 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
  </section>
  <section className="panel remotePanel" aria-label="Vzdálené sledování">
   <div className="row"><h2>Sledování vozidla</h2><span className={'status '+(onboard?'good':'')}>{onboard?'GPS na palubě':'Vzdálený režim'}</span></div>
-  <p className="hint">{onboard?'GPS telefonu odpovídá poloze tramvaje, lze použít detekci skutečného rozjezdu.':'GPS telefonu je vypnutá, neaktuální nebo mimo sledovanou tramvaj. Používám výhradně údaje Golemia.'}</p>
+  <p className="hint">{onboard?'Telefon je spárovaný s tramvají.':'GPS telefonu není ověřená na palubě; řídí se údaji Golemia.'} {onboardDecision.reason}</p>
+  <div className="details">
+   <div><small>GPS / VOZIDLO</small><strong>{onboardDecision.gap===null?'—':Math.round(onboardDecision.gap)+' m'}</strong></div>
+   <div><small>GPS / PLÁNOVANÁ TRASA</small><strong>{onboardDecision.routeGap===null?'—':Math.round(onboardDecision.routeGap)+' m'}</strong></div>
+   <div><small>POSLEDNÍ SPÁROVÁNÍ</small><strong>{onboardDecision.lastPairedAt===null?'—':new Date(onboardDecision.lastPairedAt).toLocaleTimeString('cs-CZ')}</strong></div>
+   <div><small>REŽIM DOTAZU</small><strong>{queryMode}</strong></div>
+   <div><small>STAV NA KONEČNÉ</small><strong>{terminalWaiting?'Čeká · '+(terminalName??'—'):'Nepotvrzeno'}</strong></div>
+   <div><small>POČET KANDIDÁTŮ</small><strong>{terminalCandidates.length}</strong></div>
+  </div>
+  <details><summary>Kandidáti z posledního dotazu</summary><pre>{JSON.stringify(terminalCandidates,null,2)}</pre></details>
   <div className="details">
    <div><small>STAV PREDIKCE</small><strong>{remote.status}</strong></div>
    <div><small>STAV VOZIDLA</small><strong>{remote.vehicleState}</strong></div>
