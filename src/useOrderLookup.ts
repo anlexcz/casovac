@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useMemo,useState} from 'react';
 import {selectTrip,stateOf} from './tripSelection';
 import {useChooserStops} from './chooserStops';
 import type {ChooserTarget} from './chooserStops';
@@ -29,16 +29,23 @@ export function useOrderLookup(query:string,editing:boolean,token:string,now:num
   const delay=setTimeout(()=>void load(),250),interval=setInterval(()=>void load(),45000);
   return()=>{alive=false;abort.abort();clearTimeout(delay);clearInterval(interval);};
  },[editing,lookupLine,token]);
+ // Grouping depends on the API snapshot, not the second-by-second countdown.
+ const groups=useMemo(()=>{
+  const result=new Map<string,Feature[]>();
+  if(lookup.line!==lookupLine)return result;
+  for(const feature of lookup.items){
+   const line=String(path(feature,'properties.trip.gtfs.route_short_name')??path(feature,'properties.trip.route_short_name')??'');
+   const raw=orderOf(feature);
+   if(normalize(line)!==normalize(lookupLine)||raw===null||raw===undefined||!/^[0-9]+$/.test(String(raw)))continue;
+   const key=normalize(line)+'/'+normalize(raw);
+   const existing=result.get(key);
+   if(existing)existing.push(feature);
+   else result.set(key,[feature]);
+  }
+  return result;
+ },[lookup.items,lookup.line,lookupLine]);
  const available=new Map<string,{line:string;order:string;car:string;target:ChooserTarget}>();
  if(lookup.line===lookupLine){
-  const groups=new Map<string,Feature[]>();
-  for(const f of lookup.items){
-   const line=String(path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name')??'');
-   const raw=orderOf(f);
-   if(normalize(line)!==normalize(lookupLine)||raw===null||raw===undefined||!/^\d+$/.test(String(raw)))continue;
-   const key=normalize(line)+'/'+normalize(raw);
-   groups.set(key,[...(groups.get(key)??[]),f]);
-  }
   for(const [key,items] of groups){
    const [line,order]=key.split('/');
    const chosen=selectTrip(items,line,order,now).feature??items[0];
