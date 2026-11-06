@@ -8,7 +8,7 @@ type Props={
  expanded:boolean;onExpand:()=>void;onChoose:(index:number)=>void;animate:boolean;
  continuation:{line:string;order:string;stops:Stop[]}|null;
  predecessor:{line:string;order:string;stops:Stop[]}|null;
- activeLine:string;
+ activeLine:string;visualBoundary:boolean;
 };
 function signed(remaining:number|null){
  if(remaining===null)return '—';
@@ -19,7 +19,7 @@ type Snapshot={
  trip:string;index:number;rects:Map<number,DOMRect>;
  previousName:string;previousTime:string;previousOffset:string;previousClock:string;
 };
-export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate,continuation,predecessor,activeLine}:Props){
+export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate,continuation,predecessor,activeLine,visualBoundary}:Props){
  const stack=useRef<HTMLDivElement|null>(null);
  const previous=useRef<Snapshot|null>(null);
  const board=chainBoard(stops,predecessor,continuation,activeLine);
@@ -62,7 +62,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
    const oldRect=old.rects.get(old.index);
    if(oldRect){
     const ghost=document.createElement('div');
-    ghost.className='departingStop '+old.previousClock;
+    ghost.className='departingStop departingStopFade';
     ghost.setAttribute('aria-hidden','true');
     ghost.style.top=(oldRect.top-root.getBoundingClientRect().top)+'px';
     ghost.style.height=oldRect.height+'px';
@@ -78,9 +78,9 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
     ghost.append(name,numbers);
     root.appendChild(ghost);
     const movement=ghost.animate([
-     {transform:'translateY(0)',opacity:1},
-     {transform:'translateY(-'+Math.min(85,Math.round(oldRect.height))+'px)',opacity:0}
-    ],{duration:520,easing:'cubic-bezier(.22,1,.36,1)'});
+     {transform:'scale(1)',opacity:1},
+     {transform:'scale(.94)',opacity:0}
+    ],{duration:360,easing:'ease-out'});
     movement.onfinish=()=>ghost.remove();
     movement.oncancel=()=>ghost.remove();
    }
@@ -97,7 +97,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
   {shown.map((entry,i)=>{
    const {stop,index:n,continuation:isNext,changeTo,localIndex}=entry,primary=i===0;
    return <Fragment key={(isNext?'next-':'current-')+n}>
-    {changeTo&&<div className="chainTransitionNote">↳ Dále jako linka {changeTo}</div>}
+    {changeTo&&!primary&&!visualBoundary&&<div className="chainTransitionNote">↳ Dále jako linka {changeTo}</div>}
     <div data-stop-index={n} className={primary?'activeDeparture '+clock:'upcomingStop'}>
     {primary?<>
      <span className="activeStopName">{stop.name}</span>

@@ -267,3 +267,15 @@
 
 /* Direct access to the read-only online API diagnostics page. */
 .rawDebugLink{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:#b9c4cf;font:700 10px var(--font-ui,system-ui);letter-spacing:.3px}
+
+/* Compact, opt-in spacing indicators beneath the vehicle identity. */
+.compactHeadways{display:flex;align-items:center;gap:15px;margin-top:2px;min-height:17px}
+.headwayValue{display:inline-flex;align-items:center;gap:5px;color:#b7c5d2;font-size:12px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums;white-space:nowrap}
+.headwayValue>span:first-child{font-size:14px;color:#8fa0ae}
+.headwayValue>span:last-child{font-variant-numeric:tabular-nums;min-width:39px}
+.settingsSectionHeading{font-weight:700;font-size:14px;border-top:1px solid #353e46;padding-top:14px;margin-top:8px}
+.boardStack>.departingStop.departingStopFade{background:transparent;border:0;box-shadow:none;color:#c7d1da;transform-origin:50% 50%}
+.boardStack>.departingStop.departingStopFade .liveOffset{color:#c7d1da}
+@media (prefers-reduced-motion:reduce){
+ .boardStack>.departingStopFade{display:none}
+}
