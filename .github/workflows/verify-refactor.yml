@@ -1,7 +1,9 @@
-name: Verify Časovač refactor
+name: Verify Časovač
 on:
   push:
-    branches: [refactor/audit-cleanup-20261105]
+    branches: [main, refactor/audit-cleanup-20261105]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
