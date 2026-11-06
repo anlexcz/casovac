@@ -30,11 +30,23 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
  const identity=enabled&&tripId&&token&&snapshot&&snapshot.target.split('/')[0]===line?
   tripId+'|'+date+'|'+candidates.map(t=>t.tripId).join('|'):'';
  const [state,setState]=useState<State>({key:'',pair:null,loading:false,reason:''});
- const saved=useRef<{tripId:string;date:string;pair:BlockPair}|null>(null);
+ const saved=useRef<{tripId:string;date:string;line:string;order:string;vehicle:string;pair:BlockPair}|null>(null);
+ const retained=():BlockPair|null=>{
+  const old=saved.current;
+  if(!old||old.date!==date)return null;
+  if(old.tripId===tripId)return old.pair;
+  if(old.pair.partner.tripId===tripId)return {
+   ...old.pair,role:old.pair.role==='first'?'second':'first',
+   partner:{line:old.line,order:old.order,tripId:old.tripId,
+    vehicle:old.vehicle,state:'after_track',start:null,lastStop:null,
+    nextStop:null,rawTrip:null,source:'ověřený předchozí trip'}
+  };
+  return null;
+ };
  useEffect(()=>{
-  if(!identity){saved.current=null;setState({key:'',pair:null,loading:false,reason:''});return;}
+  if(!identity){setState({key:'',pair:null,loading:false,reason:''});return;}
   let live=true;
-  setState({key:identity,pair:saved.current?.tripId===tripId&&saved.current?.date===date?saved.current.pair:null,
+  setState({key:identity,pair:retained(),
    loading:true,reason:'Ověřuji block_id obou tripů.'});
   const get=(id:string)=>golemioJson<OnlineTripDetail>(detailUrl(id,date),token,10*60000,'low');
   void (async()=>{
@@ -104,11 +116,12 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
     }
     if(!live)return;
     const pair=findVerifiedBlockPair({tripId,line,start:null,detail:current},matches);
-    if(pair)saved.current={tripId,date,pair};
-    setState({key:identity,pair:pair??(saved.current?.tripId===tripId&&saved.current?.date===date?saved.current.pair:null),loading:false,reason:pair?pair.reason:
+    if(pair)saved.current={tripId,date,line,order:snapshot?.target.split('/')[1]??'',
+     vehicle:snapshot?.vehicle??'',pair};
+    setState({key:identity,pair:pair??retained(),loading:false,reason:pair?pair.reason:
      'V online datech zatím nebyl ověřen druhý trip stejného bloku.'});
    }catch(e){
-    if(live)setState({key:identity,pair:null,loading:false,reason:e instanceof Error?e.message:String(e)});
+    if(live)setState({key:identity,pair:retained(),loading:false,reason:e instanceof Error?e.message:String(e)});
    }
   })();
   return()=>{live=false;};
