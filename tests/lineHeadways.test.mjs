@@ -89,3 +89,27 @@ test('formatting remains compact with missing values',()=>{
  assert.equal(formatHeadway(275),'04:35');
  assert.equal(formatHeadway(null),'—');
 });
+
+test('critical regression: public GTFS has no stop IDs but static schedules resolve headways',()=>{
+ const publicStops=stops.map(stop=>({...stop,id:''}));
+ // The user-facing schedule from /v2/public/gtfs/trips has blank stop IDs.
+ assert.equal(headwayEligiblePeers(me,[me,ahead,behind],publicStops,now).length,2);
+ const result=calculateLineHeadways({
+  selected:me,features:[me,ahead,behind],
+  stops:publicStops,peerStops:new Map([['9_23',stops],['9_22',stops],['9_24',stops]]),now
+ });
+ assert.equal(result.aheadSeconds,240);
+ assert.equal(result.behindSeconds,240);
+});
+test('stays blank if actual static GTFS schedules with stop IDs are missing',()=>{
+ const publicStops=stops.map(stop=>({...stop,id:''}));
+ const result=calculateLineHeadways({
+  selected:me,features:[me,ahead],stops:publicStops,peerStops:new Map(),now
+ });
+ assert.equal(result.matched,0);
+});
+test('live peers are discoverable despite next stop absent from public timetable IDs',()=>{
+ const publicStops=stops.map(stop=>({...stop,id:''}));
+ const p=f('9_26',9386,'OTHER',now+10000);
+ assert.equal(headwayEligiblePeers(me,[me,p],publicStops,now).length,1);
+});
