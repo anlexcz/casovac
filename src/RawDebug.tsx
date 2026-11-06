@@ -3,7 +3,7 @@ import {golemioJson} from './golemioClient';
 import {stored,TOKEN_KEY} from './trackingStorage';
 import {parseOrder} from './useAppController';
 import {selectTrip,tripIdOf} from './tripSelection';
-import {path,orderOf,routeOf,vehicleId} from './featureUtils';
+import {orderOf,routeOf} from './featureUtils';
 import type {Feature,Obj} from './featureUtils';
 import {parseStops} from './tripData';
 
@@ -19,7 +19,7 @@ function blocks(value:unknown){
  const found:Array<{where:string;value:unknown}>=[];
  const walk=(v:unknown,location:string,depth:number)=>{
   if(found.length>=60||depth>9||v===null||typeof v!=='object')return;
-  if(Array.isArray(v)){v.slice(0,120).forEach((entry,i)=>walk(entry,location+'['+i+']',depth+1));return;}
+  if(Array.isArray(v)){v.forEach((entry,i)=>walk(entry,location+'['+i+']',depth+1));return;}
   for(const [key,entry] of Object.entries(v as Obj)){
    if(/block[_-]?id|blockid/i.test(key))found.push({where:location+'.'+key,value:entry});
    if(typeof entry==='object'&&entry!==null)walk(entry,location+'.'+key,depth+1);
