@@ -14,16 +14,15 @@ import {distanceMeters} from './position';
 import {useOnboardMode} from './onboard';
 import {readLastSeen,saveLastSeen,extractRecordedVehicle} from './lastSeen';
 import type {LastSeen} from './lastSeen';
-import type {GpsFix} from './position';
 import {path,text,selectedTripId,vehicleId} from './featureUtils';
 import type {Feature,Obj} from './featureUtils';
 import {useVehicleTracking} from './useVehicleTracking';
+import {useGpsTracking} from './useGpsTracking';
 export {vehicleId} from './featureUtils';
 
 
 const TOKEN_KEY='casovac:golemio-token:v1';
 const ROUTE_KEY='casovac:last-order:v1';
-const GPS_KEY='casovac:gps-preferred:v1';
 const ACTIVE_KEY='casovac:active-order:v1';
 const ACTIVE_TTL=4*60*60*1000;
 const recentTracking=():[string,string]|null=>{try{
@@ -62,12 +61,9 @@ export function useAppController(){
  });
  const [error,setError]=useState('');
  const [now,setNow]=useState(Date.now());
- const [gpsWanted,setGpsWanted]=useState(()=>stored(GPS_KEY)==='1');
- const [gps,setGps]=useState<GpsFix|null>(null);
- const [gpsError,setGpsError]=useState('');
  const handoffFallbackRef=useRef<{target:string;vehicle:string;feature:Feature;until:number}|null>(null);
  const recorder=useRecorder();
- const recordGpsRef=useRef(recorder.gps);recordGpsRef.current=recorder.gps;
+ const {gpsWanted,setGpsWanted,gps,gpsError,toggleGPS}=useGpsTracking(recorder.gps);
  const recordDecisionRef=useRef(recorder.decision);recordDecisionRef.current=recorder.decision;
  const lastDecisionRef=useRef('');
  const historyRef=useRef<{previous:RemoteHistory|null;current:RemoteHistory|null}>({previous:null,current:null});
@@ -90,18 +86,7 @@ export function useAppController(){
   setLastSeen(storedValue&&recorded?storedValue.lastSeenAt>=recorded.lastSeenAt?storedValue:recorded:storedValue??recorded);
  },[active?.[0],active?.[1],recorder.session?.id]);
  useEffect(()=>{if(rememberToken)save(TOKEN_KEY,token.trim());else save(TOKEN_KEY,'');},[rememberToken,token]);
- useEffect(()=>{
-  save(GPS_KEY,gpsWanted?'1':'');
-  if(!gpsWanted){setGps(null);setGpsError('');return;}
-  if(!navigator.geolocation){setGpsError('Geolokace není v prohlížeči dostupná.');return;}
-  let alive=true;
-  const watch=navigator.geolocation.watchPosition(
-   p=>{if(alive){const fix={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy,speed:p.coords.speed,timestamp:p.timestamp};setGps(fix);recordGpsRef.current(fix);setGpsError('');}},
-   e=>{if(alive){setGps(null);setGpsError(e.message);}},
-   {enableHighAccuracy:true,maximumAge:5000,timeout:20000}
-  );
-  return()=>{alive=false;navigator.geolocation.clearWatch(watch);};
- },[gpsWanted]);
+
 
  const {features,setFeatures,lastFetch,setLastFetch,queryMode,relatedVehicle,terminalCandidates,loading}=useVehicleTracking({active,token,recorder,gps,setLastSeen,setError,handoffFallbackRef});
 
@@ -294,6 +279,5 @@ export function useAppController(){
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setSelectedTrip(id);setManual(null);}
- function toggleGPS(){setGpsWanted(v=>!v);}
  return {token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }
