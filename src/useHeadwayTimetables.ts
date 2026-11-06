@@ -138,7 +138,7 @@ export function useHeadwayTimetables(args:{
     if(!stopIdsOk(rawStops))continue;
     let combined:Stop[]=rawStops;
     if(id===selectedId&&activePair)combined=activePair.stops;
-    else if(foreignLine&&detail.block_id&&detail.route?.route_short_name){
+    else if(foreignLine&&id!==selectedId&&detail.route?.route_short_name===foreignLine&&detail.block_id){
      let partner:HeadwayTripDetail|null=null;
      // The first trip of a PID block is commonly addressable as block_id.
      if(detail.block_id!==id){
