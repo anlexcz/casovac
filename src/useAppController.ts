@@ -15,7 +15,7 @@ import {useOnboardMode} from './onboard';
 import {readLastSeen,saveLastSeen,extractRecordedVehicle} from './lastSeen';
 import type {LastSeen} from './lastSeen';
 import type {GpsFix} from './position';
-import {path,text,selectedTripId,vehicleId,orderOf,normalize} from './featureUtils';
+import {path,text,selectedTripId,vehicleId} from './featureUtils';
 import type {Feature,Obj} from './featureUtils';
 import {useVehicleTracking} from './useVehicleTracking';
 export {vehicleId} from './featureUtils';
