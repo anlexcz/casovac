@@ -1,4 +1,4 @@
-import {useLayoutEffect,useRef} from 'react';
+import {Fragment,useLayoutEffect,useRef} from 'react';
 import type {Stop} from './tripData';
 import {formatStopTime} from './tripData';
 import {chainBoard} from './chainStops';
@@ -96,9 +96,9 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
  return <div className="boardStack" ref={stack}>
   {shown.map((entry,i)=>{
    const {stop,index:n,continuation:isNext,changeTo,localIndex}=entry,primary=i===0;
-   return <div key={(isNext?'next-':'current-')+n}
-    data-stop-index={n} className={primary?'activeDeparture '+clock:'upcomingStop'}>
+   return <Fragment key={(isNext?'next-':'current-')+n}>
     {changeTo&&<div className="chainTransitionNote">↳ Dále jako linka {changeTo}</div>}
+    <div data-stop-index={n} className={primary?'activeDeparture '+clock:'upcomingStop'}>
     {primary?<>
      <span className="activeStopName">{stop.name}</span>
      <span className="departureNumbers">
@@ -115,7 +115,8 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
      <span className="upcomingName">{stop.name}</span>
      <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
     </button>}
-   </div>;
+    </div>
+   </Fragment>;
   })}
   {allStops.length-currentIndex-1>6&&<button type="button" className="moreStops" onClick={onExpand}>
    {expanded?'Zobrazit méně':'Zobrazit dalších '+(Math.max(0,allStops.length-currentIndex-7))+' zastávek'}
