@@ -1,9 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import {selectTrip,isBeforeTrip,stateOf,terminalTrip} from './tripSelection';
 import {useTripData,countdownSeconds} from './tripData';
+import {useChainTracking} from './useChainTracking';
 import {useOrderLookup} from './useOrderLookup';
-import {useChainDiagnostics} from './chainDiagnostics';
-import {findPlannedHandoff,verifyHandoffStops,departureForHandoff} from './chainHandoff';
+import {departureForHandoff} from './chainHandoff';
 import {usePosition} from './position';
 import {useDepartureDetection} from './departure';
 import {useRecorder} from './recorder';
@@ -82,30 +82,11 @@ export function useAppController(){
  const matches=resolved?.matches??[];
  const candidateFeature=selectedTrip?features.find(f=>selectedTripId(f)===selectedTrip)??null:resolved?.feature??null;
  const chosen=candidateFeature;
- const chainRecordRef=useRef(recorder.chain);
- chainRecordRef.current=recorder.chain;
- const chainRecord=useRef((value:unknown)=>{
-  const target=chainTargetRef.current;
-  if(target)chainRecordRef.current(target[0],target[1],value);
- }).current;
- const chainTargetRef=useRef<[string,string]|null>(active);
- chainTargetRef.current=active;
- const chainDiagnostic=useChainDiagnostics({
-  active,knownVehicle:chosen?vehicleId(chosen):lastSeen?.vehicle??'',
-  token:token.trim(),
-  enabled:!!active&&['5','6','9','10'].includes(active[0]),
-  primaryFeatures:features,record:chainRecord
- });
  const tripId=chosen?selectedTripId(chosen):'';
  const trip=useTripData(tripId,token.trim());
- const plannedHandoff=active&&chosen&&selectedTrip===''?
-  findPlannedHandoff(chainDiagnostic,{
-   line:active[0],order:active[1],tripId,vehicle:vehicleId(chosen),
-   start:path(chosen,'properties.trip.start_timestamp')
-  },now):null;
- const nextTrip=useTripData(plannedHandoff?.next.tripId??'',token.trim());
- const continuity=plannedHandoff?verifyHandoffStops(trip.stops,nextTrip.stops):
-  {ok:false,reason:'Navazující trip zatím nebyl nalezen.'};
+ const {chainDiagnostic,plannedHandoff,nextTrip,continuity}=useChainTracking({
+  active,chosen,lastSeen,features,token,tripId,trip,now,selectedTrip,recordChain:recorder.chain
+ });
  const age=lastFetch===null?null:Math.max(0,Math.floor((now-lastFetch)/1000));
  const gpsAge=gps?Math.max(0,Math.floor((now-gps.timestamp)/1000)):null;
  const coords=chosen?.geometry?.coordinates;
