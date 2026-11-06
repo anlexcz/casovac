@@ -63,7 +63,11 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
      if(!live)return;
      try{
       const detail=await get(candidate.tripId);
-      if(detail?.block_id===current.block_id)matches.push({trip:candidate,detail});
+      if(detail?.block_id===current.block_id){
+       matches.push({trip:candidate,detail});
+       // A verified two-trip block needs no further calls for unrelated orders.
+       if(findVerifiedBlockPair({tripId,line,start:null,detail:current},matches))break;
+      }
      }catch{/* one missing candidate must not hide other matches */}
     }
     // The first trip ID is itself the block_id in observed PID chained trips.
