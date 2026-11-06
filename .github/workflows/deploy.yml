@@ -23,16 +23,31 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Build daily PID GTFS lookup (static assets)
+      - name: Identify UTC GTFS update day
+        id: gtfs-day
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - name: Restore today's GTFS lookup
+        id: gtfs-cache
+        uses: actions/cache@v4
+        with:
+          path: public/data
+          key: casovac-gtfs-v1-${{ steps.gtfs-day.outputs.day }}
+          restore-keys: |
+            casovac-gtfs-v1-
+      - name: Build PID GTFS lookup when today's cache is unavailable
+        if: steps.gtfs-cache.outputs.cache-hit != 'true'
         run: python scripts/build_gtfs_lookup.py
-      - run: npm install --no-audit --no-fund
-      - name: Verify chained-line handoff rules
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run regression tests
         run: npm test
-      - run: npm run build
-      - name: Verify compiled site
+      - name: Build production site
+        run: npm run build
+      - name: Verify compiled site and GTFS files
         run: |
           test -s dist/index.html
           test -d dist/assets
