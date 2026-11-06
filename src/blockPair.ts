@@ -1,5 +1,5 @@
 import {sameTransitionStop} from './terminalMatch.ts';
-import {parseStops} from './tripData';
+import {parseStops} from './tripData.ts';
 import type {Stop} from './tripData';
 import type {ChainTrip} from './chainDiagnostics';
 
