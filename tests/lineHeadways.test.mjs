@@ -74,7 +74,7 @@ test('stops of another branch are not silently matched',()=>{
  assert.equal(run([unrelated]).matched,0);
 });
 test('requires two ordered common stops near both vehicles',()=>{
- const sparse=[stops[0],stops[4]].map((s,i)=>({...s,sequence:i+1}));
+ const sparse=[stops[4],{...stops[0],id:'OTHER'}].map((s,i)=>({...s,sequence:i+1}));
  assert.equal(sharedReference(stops,sparse,'C','E'),null);
 });
 test('ambiguous repeating stop IDs are not used as a reference',()=>{
