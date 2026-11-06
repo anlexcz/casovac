@@ -264,3 +264,6 @@
 .chooserStopIcon{flex:0 0 15px;color:#8b9aa9}
 .chooserStop>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:420px){.chooserRow{min-height:46px;padding:8px 3px}.chooserStop{font-size:11px}}
+
+/* Direct access to the read-only online API diagnostics page. */
+.rawDebugLink{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:#b9c4cf;font:700 10px var(--font-ui,system-ui);letter-spacing:.3px}

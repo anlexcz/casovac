@@ -1,3 +1,12 @@
-import { defineConfig } from 'vite';
+import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
-export default defineConfig({ plugins: [react()], base: '/casovac/' });
+import {resolve} from 'node:path';
+
+export default defineConfig({
+ plugins:[react()],
+ base:'/casovac/',
+ build:{rollupOptions:{input:{
+  main:resolve(process.cwd(),'index.html'),
+  rawdebug:resolve(process.cwd(),'rawdebug/index.html')
+ }}}
+});

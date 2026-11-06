@@ -11,6 +11,7 @@ export default function AppView({token,setToken,rememberToken,setRememberToken,t
    <div className="headActions">
     <button className="headButton" type="button" onClick={()=>{setQuery(active?.[0]??'');setEditing(true);setError('');}} aria-label="Vybrat sledovaný spoj" title="Vybrat sledovaný spoj"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="m15 5 4 4M4 20l4.8-1 10-10a2.8 2.8 0 0 0-4-4l-10 10L4 20Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
     <button className={'headButton '+(gpsWanted&&!gpsError&&gpsAge!==null&&gpsAge<=20?'gpsActive':'')} onClick={toggleGPS} aria-pressed={gpsWanted} aria-label={gpsWanted?'Vypnout GPS':'Zapnout GPS'} title={gpsError||pos.status}>⌖ <span>GPS</span></button>
+    <a className="headButton rawDebugLink" href={import.meta.env.BASE_URL+'rawdebug/'} title="Syrová online data Golemia" aria-label="Otevřít RAWDEBUG">RAW</a>
     <button className="headButton" onClick={()=>setSettings(true)} aria-label="Nastavení">⚙</button>
    </div>
   </header>

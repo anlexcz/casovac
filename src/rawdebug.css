@@ -1,0 +1,33 @@
+.rawPage{max-width:1000px;padding-top:26px}
+.rawBack{display:inline-flex;align-items:center;color:#ccd7e0;text-decoration:none;font-size:14px;font-weight:600;border:1px solid #49525b;border-radius:9px;padding:9px 12px}
+.rawBack:hover{background:#292f37}
+.rawSettings,.rawExtra{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.rawSettings .hint,.rawSettings .primary,.rawExtra .hint,.rawExtra h2{grid-column:1/-1}
+.rawField{min-width:0}
+.rawField label{display:block;font-size:11px;letter-spacing:.6px;color:#9da9b5;margin-bottom:6px}
+.rawToken{grid-column:1/-1}
+.rawSettings input,.rawExtra input{width:100%;min-height:44px}
+.rawSettings .primary{width:100%}
+.rawExtra .quiet{align-self:end}
+.rawFacts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:15px}
+.rawFacts>div{background:#13191f;border:1px solid #353d47;border-radius:10px;padding:12px;min-width:0}
+.rawFacts small{display:block;font-size:10px;color:#aab5c0;margin-bottom:7px}
+.rawFacts strong{display:block;overflow-wrap:anywhere;font-size:14px}
+.rawSectionHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.rawBlockField{border-top:1px solid #383f49;padding:11px 0;display:grid;gap:7px;min-width:0}
+.rawBlockField small{letter-spacing:0;overflow-wrap:anywhere}
+.rawBlockField code{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;color:#91e1cd}
+.rawResponse{border:1px solid #3b454f;border-radius:9px;margin:9px 0;overflow:hidden}
+.rawResponse summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px;background:#252c34}
+.rawResponse summary strong{font-size:14px;font-weight:600}
+.rawOK{color:#85d8b4;font-size:12px}.rawError{color:#ff9c9c;font-size:12px}
+.rawEndpoint{font-size:12px;color:#b4c6d5;overflow-wrap:anywhere;padding:0 12px}
+.rawResponse>.hint{padding:0 12px}
+.rawActions{display:flex;gap:7px;padding:0 12px 10px;flex-wrap:wrap}
+.rawActions button{font-size:12px;padding:9px}
+.rawJson{max-height:65vh;overflow:auto;white-space:pre;font-size:11px;line-height:1.5;margin:0;border-radius:0;background:#0d1116;color:#cbd6df;tab-size:2;padding:14px}
+@media(max-width:520px){
+ .rawSettings,.rawExtra{grid-template-columns:1fr}
+ .rawFacts{grid-template-columns:1fr}
+ .rawResponse summary{align-items:flex-start}
+}
