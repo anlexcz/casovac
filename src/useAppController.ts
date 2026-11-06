@@ -21,20 +21,7 @@ import {useGpsTracking} from './useGpsTracking';
 export {vehicleId} from './featureUtils';
 
 
-const TOKEN_KEY='casovac:golemio-token:v1';
-const ROUTE_KEY='casovac:last-order:v1';
-const ACTIVE_KEY='casovac:active-order:v1';
-const ACTIVE_TTL=4*60*60*1000;
-const recentTracking=():[string,string]|null=>{try{
- const raw=localStorage.getItem(ACTIVE_KEY);if(!raw)return null;
- const v=JSON.parse(raw) as {line?:string;order?:string;expires?:number};
- if(!v?.expires||v.expires<Date.now()||!/^\d{1,3}$/.test(v.line??'')||!/^\d{1,4}$/.test(v.order??'')){
-  localStorage.removeItem(ACTIVE_KEY);return null;
- }
- return [v.line!,v.order!];
- }catch{return null;}};
-const stored=(key:string):string=>{try{return localStorage.getItem(key)??'';}catch{return '';}};
-const save=(key:string,value:string)=>{try{if(value)localStorage.setItem(key,value);else localStorage.removeItem(key);return true;}catch{return false;}};
+import {TOKEN_KEY,ROUTE_KEY,ACTIVE_KEY,ACTIVE_TTL,recentTracking,stored,save} from './trackingStorage';
 export const parseOrder=(q:string):[string,string]|null=>{
  const match=/^(\d{1,3})\s*\/\s*(\d{1,4})$/.exec(q.trim());
  return match?[match[1],match[2]]:null;
