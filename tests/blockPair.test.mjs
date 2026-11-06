@@ -72,3 +72,18 @@ test('terminal boundary tolerates an actual layover without a rigid 30-min cutof
   {id:'B',name:'B',arrival:'13:55:00',departure:'13:55:00',sequence:2,lat:null,lon:null}];
  assert.equal(validBlockBoundary(a,b),true);
 });
+
+test('rejects a trip starting an hour earlier on the same platform',()=>{
+ const a=[{id:'A',name:'A',arrival:'13:00:00',departure:'13:00:00',sequence:1,lat:null,lon:null},
+  {id:'X',name:'X',arrival:'14:00:00',departure:'14:00:00',sequence:2,lat:null,lon:null}];
+ const b=[{...a[1],arrival:'13:00:00',departure:'13:00:00',sequence:1},
+  {id:'B',name:'B',arrival:'13:05:00',departure:'13:05:00',sequence:2,lat:null,lon:null}];
+ assert.equal(validBlockBoundary(a,b),false);
+});
+test('accepts a service-day rollover between 24:01 and 00:01',()=>{
+ const a=[{id:'A',name:'A',arrival:'23:58:00',departure:'23:58:00',sequence:1,lat:null,lon:null},
+  {id:'X',name:'X',arrival:'24:01:00',departure:'24:01:00',sequence:2,lat:null,lon:null}];
+ const b=[{...a[1],arrival:'00:01:00',departure:'00:01:00',sequence:1},
+  {id:'B',name:'B',arrival:'00:05:00',departure:'00:05:00',sequence:2,lat:null,lon:null}];
+ assert.equal(validBlockBoundary(a,b),true);
+});
