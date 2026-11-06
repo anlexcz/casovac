@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {path,normalize,orderOf,selectedTripId,vehicleId,text} from '../src/featureUtils.ts';
+import {path,normalize,orderOf,selectedTripId,vehicleId,text,routeOf,stateOfFeature,rawTripOf} from '../src/featureUtils.ts';
 
 const feature=(trip={})=>({properties:{trip}});
 test('reads nested Golemio fields without crashing on absent objects',()=>{
@@ -30,4 +30,14 @@ test('normalizes leading zeroes without conflating missing display values',()=>{
  assert.equal(normalize('000'),'0');
  assert.equal(text(undefined),'—');
  assert.equal(text(0),'0');
+});
+
+test('uses the same canonical route and state fields across trip and chain parsing',()=>{
+ const trip={gtfs:{route_short_name:'9'},route_short_name:'10',trip_id:'id'};
+ const feature={properties:{trip,last_position:{state_position:'on_track'}}};
+ assert.equal(routeOf(feature),'9');
+ assert.equal(stateOfFeature(feature),'on_track');
+ assert.equal(rawTripOf(feature),trip);
+ assert.equal(routeOf({properties:{trip:{route_short_name:'6'}}}),'6');
+ assert.equal(stateOfFeature({properties:{}}),'');
 });
