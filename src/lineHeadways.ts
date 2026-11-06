@@ -40,22 +40,28 @@ const indexOfUnique=(stops:Stop[],id:string):number=>{
  const found=stops.flatMap((stop,i)=>stop.id===id?[i]:[]);
  return found.length===1?found[0]:-1;
 };
+const distanceSq=(a:Feature,b:Feature):number=>{
+ const ac=a.geometry?.coordinates,bc=b.geometry?.coordinates;
+ if(!Array.isArray(ac)||!Array.isArray(bc)||ac.length<2||bc.length<2)return Infinity;
+ const ax=Number(ac[0]),ay=Number(ac[1]),bx=Number(bc[0]),by=Number(bc[1]);
+ if(![ax,ay,bx,by].every(Number.isFinite))return Infinity;
+ const dy=(ay-by)*111_200,dx=(ax-bx)*111_200*Math.cos(ay*Math.PI/180);
+ return dy*dy+dx*dx;
+};
+/** The public GTFS Lookup stop list intentionally lacks stop_id. Neighbours
+ * must be chosen from live vehiclepositions first, independently of that list.
+ * Their full static GTFS stop sequences are resolved asynchronously.
+ */
 export function headwayEligiblePeers(
- selected:Feature|null,features:Feature[],stops:Stop[],now:number,limit=16
+ selected:Feature|null,features:Feature[],_stops:Stop[],now:number,limit=24
 ):Feature[]{
- if(!selected||!stops.length||!live(selected,now))return [];
+ if(!selected||!live(selected,now))return [];
  const ownId=selectedTripId(selected),car=vehicleId(selected);
- const ids=new Set(stops.map(s=>s.id).filter(Boolean));
- const currentIndex=indexOfUnique(stops,stopId(selected));
- if(currentIndex<0)return [];
  return features.filter(f=>f!==selected&&routeOf(f)===routeOf(selected)&&
-  selectedTripId(f)!==ownId&&vehicleId(f)!==car&&live(f,now)&&
-  ids.has(stopId(f))&&nextEta(f)!==null)
-  .sort((a,b)=>{
-   // Prioritize vehicles close to our position, on either side.
-   const indexA=indexOfUnique(stops,stopId(a)),indexB=indexOfUnique(stops,stopId(b));
-   return Math.abs(indexA-currentIndex)-Math.abs(indexB-currentIndex);
-  }).slice(0,limit);
+  selectedTripId(f)!==ownId&&selectedTripId(f)!=='—'&&
+  vehicleId(f)!==car&&live(f,now)&&!!stopId(f)&&nextEta(f)!==null)
+  .sort((a,b)=>distanceSq(a,selected)-distanceSq(b,selected))
+  .slice(0,limit);
 }
 /** Confirm that the two real GTFS trips traverse at least two common stops
  * in the same order near their live positions. Different headsigns alone
@@ -92,20 +98,21 @@ export function calculateLineHeadways(args:{
  peerStops:ReadonlyMap<string,Stop[]>;now:number;
 }):LineHeadways{
  const {selected,features,stops,peerStops,now}=args;
+ const ownStops=peerStops.get(selected?selectedTripId(selected):'')??stops;
  const result:LineHeadways={...EMPTY_HEADWAYS,checkedAt:now};
- if(!selected||stops.length<3||!live(selected,now))return result;
+ if(!selected||ownStops.length<3||!live(selected,now))return result;
  const ownEta=nextEta(selected),ownNextId=stopId(selected);
- if(ownEta===null||indexOfUnique(stops,ownNextId)<0)return result;
+ if(ownEta===null||indexOfUnique(ownStops,ownNextId)<0)return result;
  for(const peer of headwayEligiblePeers(selected,features,stops,now)){
   const ownTripId=selectedTripId(peer);
   const schedulePeer=peerStops.get(ownTripId);
   if(!schedulePeer?.length)continue;
-  const shared=sharedReference(stops,schedulePeer,ownNextId,stopId(peer));
+  const shared=sharedReference(ownStops,schedulePeer,ownNextId,stopId(peer));
   if(!shared)continue;
   const peerEta=nextEta(peer);
   if(peerEta===null)continue;
-  const ownNext=schedule(stops[shared.ownIndex]);
-  const ownRef=schedule(stops[shared.ownRef]);
+  const ownNext=schedule(ownStops[shared.ownIndex]);
+  const ownRef=schedule(ownStops[shared.ownRef]);
   const peerNext=schedule(schedulePeer[shared.peerIndex]);
   const peerRef=schedule(schedulePeer[shared.peerRef]);
   if(ownNext===null||ownRef===null||peerNext===null||peerRef===null)continue;
