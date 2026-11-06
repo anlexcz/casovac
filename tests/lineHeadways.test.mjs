@@ -112,8 +112,9 @@ test('correctly formats unavailable and zero spacing',()=>{
 const details=(id,line,block,ids,offset)=>({
  trip_id:id,block_id:block,route:{route_short_name:line},
  stop_times:ids.map((stopId,i)=>({
-  stop_id:stopId,stop_sequence:i+1,arrival_time:'14:'+String(50+offset+i*2).padStart(2,'0')+':00',
-  departure_time:'14:'+String(50+offset+i*2).padStart(2,'0')+':00'
+  stop_id:stopId,stop_sequence:i+1,
+  arrival_time:String(14+Math.floor((50+offset+i*2)/60)).padStart(2,'0')+':'+String((50+offset+i*2)%60).padStart(2,'0')+':00',
+  departure_time:String(14+Math.floor((50+offset+i*2)/60)).padStart(2,'0')+':'+String((50+offset+i*2)%60).padStart(2,'0')+':00'
  }))
 });
 const first=details('9_A','9','BLOCK_A',['P','Q','T'],0);
