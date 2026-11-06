@@ -54,7 +54,7 @@ export default function AppView({showHeadways,setShowHeadways,headways,visualLin
        {showHeadways&&<div className="compactHeadways" aria-label="Časové rozestupy spojů stejné linky">
         <span title="Předchozí spoj před vámi na stejné trase" className="headwayValue"><span aria-hidden="true">↑</span> <span>{formatHeadway(headways?.aheadSeconds??null)}</span></span>
         <span title="Následující spoj za vámi na stejné trase" className="headwayValue"><span aria-hidden="true">↓</span> <span>{formatHeadway(headways?.behindSeconds??null)}</span></span>
-       </div>
+       </div>}
       </div>
       <button className={'vehicleStatus '+statusColor} type="button" onClick={()=>setDiagnostics(true)}
        aria-label={statusDescription+'; otevřít diagnostiku'} title={statusDescription}>
