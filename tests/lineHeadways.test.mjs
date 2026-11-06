@@ -1,115 +1,157 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {calculateLineHeadways,formatHeadway,sharedReference,headwayEligiblePeers} from '../src/lineHeadways.ts';
+import {joinHeadwayBlock,possibleBlockPartners} from '../src/headwayChains.ts';
 
 const now=Date.parse('2026-11-06T14:54:00+01:00');
-const stops=[
- ['A','14:50:00'],['B','14:52:00'],['C','14:54:00'],
- ['D','14:56:00'],['E','14:58:00'],['F','15:00:00']
-].map(([id,time],i)=>({id,name:id,arrival:time,departure:time,sequence:i+1,lat:null,lon:null}));
-const f=(tripId,car,nextId,eta,delay=0,headsign='Nákladové nádraží Žižkov',state='on_track',origin=now)=>({
- properties:{trip:{gtfs:{route_short_name:'9',trip_id:tripId,trip_headsign:headsign},
-  sequence_id:Number(tripId.split('_')[1]),vehicle_registration_number:car},
+const stops=['A','B','C','D','E','F'].map((id,i)=>({
+ id,name:id,arrival:'14:'+String(50+2*i).padStart(2,'0')+':00',
+ departure:'14:'+String(50+2*i).padStart(2,'0')+':00',
+ sequence:i+1,lat:null,lon:null
+}));
+const shifted=(source,minutes)=>source.map(s=>{
+ const shift=t=>{
+  const [h,m,sec]=t.split(':').map(Number),sum=h*3600+m*60+sec+minutes*60;
+  return [Math.floor(sum/3600),Math.floor(sum%3600/60),sum%60]
+   .map(v=>String(v).padStart(2,'0')).join(':');
+ };
+ return {...s,arrival:shift(s.arrival),departure:shift(s.departure)};
+});
+const f=(tripId,car,nextId,eta,{delay=0,line='9',order,headsign='Nákladové nádraží Žižkov',
+ state='on_track',origin=now}={})=>({
+ properties:{trip:{gtfs:{route_short_name:line,trip_id:tripId,trip_headsign:headsign},
+  sequence_id:order??Number(tripId.split('_')[1]),vehicle_registration_number:car},
   last_position:{state_position:state,origin_timestamp:new Date(origin).toISOString(),
    next_stop:{id:nextId,arrival_time:new Date(eta).toISOString()},delay:{actual:delay}}}
 });
 const me=f('9_23',9383,'C',now+10000);
 const ahead=f('9_22',9380,'E',now+10000);
 const behind=f('9_24',9384,'A',now+10000);
-const peerStops=new Map([['9_22',stops],['9_24',stops]]);
-const run=(others,overrides={})=>calculateLineHeadways({
- selected:me,features:[me,...others],stops,peerStops,now,...overrides
+const schedules=new Map([['9_23',stops],['9_22',shifted(stops,-4)],['9_24',shifted(stops,4)]]);
+const run=(peers,opts={})=>calculateLineHeadways({
+ selected:me,features:[me,...peers],stops,peerStops:schedules,now,...opts
 });
-test('projects nearby trips with different next stops onto a shared reference point',()=>{
+test('closest neighbours are ranked by PLANNED time and keep identity badges',()=>{
  const r=run([ahead,behind]);
  assert.equal(r.aheadSeconds,240);
  assert.equal(r.behindSeconds,240);
- assert.equal(r.matched,2);
+ assert.deepEqual([r.ahead.line,r.ahead.order,r.behind.line,r.behind.order],['9','22','9','24']);
 });
-test('uses same next stop for both vehicles when one is already ahead in time',()=>{
- const p=f('9_22',9380,'C',now-270000);
- const r=run([p]);
- assert.equal(r.aheadSeconds,280);
+test('a delayed planned predecessor never becomes a follower: clamp at zero',()=>{
+ const late=f('9_22',9380,'E',now+5*60000);
+ const r=run([late]);
+ assert.equal(r.aheadSeconds,0);
  assert.equal(r.behindSeconds,null);
+ assert.equal(r.ahead.tripId,'9_22');
 });
-test('different headsign does not invalidate same-direction short turn on shared track',()=>{
- const shortTurn=f('9_22',9380,'E',now+10000,0,'Vozovna Motol');
- assert.equal(run([shortTurn]).aheadSeconds,240);
+test('an early planned follower never becomes a predecessor: clamp at zero',()=>{
+ const early=f('9_24',9384,'A',now-5*60000);
+ const r=run([early]);
+ assert.equal(r.behindSeconds,0);
+ assert.equal(r.aheadSeconds,null);
 });
-test('accepts a separate trip schedule with slightly different running times',()=>{
- const special=[...stops];special[4]={...stops[4],arrival:'14:59:00',departure:'14:59:00'};
- const r=run([ahead],{peerStops:new Map([['9_22',special]])});
- assert.equal(r.aheadSeconds,300);
+test('chooses closest planned predecessor, not closest live prediction',()=>{
+ const far=f('9_20',9381,'F',now+10000);
+ const s=new Map(schedules);
+ s.set('9_20',shifted(stops,-12));
+ const near=f('9_22',9380,'E',now+7*60000);
+ const r=run([far,near],{peerStops:s});
+ assert.equal(r.ahead.tripId,'9_22');
+ assert.equal(r.aheadSeconds,0);
 });
-test('includes valid delay in seconds',()=>{
- const delayed=f('9_22',9380,'E',now+10000,30);
+test('same next stop is comparable when planned trips differ',()=>{
+ const neighbour=f('9_22',9380,'C',now-270000);
+ const r=run([neighbour]);
+ assert.equal(r.aheadSeconds,280);
+});
+test('short-turn destination difference does not change shared-track comparisons',()=>{
+ const short=f('9_22',9380,'E',now+10000,{headsign:'Vozovna Motol'});
+ assert.equal(run([short]).aheadSeconds,240);
+});
+test('uses live delay but fixed planned ordering',()=>{
+ const delayed=f('9_22',9380,'E',now+10000,{delay:30});
  assert.equal(run([delayed]).aheadSeconds,210);
 });
-test('uses latest stop delay when actual delay is missing',()=>{
- const alternate=f('9_22',9380,'E',now+10000);
- alternate.properties.last_position.delay.actual=null;
- alternate.properties.last_position.delay.last_stop_arrival=12;
- assert.equal(run([alternate]).aheadSeconds,228);
-});
-test('refuses to invent an ETA without any delay evidence',()=>{
- const missing=f('9_22',9380,'E',now+10000);
- missing.properties.last_position.delay.actual=null;
- assert.equal(run([missing]).matched,0);
-});
-test('rejects stale positions and inactive trips',()=>{
- const stale=f('9_24',9384,'A',now+10000,0,'Nákladové nádraží Žižkov','on_track',now-120000);
- const prepared=f('9_22',9380,'E',now+10000,0,'Nákladové nádraží Žižkov','before_track');
+test('stale or nontracking vehicles are not selected',()=>{
+ const stale=f('9_22',9380,'E',now+10000,{origin:now-120000});
+ const prepared=f('9_24',9384,'A',now+10000,{state:'before_track'});
  assert.equal(run([stale,prepared]).matched,0);
 });
-test('rejects opposite-direction route and trips on another line',()=>{
- const reversed=[...stops].reverse().map((s,i)=>({...s,sequence:i+1}));
- const r=run([ahead],{peerStops:new Map([['9_22',reversed]])});
- assert.equal(r.matched,0);
- const different=f('9_22',9380,'E',now+10000);
- different.properties.trip.gtfs.route_short_name='10';
- assert.equal(run([different]).matched,0);
+test('different route is considered only when verified chain allows it',()=>{
+ const connected=f('10_22',9380,'E',now+10000,{line:'10',order:22});
+ const s=new Map(schedules);s.set('10_22',shifted(stops,-4));
+ assert.equal(run([connected],{peerStops:s}).matched,0);
+ const r=run([connected],{peerStops:s,allowedRoutes:new Set(['9','10'])});
+ assert.equal(r.ahead.tripId,'10_22');
+ assert.equal(r.ahead.line,'10');
 });
-test('stops of another branch are not silently matched',()=>{
- const unrelated=f('9_22',9380,'OTHER',now+10000);
- assert.equal(run([unrelated]).matched,0);
+test('reverse order of common stops is never accepted',()=>{
+ const reverse=[...stops].reverse().map((s,i)=>({...s,sequence:i+1}));
+ assert.equal(run([ahead],{peerStops:new Map([['9_23',stops],['9_22',reverse]])}).matched,0);
 });
-test('requires two ordered common stops near both vehicles',()=>{
- const sparse=[stops[4],{...stops[0],id:'OTHER'}].map((s,i)=>({...s,sequence:i+1}));
- assert.equal(sharedReference(stops,sparse,'C','E'),null);
-});
-test('ambiguous repeating stop IDs are not used as a reference',()=>{
+test('rejects ambiguous repeated stop ids',()=>{
  const repeated=[...stops,{...stops[2],sequence:7}];
- assert.equal(run([ahead],{stops:repeated}).matched,0);
+ assert.equal(run([ahead],{peerStops:new Map([['9_23',repeated],['9_22',shifted(stops,-4)]])}).matched,0);
 });
-test('filter does not request details for inactive, remote or stale peers',()=>{
- const stale=f('9_25',9385,'D',now+10000,0,'Nákladové nádraží Žižkov','on_track',now-125000);
- assert.deepEqual(headwayEligiblePeers(me,[me,ahead,behind,stale],stops,now).map(p=>p.properties.trip.gtfs.trip_id),['9_22','9_24']);
+test('public GTFS without stop ids does not hide static GTFS-based headways',()=>{
+ const pub=stops.map(s=>({...s,id:''}));
+ assert.equal(headwayEligiblePeers(me,[me,ahead],pub,now).length,1);
+ assert.equal(run([ahead],{stops:pub}).aheadSeconds,240);
 });
-test('formatting remains compact with missing values',()=>{
+test('does not show a timing value without telemetry or schedule',()=>{
+ const noDelay=f('9_22',9380,'E',now+10000);
+ noDelay.properties.last_position.delay.actual=null;
+ assert.equal(run([noDelay]).aheadSeconds,null);
+ assert.equal(run([ahead],{peerStops:new Map()}).aheadSeconds,null);
+});
+test('correctly formats unavailable and zero spacing',()=>{
  assert.equal(formatHeadway(275),'04:35');
+ assert.equal(formatHeadway(0),'00:00');
  assert.equal(formatHeadway(null),'—');
 });
-
-test('critical regression: public GTFS has no stop IDs but static schedules resolve headways',()=>{
- const publicStops=stops.map(stop=>({...stop,id:''}));
- // The user-facing schedule from /v2/public/gtfs/trips has blank stop IDs.
- assert.equal(headwayEligiblePeers(me,[me,ahead,behind],publicStops,now).length,2);
+const details=(id,line,block,ids,offset)=>({
+ trip_id:id,block_id:block,route:{route_short_name:line},
+ stop_times:ids.map((stopId,i)=>({
+  stop_id:stopId,stop_sequence:i+1,arrival_time:'14:'+String(50+offset+i*2).padStart(2,'0')+':00',
+  departure_time:'14:'+String(50+offset+i*2).padStart(2,'0')+':00'
+ }))
+});
+const first=details('9_A','9','BLOCK_A',['P','Q','T'],0);
+const second=details('10_A','10','BLOCK_A',['T','U','V'],4);
+test('GTFS block pair creates a continuous timetable with one boundary stop',()=>{
+ const combined=joinHeadwayBlock(first,second);
+ assert.deepEqual(combined.stops.map(s=>s.id),['P','Q','T','U','V']);
+ assert.equal(combined.firstId,'9_A');
+ assert.equal(joinHeadwayBlock(second,first).secondId,'10_A');
+});
+test('false vehicle/order matching cannot join unrelated GTFS blocks',()=>{
+ assert.equal(joinHeadwayBlock(first,{...second,block_id:'DIFFERENT'}),null);
+ assert.equal(joinHeadwayBlock(first,{...second,route:{route_short_name:'9'}}),null);
+});
+test('GTFS lookup must filter exact block and reject unrelated terminal trips',()=>{
+ assert.deepEqual(possibleBlockPartners(first,[second,{...second,trip_id:'other',block_id:'B'}],'10'),['10_A']);
+});
+test('after transition, a preceding-line vehicle remains the planned follower',()=>{
+ const my=f('10_current',9128,'U',now+10000,{line:'10',order:11});
+ const next=f('9_follow',9405,'Q',now+10000,{line:'9',order:12});
+ const myStops=details('10_current','10','ME',['T','U','V'],4);
+ const followFirst=details('9_follow','9','FOLLOW',['P','Q','T'],4);
+ const followSecond=details('10_follow','10','FOLLOW',['T','U','V'],8);
+ const mapped=new Map([
+  ['10_current',stopsOf(myStops)],
+  ['9_follow',joinHeadwayBlock(followFirst,followSecond).stops]
+ ]);
  const result=calculateLineHeadways({
-  selected:me,features:[me,ahead,behind],
-  stops:publicStops,peerStops:new Map([['9_23',stops],['9_22',stops],['9_24',stops]]),now
+  selected:my,features:[my,next],stops:stopsOf(myStops),
+  peerStops:mapped,now,allowedRoutes:new Set(['9','10'])
  });
- assert.equal(result.aheadSeconds,240);
- assert.equal(result.behindSeconds,240);
+ assert.equal(result.behind.tripId,'9_follow');
+ assert.equal(result.behind.line,'9');
+ assert.equal(result.behind.order,'12');
 });
-test('stays blank if actual static GTFS schedules with stop IDs are missing',()=>{
- const publicStops=stops.map(stop=>({...stop,id:''}));
- const result=calculateLineHeadways({
-  selected:me,features:[me,ahead],stops:publicStops,peerStops:new Map(),now
- });
- assert.equal(result.matched,0);
-});
-test('live peers are discoverable despite next stop absent from public timetable IDs',()=>{
- const publicStops=stops.map(stop=>({...stop,id:''}));
- const p=f('9_26',9386,'OTHER',now+10000);
- assert.equal(headwayEligiblePeers(me,[me,p],publicStops,now).length,1);
-});
+function stopsOf(detail){
+ return detail.stop_times.map((s,i)=>({
+  id:s.stop_id,name:s.stop_id,sequence:i+1,
+  arrival:s.arrival_time,departure:s.departure_time,lat:null,lon:null
+ }));
+}
