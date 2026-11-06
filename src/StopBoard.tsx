@@ -1,12 +1,14 @@
 import {useLayoutEffect,useRef} from 'react';
 import type {Stop} from './tripData';
 import {formatStopTime} from './tripData';
-import {continuousStops} from './chainStops';
+import {chainBoard} from './chainStops';
 
 type Props={
  stops:Stop[];index:number|null;tripId:string;remaining:number|null;terminalWaiting:boolean;
  expanded:boolean;onExpand:()=>void;onChoose:(index:number)=>void;animate:boolean;
  continuation:{line:string;order:string;stops:Stop[]}|null;
+ predecessor:{line:string;order:string;stops:Stop[]}|null;
+ activeLine:string;
 };
 function signed(remaining:number|null){
  if(remaining===null)return '—';
@@ -17,13 +19,14 @@ type Snapshot={
  trip:string;index:number;rects:Map<number,DOMRect>;
  previousName:string;previousTime:string;previousOffset:string;previousClock:string;
 };
-export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate,continuation}:Props){
+export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate,continuation,predecessor,activeLine}:Props){
  const stack=useRef<HTMLDivElement|null>(null);
  const previous=useRef<Snapshot|null>(null);
- const currentIndex=index??-1;
- const valid=currentIndex>=0&&currentIndex<stops.length;
- const current=valid?stops[currentIndex]:null;
- const allStops=continuousStops(stops,continuation?.stops??null,!!continuation);
+ const board=chainBoard(stops,predecessor,continuation,activeLine);
+ const allStops=board.stops;
+ const currentIndex=index===null?-1:board.offset+index;
+ const valid=index!==null&&index>=0&&index<stops.length;
+ const current=valid?allStops[currentIndex]?.stop:null;
  const end=expanded?allStops.length:Math.min(allStops.length,currentIndex+7);
  const shown=valid?allStops.slice(currentIndex,end):[];
  const clock=terminalWaiting?'clockTerminal':remaining===null?'clockUnknown':remaining>0?'clockEarly':'clockReady';
@@ -37,7 +40,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
    if(Number.isInteger(n))rects.set(n,node.getBoundingClientRect());
   }
   const old=previous.current;
-  const sequential=old!==null&&old.trip===tripId&&index!==null&&index===old.index+1;
+  const sequential=old!==null&&old.trip===tripId&&currentIndex===old.index+1;
   const reduced=typeof window.matchMedia==='function'&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if(sequential&&animate&&!reduced&&typeof Element.prototype.animate==='function'){
    const duration=720;
@@ -45,7 +48,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
     const n=Number(node.dataset.stopIndex),before=old.rects.get(n);
     if(before===undefined)continue;
     const after=node.getBoundingClientRect(),dy=before.top-after.top;
-    const promoted=n===index;
+    const promoted=n===currentIndex;
     if(Math.abs(dy)<1&&!promoted)continue;
     node.animate([
      {transform:'translateY('+dy+'px)',opacity:1,
@@ -82,8 +85,8 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
     movement.oncancel=()=>ghost.remove();
    }
   }
-  previous.current=index===null||!current?null:{
-   trip:tripId,index,rects,previousName:current.name,
+  previous.current=!valid||!current?null:{
+   trip:tripId,index:currentIndex,rects,previousName:current.name,
    previousTime:formatStopTime(current.departure||current.arrival),
    previousOffset:signed(remaining),
    previousClock:clock
@@ -92,9 +95,10 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
  if(!current)return null;
  return <div className="boardStack" ref={stack}>
   {shown.map((entry,i)=>{
-   const {stop,index:n,continuation:isNext}=entry,primary=i===0;
+   const {stop,index:n,continuation:isNext,changeTo,localIndex}=entry,primary=i===0;
    return <div key={(isNext?'next-':'current-')+n}
     data-stop-index={n} className={primary?'activeDeparture '+clock:'upcomingStop'}>
+    {changeTo&&<div className="chainTransitionNote">↳ Dále jako linka {changeTo}</div>}
     {primary?<>
      <span className="activeStopName">{stop.name}</span>
      <span className="departureNumbers">
@@ -102,15 +106,11 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
       <time className="scheduledTime" aria-label="Čas podle jízdního řádu">{formatStopTime(stop.departure||stop.arrival)}</time>
      </span>
     </>:isNext?<>
-     {n===stops.length&&<div className="chainLabel" aria-label={'Pokračování linkou '+continuation?.line}>
-      <span className="chainLine">{continuation?.line}</span>
-      Pokračování jako {continuation?.line}/{continuation?.order}
-     </div>}
      <div className="upcomingButton chainUpcoming">
       <span className="upcomingName">{stop.name}</span>
       <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
      </div>
-    </>:<button type="button" className="upcomingButton" onClick={()=>onChoose(n)}
+    </>:<button type="button" className="upcomingButton" onClick={()=>onChoose(localIndex)}
        title="Vybrat zastávku">
      <span className="upcomingName">{stop.name}</span>
      <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
@@ -118,7 +118,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
    </div>;
   })}
   {allStops.length-currentIndex-1>6&&<button type="button" className="moreStops" onClick={onExpand}>
-   {expanded?'Zobrazit méně':'Zobrazit dalších '+(allStops.length-currentIndex-7)+' zastávek'}
+   {expanded?'Zobrazit méně':'Zobrazit dalších '+(Math.max(0,allStops.length-currentIndex-7))+' zastávek'}
    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d={expanded?'m6 15 6-6 6 6':'m6 9 6 6 6-6'} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
   </button>}
  </div>;
