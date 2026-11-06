@@ -1,8 +1,10 @@
 import {useRef} from 'react';
 import {useChainDiagnostics} from './chainDiagnostics';
-import {findPlannedHandoff,verifyHandoffStops} from './chainHandoff';
+import {validBlockBoundary} from './blockPair';
+import {useOnlineBlockPair} from './useOnlineBlockPair';
+import type {PlannedHandoff} from './chainHandoff';
 import {useTripData} from './tripData';
-import {path,vehicleId} from './featureUtils';
+import {vehicleId} from './featureUtils';
 import type {Feature} from './featureUtils';
 import type {LastSeen} from './lastSeen';
 import type {useRecorder} from './recorder';
@@ -15,11 +17,10 @@ type Inputs={
  token:string;
  tripId:string;
  trip:ReturnType<typeof useTripData>;
- now:number;
  selectedTrip:string;
  recordChain:ReturnType<typeof useRecorder>['chain'];
 };
-export function useChainTracking({active,chosen,lastSeen,features,token,tripId,trip,now,selectedTrip,recordChain}:Inputs){
+export function useChainTracking({active,chosen,lastSeen,features,token,tripId,trip,selectedTrip,recordChain}:Inputs){
  const chainRecordRef=useRef(recordChain);
  chainRecordRef.current=recordChain;
  const chainTargetRef=useRef<[string,string]|null>(active);
@@ -34,13 +35,19 @@ export function useChainTracking({active,chosen,lastSeen,features,token,tripId,t
   enabled:!!active&&['5','6','9','10'].includes(active[0]),
   primaryFeatures:features,record:chainRecord
  });
- const plannedHandoff=active&&chosen&&selectedTrip===''?
-  findPlannedHandoff(chainDiagnostic,{
-   line:active[0],order:active[1],tripId,vehicle:vehicleId(chosen),
-   start:path(chosen,'properties.trip.start_timestamp')
-  },now):null;
+ const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const block=useOnlineBlockPair({tripId,line:active?.[0]??'',token:token.trim(),date,
+  snapshot:chainDiagnostic,enabled:!!active&&!!chosen&&selectedTrip===''&&['5','6','9','10'].includes(active[0])});
+ const pair=block.pair;
+ const plannedHandoff:PlannedHandoff|null=pair?.role==='first'?
+  {next:pair.partner,reason:pair.reason}:null;
  const nextTrip=useTripData(plannedHandoff?.next.tripId??'',token.trim());
- const continuity=plannedHandoff?verifyHandoffStops(trip.stops,nextTrip.stops):
-  {ok:false,reason:'Navazující trip zatím nebyl nalezen.'};
- return {chainDiagnostic,plannedHandoff,nextTrip,continuity};
+ const previousPartner=pair?.role==='second'?pair.partner:null;
+ const previousTrip=useTripData(previousPartner?.tripId??'',token.trim());
+ const continuity=pair?.role==='first'&&nextTrip.stops.length?
+  {ok:validBlockBoundary(trip.stops,nextTrip.stops),reason:pair.reason}:
+  pair?.role==='second'&&previousTrip.stops.length?
+   {ok:validBlockBoundary(previousTrip.stops,trip.stops),reason:pair.reason}:
+   {ok:false,reason:block.reason||'Navazující trip zatím nebyl nalezen.'};
+ return {chainDiagnostic,plannedHandoff,nextTrip,previousTrip,previousPartner,continuity,block};
 }
