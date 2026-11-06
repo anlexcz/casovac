@@ -1,6 +1,6 @@
 import type {ChainSnapshot,ChainTrip} from './chainDiagnostics';
 import type {Stop} from './tripData';
-import {sameTransitionStop} from './terminalMatch';
+import {sameTransitionStop} from './terminalMatch.ts';
 import type {RemoteState} from './remoteTracking';
 import type {DepartureTelemetry} from './departure';
 import type {RemoteProgress} from './remoteProgress';
