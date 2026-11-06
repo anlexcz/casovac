@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState,useMemo} from 'react';
 import {selectTrip,isBeforeTrip,stateOf,terminalTrip} from './tripSelection';
 import {useTripData,countdownSeconds} from './tripData';
 import {useChainTracking} from './useChainTracking';
@@ -19,6 +19,7 @@ import {useChainHandoff} from './useChainHandoff';
 import type {Feature} from './featureUtils';
 import {useVehicleTracking} from './useVehicleTracking';
 import {useGpsTracking} from './useGpsTracking';
+import {calculateLineHeadways} from './lineHeadways';
 export {vehicleId} from './featureUtils';
 
 
@@ -35,6 +36,8 @@ export function useAppController(){
  const [query,setQuery]=useState(()=>stored(ROUTE_KEY));
  const [active,setActive]=useState<[string,string]|null>(()=>stored(TOKEN_KEY)?recentTracking():null);
  const [diagnostics,setDiagnostics]=useState(false);
+ const [showHeadways,setShowHeadways]=useState(()=>stored('casovac:show-headways:v1')==='true');
+ useEffect(()=>{save('casovac:show-headways:v1',showHeadways?'true':'false');},[showHeadways]);
  const [selectedTrip,setSelectedTrip]=useState('');
  const [manual,setManual]=useState<number|null>(null);
  const [expanded,setExpanded]=useState(false);
@@ -85,6 +88,10 @@ export function useAppController(){
  const chosen=candidateFeature;
  const tripId=chosen?selectedTripId(chosen):'';
  const trip=useTripData(tripId,token.trim());
+ const headways=useMemo(()=>showHeadways?
+  calculateLineHeadways({selected:chosen,features,stops:trip.stops,now}):null,
+  // Fresh vehicle snapshots are the source of truth; do not issue more API requests.
+  [showHeadways,chosen,features,trip.stops,Math.floor(now/30000)]);
  const {chainDiagnostic,plannedHandoff,nextTrip,previousTrip,previousPartner,continuity}=useChainTracking({
   active,chosen,lastSeen,features,token,tripId,trip,selectedTrip,recordChain:recorder.chain
  });
@@ -156,6 +163,13 @@ export function useAppController(){
  });
  const terminalCountdown=terminalWaiting?firstDeparture:null;
  const displayedIndex=terminalWaiting?0:manual??(compatible?position:remoteProgress.index);
+ // Visual identity can switch at the shared boundary without changing the
+ // tracked trip. The physical handoff still follows live telemetry.
+ const atChainBoundary=!!continuity.ok&&!!plannedHandoff&&!!nextTrip.stops.length&&
+  displayedIndex!==null&&displayedIndex>=trip.stops.length-1;
+ const visualLine=atChainBoundary?plannedHandoff.next.line:active?.[0]??'';
+ const visualOrder=atChainBoundary?plannedHandoff.next.order||active?.[1]??'':active?.[1]??'';
+ const visualDestination=atChainBoundary?nextTrip.headsign||destination:destination;
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
  const highlightedTime=highlightedStop?.departure||highlightedStop?.arrival||'';
  const highlightedRemaining=terminalWaiting?terminalCountdown:
@@ -213,5 +227,5 @@ export function useAppController(){
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setSelectedTrip(id);setManual(null);}
- return {token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ return {showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }
