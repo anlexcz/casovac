@@ -6,52 +6,65 @@ import {selectedTripId} from './featureUtils';
 import type {Feature} from './featureUtils';
 import {headwayEligiblePeers} from './lineHeadways';
 
-// Public timetable cache, shared between rerenders/line changes; no credentials.
+// Static GTFS includes real platform stop_id; the public /public/gtfs/trips
+// endpoint used by the main display does not. Headways require the static API.
 const cache=new Map<string,{stops:Stop[];at:number}>();
 const TTL=6*3600000;
-const endpoint=(id:string)=>{
- const url=new URL('https://api.golemio.cz/v2/public/gtfs/trips/'+encodeURIComponent(id));
- url.searchParams.append('scopes[]','info');
- url.searchParams.append('scopes[]','stop_times');
+const endpoint=(id:string,date:string)=>{
+ const url=new URL('https://api.golemio.cz/v2/gtfs/trips/'+encodeURIComponent(id));
+ url.searchParams.set('date',date);
+ url.searchParams.set('includeStopTimes','true');
+ url.searchParams.set('includeStops','true');
  return url.toString();
 };
+const localDate=(now:number)=>new Intl.DateTimeFormat('sv-SE',{
+ timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'
+}).format(new Date(now));
+const hasStopIds=(stops:Stop[]):boolean=>stops.length>=2&&stops.every(s=>s.id.length>0);
+
 export function useHeadwayTimetables(args:{
  enabled:boolean;selected:Feature|null;features:Feature[];
  currentStops:Stop[];token:string;now:number;
 }):ReadonlyMap<string,Stop[]>{
  const {enabled,selected,features,currentStops,token,now}=args;
- // Recalculate candidates only when a new vehiclepositions response arrives.
- const candidateIds=useMemo(()=>enabled?
-  headwayEligiblePeers(selected,features,currentStops,now).map(selectedTripId):[],
-  // Intentional: no re-fetch on every one-second clock tick.
+ // No stop-id filter: public GTFS has no stop IDs. Start with the selected
+ // trip, then fetch nearby live vehicles on the same line.
+ const ids=useMemo(()=>{
+  if(!enabled||!selected||!token)return [];
+  const id=selectedTripId(selected);
+  if(!id||id==='—')return [];
+  const candidates=headwayEligiblePeers(selected,features,currentStops,now);
+  if(!candidates.length)return [];
+  return [id,...candidates.map(selectedTripId)];
+  // Recompute only with fresh vehicle polling or each 30s for stale detection.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [enabled,selected,features,currentStops,Math.floor(now/30000)]);
- const key=enabled&&token?candidateIds.join('|'):'';
+ },[enabled,selected,features,currentStops,token,Math.floor(now/30000)]);
+ const date=localDate(now);
+ const key=enabled&&token?date+'|'+ids.join('|'):'';
  const [revision,setRevision]=useState(0);
  useEffect(()=>{
-  if(!key||!token)return;
+  if(!key||!token||!ids.length)return;
   let alive=true;
-  const missing=candidateIds.filter(id=>{
-   const cached=cache.get(id);
-   return !cached||Date.now()-cached.at>=TTL;
+  const missing=ids.filter(id=>{
+   const entry=cache.get(date+'|'+id);
+   return !entry||Date.now()-entry.at>=TTL;
   });
   if(!missing.length)return;
   void (async()=>{
-   // Sequential LOW priority requests; live vehicle polling retains priority.
    for(const id of missing){
     if(!alive)return;
     try{
-     const body=await golemioJson<unknown>(endpoint(id),token,TTL,'low');
+     const body=await golemioJson<unknown>(endpoint(id,date),token,TTL,'low');
      if(!alive)return;
      const stops=parseStops(body);
-     if(stops.length>1){
-      cache.set(id,{stops,at:Date.now()});
-      if(cache.size>150)cache.delete(cache.keys().next().value!);
+     if(hasStopIds(stops)){
+      cache.set(date+'|'+id,{stops,at:Date.now()});
+      if(cache.size>180)cache.delete(cache.keys().next().value!);
       setRevision(n=>n+1);
      }
     }catch{
-     // Missing GTFS or rate limits cannot interrupt the running timer.
-     // A later changed set of candidates can trigger another attempt.
+     // An unavailable trip or rate limit must never stop the main timer.
+     // Candidate set changes or a subsequent poll can retry.
     }
    }
   })();
@@ -59,11 +72,11 @@ export function useHeadwayTimetables(args:{
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[key,token]);
  return useMemo(()=>{
-  const available=new Map<string,Stop[]>();
-  for(const id of candidateIds){
-   const entry=cache.get(id);
-   if(entry&&Date.now()-entry.at<TTL)available.set(id,entry.stops);
+  const schedules=new Map<string,Stop[]>();
+  for(const id of ids){
+   const entry=cache.get(date+'|'+id);
+   if(entry&&Date.now()-entry.at<TTL)schedules.set(id,entry.stops);
   }
-  return available;
- },[key,revision,candidateIds]);
+  return schedules;
+ },[key,revision,ids,date]);
 }
