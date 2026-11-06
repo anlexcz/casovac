@@ -312,3 +312,13 @@
  .boardStack>.activeDeparture{min-height:108px}
  .boardStack>.activeDeparture>.departingTextGhost{padding:14px 10px;column-gap:7px}
 }
+
+/* Tiny identity badge for the exact preceding/following operating order. */
+.compactHeadways{flex-wrap:wrap;column-gap:13px;row-gap:3px}
+.headwayValue .headwayBadge,
+.headwayValue>span:last-child.headwayBadge{
+ display:inline-flex;align-items:center;min-width:0;
+ padding:1px 4px;border:1px solid #46515e;border-radius:4px;
+ font-size:10px;line-height:1.15;font-weight:650;color:#aebfce;
+ font-variant-numeric:tabular-nums;white-space:nowrap;
+}

@@ -1,9 +1,10 @@
-import {path,routeOf,selectedTripId,vehicleId,stateOfFeature} from './featureUtils.ts';
+import {path,routeOf,selectedTripId,vehicleId,stateOfFeature,orderOf} from './featureUtils.ts';
 import type {Feature} from './featureUtils.ts';
 import type {Stop} from './tripData.ts';
 
-export type LineHeadways={aheadSeconds:number|null;behindSeconds:number|null;checkedAt:number;matched:number};
-export const EMPTY_HEADWAYS:LineHeadways={aheadSeconds:null,behindSeconds:null,checkedAt:0,matched:0};
+export type HeadwayNeighbour={line:string;order:string;tripId:string;seconds:number;scheduledGap:number};
+export type LineHeadways={aheadSeconds:number|null;behindSeconds:number|null;ahead:HeadwayNeighbour|null;behind:HeadwayNeighbour|null;checkedAt:number;matched:number};
+export const EMPTY_HEADWAYS:LineHeadways={aheadSeconds:null,behindSeconds:null,ahead:null,behind:null,checkedAt:0,matched:0};
 
 const timestamp=(value:unknown):number|null=>{
  if(typeof value!=='string'||!value)return null;
@@ -53,11 +54,11 @@ const distanceSq=(a:Feature,b:Feature):number=>{
  * Their full static GTFS stop sequences are resolved asynchronously.
  */
 export function headwayEligiblePeers(
- selected:Feature|null,features:Feature[],_stops:Stop[],now:number,limit=24
+ selected:Feature|null,features:Feature[],_stops:Stop[],now:number,limit=24,allowedRoutes?:ReadonlySet<string>
 ):Feature[]{
  if(!selected||!live(selected,now))return [];
  const ownId=selectedTripId(selected),car=vehicleId(selected);
- return features.filter(f=>f!==selected&&routeOf(f)===routeOf(selected)&&
+ return features.filter(f=>f!==selected&&(allowedRoutes?allowedRoutes.has(routeOf(f)):routeOf(f)===routeOf(selected))&&
   selectedTripId(f)!==ownId&&selectedTripId(f)!=='—'&&
   vehicleId(f)!==car&&live(f,now)&&!!stopId(f)&&nextEta(f)!==null)
   .sort((a,b)=>distanceSq(a,selected)-distanceSq(b,selected))
@@ -95,15 +96,15 @@ export function sharedReference(
  */
 export function calculateLineHeadways(args:{
  selected:Feature|null;features:Feature[];stops:Stop[];
- peerStops:ReadonlyMap<string,Stop[]>;now:number;
+ peerStops:ReadonlyMap<string,Stop[]>;now:number;allowedRoutes?:ReadonlySet<string>;
 }):LineHeadways{
- const {selected,features,stops,peerStops,now}=args;
+ const {selected,features,stops,peerStops,now,allowedRoutes}=args;
  const ownStops=peerStops.get(selected?selectedTripId(selected):'')??stops;
  const result:LineHeadways={...EMPTY_HEADWAYS,checkedAt:now};
  if(!selected||ownStops.length<3||!live(selected,now))return result;
  const ownEta=nextEta(selected),ownNextId=stopId(selected);
  if(ownEta===null||indexOfUnique(ownStops,ownNextId)<0)return result;
- for(const peer of headwayEligiblePeers(selected,features,stops,now)){
+ for(const peer of headwayEligiblePeers(selected,features,stops,now,24,allowedRoutes)){
   const ownTripId=selectedTripId(peer);
   const schedulePeer=peerStops.get(ownTripId);
   if(!schedulePeer?.length)continue;
@@ -118,14 +119,29 @@ export function calculateLineHeadways(args:{
   if(ownNext===null||ownRef===null||peerNext===null||peerRef===null)continue;
   const ownProjected=ownEta+(ownRef-ownNext)*1000;
   const peerProjected=peerEta+(peerRef-peerNext)*1000;
-  const signedGap=Math.round((ownProjected-peerProjected)/1000);
-  if(Math.abs(signedGap)<1||Math.abs(signedGap)>30*60)continue;
+  // GTFS, NEVER live prediction, determines the preceding/following vehicle.
+  // Compare schedules at exactly the same shared stop. Delays cannot swap sides.
+  const plannedGap=ownRef-peerRef;
+  if(!plannedGap||Math.abs(plannedGap)>90*60)continue;
+  const liveGap=Math.round((ownProjected-peerProjected)/1000);
+  if(!Number.isFinite(liveGap)||Math.abs(liveGap)>90*60)continue;
+  const neighbour:HeadwayNeighbour={
+   line:routeOf(peer),order:String(orderOf(peer)??''),tripId:selectedTripId(peer),
+   seconds:plannedGap>0?Math.max(0,liveGap):Math.max(0,-liveGap),
+   scheduledGap:Math.abs(plannedGap)
+  };
+  // Choose the closest PLANNED neighbouring service, not the one whose live
+  // delay happens to be smallest. A late predecessor remains a predecessor.
+  if(plannedGap>0&&(!result.ahead||neighbour.scheduledGap<result.ahead.scheduledGap)){
+   result.ahead=neighbour;
+  }
+  if(plannedGap<0&&(!result.behind||neighbour.scheduledGap<result.behind.scheduledGap)){
+   result.behind=neighbour;
+  }
   result.matched++;
-  if(signedGap>0&&(result.aheadSeconds===null||signedGap<result.aheadSeconds))
-   result.aheadSeconds=signedGap;
-  if(signedGap<0&&(result.behindSeconds===null||-signedGap<result.behindSeconds))
-   result.behindSeconds=-signedGap;
  }
+ result.aheadSeconds=result.ahead?.seconds??null;
+ result.behindSeconds=result.behind?.seconds??null;
  return result;
 }
 export function formatHeadway(value:number|null):string{

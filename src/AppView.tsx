@@ -53,14 +53,14 @@ export default function AppView({showHeadways,setShowHeadways,headways,visualLin
        </div>
        {showHeadways&&(headways?.aheadSeconds!==null&&headways?.aheadSeconds!==undefined||
          headways?.behindSeconds!==null&&headways?.behindSeconds!==undefined)&&
-        <div className="compactHeadways" aria-label="Časové rozestupy spojů stejné linky">
+        <div className="compactHeadways" aria-label="Časové rozestupy plánovaně sousedních spojů">
          {headways?.aheadSeconds!==null&&headways?.aheadSeconds!==undefined&&
           <span title="Předchozí spoj na společné části trasy" className="headwayValue">
-           <span aria-hidden="true">↑</span><span>{formatHeadway(headways.aheadSeconds)}</span>
+           <span aria-hidden="true">↑</span><span>{formatHeadway(headways.aheadSeconds)}</span>{headways.ahead&&<span className="headwayBadge">{headways.ahead.line}/{headways.ahead.order||'?'}</span>}
           </span>}
          {headways?.behindSeconds!==null&&headways?.behindSeconds!==undefined&&
           <span title="Následující spoj na společné části trasy" className="headwayValue">
-           <span aria-hidden="true">↓</span><span>{formatHeadway(headways.behindSeconds)}</span>
+           <span aria-hidden="true">↓</span><span>{formatHeadway(headways.behindSeconds)}</span>{headways.behind&&<span className="headwayBadge">{headways.behind.line}/{headways.behind.order||'?'}</span>}
           </span>}
         </div>}
       </div>

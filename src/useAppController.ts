@@ -89,17 +89,22 @@ export function useAppController(){
  const chosen=candidateFeature;
  const tripId=chosen?selectedTripId(chosen):'';
  const trip=useTripData(tripId,token.trim());
- const peerStops=useHeadwayTimetables({
-  enabled:showHeadways&&!!active,selected:chosen,features,currentStops:trip.stops,
-  token:token.trim(),now
- });
- const headways=useMemo(()=>showHeadways?
-  calculateLineHeadways({selected:chosen,features,stops:trip.stops,peerStops,now}):null,
-  // Vehicle polling drives the results; never recalculate on every clock tick.
-  [showHeadways,chosen,features,trip.stops,peerStops,Math.floor(now/30000)]);
  const {chainDiagnostic,plannedHandoff,nextTrip,previousTrip,previousPartner,continuity}=useChainTracking({
   active,chosen,lastSeen,features,token,tripId,trip,selectedTrip,recordChain:recorder.chain
  });
+ const verifiedCompanion=continuity.ok?
+  plannedHandoff?.next??previousPartner:null;
+ const headwaySource=useHeadwayTimetables({
+  enabled:showHeadways&&!!active,selected:chosen,features,currentStops:trip.stops,
+  token:token.trim(),now,
+  companionLine:verifiedCompanion?.line??'',
+  companionTripId:verifiedCompanion?.tripId??''
+ });
+ const headways=useMemo(()=>showHeadways?
+  calculateLineHeadways({selected:chosen,features:headwaySource.features,stops:trip.stops,
+   peerStops:headwaySource.schedules,allowedRoutes:headwaySource.allowedRoutes,now}):null,
+  [showHeadways,chosen,headwaySource.features,trip.stops,headwaySource.schedules,
+   headwaySource.allowedRoutes,Math.floor(now/30000)]);
  const age=lastFetch===null?null:Math.max(0,Math.floor((now-lastFetch)/1000));
  const gpsAge=gps?Math.max(0,Math.floor((now-gps.timestamp)/1000)):null;
  const coords=chosen?.geometry?.coordinates;
