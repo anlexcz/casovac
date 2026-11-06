@@ -8,3 +8,7 @@ export const selectedTripId=(f:Feature)=>text(path(f,'properties.trip.gtfs.trip_
 export const vehicleId=(f:Feature)=>text(path(f,'properties.trip.vehicle_registration_number')??path(f,'properties.trip.vehicle.id')??path(f,'properties.trip.vehicle_id'));
 export const orderOf=(f:Feature)=>path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??path(f,'properties.trip.order')??path(f,'properties.trip.gtfs.run_number');
 export const normalize=(v:unknown)=>String(v??'').replace(/^0+/,'')||'0';
+// Common field accessors for live line, order and vehicle projections.
+export const routeOf=(f:Feature):string=>String(path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name')??'');
+export const stateOfFeature=(f:Feature):string=>String(path(f,'properties.last_position.state_position')??'');
+export const rawTripOf=(f:Feature):unknown=>path(f,'properties.trip')??null;
