@@ -1,10 +1,10 @@
-:root{font-family:Montserrat,Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#eff1f3;background:#101216;font-synthesis:none}*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer;border:1px solid #353b43;border-radius:10px;background:#292e35;color:#f1f2f4;padding:12px 15px}button:hover{filter:brightness(1.13)}main{max-width:850px;margin:auto;padding:24px 16px 45px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px}h1{font-family:Impact,'Arial Narrow',sans-serif;font-size:44px;letter-spacing:1px;line-height:1;margin:4px 0}h2{font-size:17px;margin:0;font-weight:700}.dot{color:#ff3636}.eyebrow,label,small{font-size:11px;letter-spacing:1px;font-weight:700;color:#a1acb7}label{display:block;margin-bottom:8px}.panel{background:#1b1f25;border:1px solid #343941;border-radius:15px;padding:20px;margin-bottom:15px}.row{display:flex;align-items:center;justify-content:space-between;gap:12px}.search{display:flex;gap:8px}input,select{background:#111419;border:1px solid #454b55;border-radius:10px;color:white;padding:12px;min-width:0;width:100%}input:focus,select:focus{outline:2px solid #ff3636;outline-offset:1px}.search input{flex:1}.primary{background:#ff3636;border-color:#ff3636;color:#fff;font-weight:750}.hint{color:#9fa9b5;font-size:13px;line-height:1.5}.status{border:1px solid #49515c;border-radius:30px;color:#b6bec8;padding:5px 9px;font-size:11px;white-space:nowrap}.good{border-color:#2d806c;color:#6cdfb6}.bad,.warn{color:#ff9999}.alert{border:1px solid #a45454;background:#41272d;padding:14px;border-radius:12px;margin-bottom:15px}.details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:17px 0}.details>div{border:1px solid #363d45;border-radius:10px;padding:12px;min-width:0}.details small{display:block;margin-bottom:8px}.details strong{display:block;overflow-wrap:anywhere;font-size:14px}.quiet{background:transparent;border-color:#525c68}pre{overflow:auto;max-height:340px;background:#0e1115;padding:14px;border-radius:10px;font-size:12px;color:#c9d2dc}footer{color:#828e9b;font-size:11px;text-align:center;line-height:1.6}.overlay{position:fixed;inset:0;background:#05070acd;display:grid;place-items:center;padding:18px;z-index:5}.modal{background:#20252c;border:1px solid #49515a;border-radius:16px;width:min(100%,490px);padding:22px;box-shadow:0 25px 70px #0008}.modal label{margin-top:25px}.full{width:100%;margin-top:14px}.iconButton{background:transparent;font-size:13px}@media(max-width:520px){main{padding:18px 12px 40px}.panel{padding:16px}h1{font-size:37px}.details{grid-template-columns:1fr}.search button{padding:12px 11px}}
+:root{font-family:Montserrat,Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#eff1f3;background:#101216;font-synthesis:none}*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer;border:1px solid #353b43;border-radius:10px;background:#292e35;color:#f1f2f4;padding:12px 15px}button:hover{filter:brightness(1.13)}main{max-width:850px;margin:auto;padding:24px 16px 45px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px}h1{font-family:Impact,'Arial Narrow',sans-serif;font-size:44px;letter-spacing:1px;line-height:1;margin:4px 0}h2{font-size:17px;margin:0;font-weight:700}.dot{color:#ff3636}label,small{font-size:11px;letter-spacing:1px;font-weight:700;color:#a1acb7}label{display:block;margin-bottom:8px}.panel{background:#1b1f25;border:1px solid #343941;border-radius:15px;padding:20px;margin-bottom:15px}.row{display:flex;align-items:center;justify-content:space-between;gap:12px}.search{display:flex;gap:8px}input,select{background:#111419;border:1px solid #454b55;border-radius:10px;color:white;padding:12px;min-width:0;width:100%}input:focus,select:focus{outline:2px solid #ff3636;outline-offset:1px}.search input{flex:1}.primary{background:#ff3636;border-color:#ff3636;color:#fff;font-weight:750}.hint{color:#9fa9b5;font-size:13px;line-height:1.5}.status{border:1px solid #49515c;border-radius:30px;color:#b6bec8;padding:5px 9px;font-size:11px;white-space:nowrap}.good{border-color:#2d806c;color:#6cdfb6}.bad,.warn{color:#ff9999}.alert{border:1px solid #a45454;background:#41272d;padding:14px;border-radius:12px;margin-bottom:15px}.details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:17px 0}.details>div{border:1px solid #363d45;border-radius:10px;padding:12px;min-width:0}.details small{display:block;margin-bottom:8px}.details strong{display:block;overflow-wrap:anywhere;font-size:14px}.quiet{background:transparent;border-color:#525c68}pre{overflow:auto;max-height:340px;background:#0e1115;padding:14px;border-radius:10px;font-size:12px;color:#c9d2dc}footer{color:#828e9b;font-size:11px;text-align:center;line-height:1.6}.overlay{position:fixed;inset:0;background:#05070acd;display:grid;place-items:center;padding:18px;z-index:5}.modal{background:#20252c;border:1px solid #49515a;border-radius:16px;width:min(100%,490px);padding:22px;box-shadow:0 25px 70px #0008}.modal label{margin-top:25px}.full{width:100%;margin-top:14px}.iconButton{background:transparent;font-size:13px}@media(max-width:520px){main{padding:18px 12px 40px}.panel{padding:16px}h1{font-size:37px}.details{grid-template-columns:1fr}.search button{padding:12px 11px}}
 
-.stopList{margin:16px 0;border:1px solid #373d45;border-radius:12px;overflow:hidden;max-height:440px;overflow-y:auto}.stopRow{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:9px;align-items:center;padding:12px;border-bottom:1px solid #333942;position:relative}.stopRow:last-child{border-bottom:0}.stopRow.current{background:#ff36361a;border-left:3px solid #ff3636;padding-left:9px}.stopNum{color:#98a5b2;font-size:12px;font-variant-numeric:tabular-nums}.stopName{font-weight:650;font-size:14px;min-width:0}.stopName small{display:block;font-size:10px;letter-spacing:0;margin-top:3px;color:#82909e;overflow-wrap:anywhere}.stopTime{font-variant-numeric:tabular-nums;font-size:13px;font-weight:600}.stopDistance{grid-column:2/4;font-size:11px;color:#65bcb6;margin-top:-3px}.stopRow.current .stopNum{color:#ff6d56}
+.stopList{margin:16px 0;border:1px solid #373d45;border-radius:12px;overflow:hidden;max-height:440px;overflow-y:auto}.stopRow{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:9px;align-items:center;padding:12px;border-bottom:1px solid #333942;position:relative}.stopRow:last-child{border-bottom:0}.stopRow.current{background:#ff36361a;border-left:3px solid #ff3636;padding-left:9px}.stopNum{color:#98a5b2;font-size:12px;font-variant-numeric:tabular-nums}.stopName{font-weight:650;font-size:14px;min-width:0}.stopName small{display:block;font-size:10px;letter-spacing:0;margin-top:3px;color:#82909e;overflow-wrap:anywhere}.stopTime{font-variant-numeric:tabular-nums;font-size:13px;font-weight:600}.stopRow.current .stopNum{color:#ff6d56}
 
 .rememberOption{display:flex;align-items:flex-start;gap:10px;margin:18px 0 8px;font-size:13px;letter-spacing:0;text-transform:none;line-height:1.4;color:#e5e9ed;cursor:pointer}.rememberOption input{flex:0 0 auto;width:18px;height:18px;min-width:18px;margin:0;accent-color:#ff3636}.modal button:disabled{opacity:.45;cursor:not-allowed}
 
-.gpsProgress{margin:14px 0;padding:13px;background:#14191f;border:1px solid #35424a;border-radius:10px}.gpsProgress .status{display:inline-block;margin-bottom:5px}.gpsProgress .hint{margin:7px 0 0}
+
 
 /* Časovač 0.4 / compact everyday screen */
 .appShell{max-width:680px;padding-bottom:100px}
@@ -17,44 +17,44 @@
 .searchPanel .hint{margin:9px 0 0}
 .searchPanel label{margin-bottom:6px}
 .journeyPanel{padding:17px}
-.journeyHeader{display:flex;align-items:center;gap:13px}
+
 .routeTile{width:59px;height:63px;flex:0 0 auto;background:#ff3636;color:white;border-radius:11px;display:grid;place-items:center;font-family:Impact,'Arial Narrow',sans-serif;font-size:33px}
-.journeyIdentity{flex:1;min-width:0}
-.journeyTitle{font-weight:800;font-size:19px}
-.journeySubtitle{color:#b1bdc9;font-size:13px;overflow-wrap:anywhere;margin-top:2px}
-.liveDot{width:10px;height:10px;border-radius:50%;background:#697380;flex:0 0 auto}
-.liveDot.on{background:#75d5a9;box-shadow:0 0 0 4px #75d5a91c}
-.focusArea{margin-top:17px;border-top:1px solid #353b42;padding-top:16px}
-.focusName{font-size:clamp(24px,6.4vw,35px);font-weight:790;line-height:1.18;margin-top:8px;overflow-wrap:anywhere}
-.focusSubtitle{color:#b6c0cb;font-size:13px;margin-top:8px}
-.timerPanel{margin-top:17px;border-radius:13px;background:#292b33;border:1px solid #3c4049;padding:18px;text-align:center}
-.timerNumbers{font-size:clamp(49px,13vw,74px);font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums;letter-spacing:-2px;color:#fff;margin:8px 0}
-.timerFooter{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #444851;padding-top:11px;font-size:12px;color:#b4bfca}
-.timerFooter b{color:#f1f2f4}
-.safetyLine{margin:12px 0 0;color:#94a0ac;font-size:11px;text-align:center}
-.emptyState{padding:24px 0 6px;color:#bdc6cf;font-size:14px;line-height:1.5}
-.timelinePanel{padding:17px}
-.publicStops{margin-top:15px;border-top:1px solid #353b43}
-.publicStop{display:flex;align-items:center;gap:12px;width:100%;border:0;border-radius:0;border-bottom:1px solid #343a42;background:transparent;padding:12px 4px;text-align:left;color:#ced6de}
-.publicStop:hover{background:#252b33}
-.publicStop.activeStop{border-left:3px solid #ff3636;background:#ff363613;padding-left:9px;color:#fff}
-.stopMarker{width:20px;color:#86909b;text-align:center}
-.activeStop .stopMarker{color:#ff6254}
-.publicStopName{flex:1;min-width:0;font-size:14px;font-weight:650;overflow-wrap:anywhere}
-.publicStopTime{font-size:13px;font-variant-numeric:tabular-nums;font-weight:650}
-.timelineActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.timelineActions button{padding:10px;font-size:12px}
-.timelinePanel>.hint{margin-bottom:0}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 .emptyWelcome h2{margin-bottom:12px}
 .emptyWelcome p{font-size:14px;line-height:1.5;color:#b5bec9}
-.topWarning{padding:0 10px}
+
 .debugFab{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));right:max(16px,calc((100vw - 660px)/2));width:54px;height:54px;border-radius:50%;background:#323842;border:1px solid #69717d;box-shadow:0 8px 28px #0008;font-size:25px;z-index:4;display:grid;place-items:center}
 .debugFab:hover{background:#444b55}
 .diagnosticHidden{display:none}
 .diagnosticVisible{display:block}
 .diagHeading{display:flex;align-items:center;justify-content:space-between;margin:4px 0 15px}
 .diagHeading h2{font-size:22px}
-.appShell:has(.diagnosticVisible)>.searchPanel,.appShell:has(.diagnosticVisible)>.journeyPanel,.appShell:has(.diagnosticVisible)>.timelinePanel,.appShell:has(.diagnosticVisible)>.emptyWelcome,.appShell:has(.diagnosticVisible)>.alert,.appShell:has(.diagnosticVisible)>.topWarning{display:none}
+.appShell:has(.diagnosticVisible)>.searchPanel,.appShell:has(.diagnosticVisible)>.journeyPanel,.appShell:has(.diagnosticVisible)>.emptyWelcome,.appShell:has(.diagnosticVisible)>.alert{display:none}
 .diagnosticStack .panel{margin-bottom:14px}
 .diagnosticStack details{margin-top:16px}
 .diagnosticStack summary{cursor:pointer;background:#292f37;padding:13px;border-radius:10px;color:#edf1f3;font-size:13px}
@@ -62,9 +62,9 @@
 @media(max-width:520px){
  .appShell{padding-top:18px}
  .headButton{min-width:42px;height:40px}
- .timerPanel{padding:13px 10px}
- .timerFooter{font-size:11px}
- .journeyPanel,.timelinePanel{padding:15px}
+ 
+ 
+ .journeyPanel{padding:15px}
 }
 
 /* Audit of live PID stop IDs against GTFS stop_times */
@@ -107,7 +107,7 @@
 .identityDetails{min-width:0;flex:1;display:flex;flex-direction:column;gap:5px}
 .routeDirection{font-size:clamp(15px,4vw,20px);font-weight:700;line-height:1.2;overflow-wrap:anywhere}
 .vehicleNumber{color:#9ba7b3;font-size:15px;font-weight:650;font-variant-numeric:tabular-nums}
-.editOrder{border:0;background:transparent;color:#9ea8b4;font-size:22px;padding:8px 4px;align-self:flex-start}
+
 .activeDeparture{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;min-height:92px;padding:16px 14px;margin:0 -1px;border-radius:11px;background:#31363d;color:#fff}
 .activeDeparture.clockEarly{background:#ae2926}
 .activeDeparture.clockReady{background:#1d7651}
@@ -117,7 +117,7 @@
 .liveOffset{font-size:clamp(25px,6vw,37px);font-weight:850;letter-spacing:-1px}
 .scheduledTime{font-size:clamp(14px,3.5vw,18px);color:#c7cbd0;font-weight:650}
 .activeDeparture.clockEarly .scheduledTime,.activeDeparture.clockReady .scheduledTime{color:#e4e4e4}
-.upcomingStops{margin-top:8px}
+
 .upcomingStop{width:100%;display:grid;grid-template-columns:minmax(0,1fr) 64px;align-items:center;column-gap:12px;padding:11px 12px;border:0;border-radius:0;border-bottom:1px solid #303740;background:transparent;text-align:left}
 .upcomingStop:last-child{border-bottom:0}
 .upcomingName{font-size:15px;font-weight:580;line-height:1.25;overflow-wrap:anywhere}
@@ -130,7 +130,7 @@
  .compactIdentity{gap:10px;padding:3px 3px 14px}
  .compactIdentity .routeTile{height:57px;width:57px;flex-basis:57px;font-size:33px}
  .orderTile{font-size:36px}
- .editOrder{font-size:18px;padding:5px}
+ 
  .activeDeparture{grid-template-columns:minmax(0,1fr) auto;gap:7px;padding:14px 10px;min-height:86px}
  .departureNumbers{gap:8px}
  .liveOffset{font-size:clamp(23px,6vw,30px)}
@@ -159,8 +159,8 @@
 .statusGreen .statusDot{background:#35ca91;box-shadow:0 0 0 3px #35ca9123}
 .statusAmber .statusDot{background:#ecac43;box-shadow:0 0 0 3px #ecac4323}
 .statusRed .statusDot{background:#ed6464;box-shadow:0 0 0 3px #ed646426}
-.editOrder{flex:0 0 27px;align-self:flex-start;width:27px;height:32px;padding:4px;display:grid;place-items:center;border-radius:8px}
-.editOrder:hover,.editOrder:focus-visible{background:#303640}
+
+
 .boardStack{position:relative;isolation:isolate;--time-column:55px;--time-edge:10px}
 .activeDeparture{grid-template-columns:minmax(0,1fr) auto;column-gap:9px;padding:14px var(--time-edge);min-height:84px}
 .activeStopName{font-weight:800;line-height:1.17;font-size:clamp(18px,4.5vw,24px)}
@@ -170,9 +170,9 @@
 .upcomingStop{grid-template-columns:minmax(0,1fr) var(--time-column);column-gap:12px;padding:10px var(--time-edge);min-height:43px}
 .upcomingName{font-size:14px;font-weight:480;line-height:1.25}
 .upcomingTime{font-size:14px;font-weight:540}
-.upcomingStops{margin-top:6px}
+
 .moreStops{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:44px;margin:3px auto 0;color:#aab5c0}
-.departureGhost{position:absolute;left:0;right:0;z-index:2;border-radius:11px;background:#2d343a;padding:18px 12px;display:flex;align-items:center;font-size:17px;font-weight:700;pointer-events:none;overflow:hidden;white-space:nowrap;isolation:isolate}
+
 @media(max-width:490px){
  .compactIdentity{min-height:57px;gap:8px;padding-bottom:14px}
  .orderTile{font-size:24px;margin-bottom:2px}
@@ -183,7 +183,7 @@
  .vehicleNumber{font-size:13px}
  .vehicleNumber .identityIcon{width:14px;height:14px;flex-basis:14px}
  .vehicleStatus{width:21px;flex-basis:21px}
- .editOrder{width:24px;flex-basis:24px}
+ 
  .boardStack{--time-column:49px;--time-edge:10px}
  .activeDeparture{gap:7px;min-height:84px;padding:14px var(--time-edge)}
  .departureNumbers{grid-template-columns:minmax(75px,auto) var(--time-column);column-gap:6px}

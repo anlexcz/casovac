@@ -10,7 +10,7 @@ Mobilní webová pomůcka pro sledování tramvajového pořadí PID. React, Typ
 4. GPS lze zapnout a vypnout v horní liště. Prohlížeč si pamatuje preferenci; při novém otevření se pokusí získávání polohy spustit znovu, pokud to oprávnění a pravidla Androidu dovolí.
 5. Plovoucí tlačítko otevře **Diagnostiku**, kde zůstávají původní technická data a ruční výběr tripu.
 
-Poslední zadané `linka/pořadí` se uchovává místně. Sledování se po novém otevření **nespouští automaticky**, vyžaduje potvrzení tlačítkem.
+Poslední zadané `linka/pořadí` se uchovává místně. Pokud je API klíč uložený a sledování ještě nevypršelo (4 hodiny od aktivace), aplikace po znovuotevření sledování obnoví. Bez zapamatovaného klíče je nutné znovu zadat klíč a sledování spustit.
 
 ## Princip
 
@@ -28,7 +28,8 @@ API token se ukládá do `localStorage` **pouze s výslovným zapamatováním**.
 ## Vývoj
 
 ```sh
-npm install
+npm ci
+npm run test
 npm run dev
 npm run build
 ```
@@ -215,3 +216,22 @@ Pět diagnostických záznamů linky 25/5 obsahuje přímo hlášení `last_posi
 
 **Limitace:** Bez přímé polohy telefonu na palubě nemůže aplikace spolehlivě potvrdit skutečný okamžik rozjezdu z pravidelných sporadických zpráv Golemia. Predikce proto může v některých situacích přepnout před odjezdem nebo později, zejména při delším stání na zastávce, dopravní nepravidelnosti nebo změně intervalů aktualizace. Pro definitivní kalibraci je vhodný další záznam z několika linek; UI výslovně odlišuje predikci od potvrzení. 
 
+
+## Struktura aplikace po refaktoringu (listopad 2026)
+
+- `src/main.tsx`: inicializace Reactu.
+- `src/AppView.tsx`, `src/StopBoard.tsx`, `src/Diagnostics.tsx`: vykreslování.
+- `src/useAppController.ts`: koordinace obrazovky a výpočtu aktuálního stavu.
+- `src/useOrderLookup.ts`: nabídka spojů; seskupování podle linky a pořadí je memoizované, nemusí se opakovat každou sekundu.
+- `src/useVehicleTracking.ts`: živá data Golemia, obnovování a známý vůz.
+- `src/useGpsTracking.ts`: sledování GPS a preference.
+- `src/useChainTracking.ts` a `src/useChainHandoff.ts`: sledování návazných linek a jejich přepínání.
+- `src/chainHandoff.ts`, `src/tripSelection.ts`, `src/remoteProgress.ts`: pravidla výběru tripu, návaznosti a odhadu postupu.
+- `src/featureUtils.ts`: společné přístupy k polím vozidel Golemia.
+- `src/trackingStorage.ts`: uložení a vypršení aktivního sledování.
+
+`npm test` zahrnuje scénáře změny vozu a pořadí, přechody mezi řetězenými linkami a odhad přepnutí zastávek bez GPS. `npm run build` zároveň kontroluje TypeScript.
+
+GitHub Actions **Verify Časovač** ověřuje změny před sloučením i na větvi `main`; **Deploy Časovač** sestaví produkci pomocí `npm ci`, používá cache npm a denní cache statických GTFS dat. Výpadek stažení GTFS nemá vést k nasazení neúplné aplikace.
+
+**Provozní kontrola před dalšími změnami:** automatické testy neověřují fungování telefonu na pozadí ani konkrétní reálnou posloupnost hlášení vozidla. Při úpravách GPS a řetězení zaznamenávej reálné testovací jízdy a ověřuj na mobilu.

@@ -1,9 +1,10 @@
+import {path} from './featureUtils';
 import {decodeRoute,buildStopProgress} from './departure';
 import {normalizedStopId,distanceMeters} from './position';
 import type {Stop} from './tripData';
 
 type Feature={properties?:Record<string,unknown>;geometry?:{coordinates?:unknown}};
-const get=(o:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,o);
+const get=path;
 const validNumber=(value:unknown):number|null=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))?Number(value):null;
 export function observationTimestamp(feature:Feature|null):number|null{
  const paths=['properties.last_position.origin_timestamp','properties.last_position.timestamp','properties.last_position.last_updated','properties.last_position.recorded_at','properties.last_position.updated_at','properties.origin_timestamp','properties.timestamp'];

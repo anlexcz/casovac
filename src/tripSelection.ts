@@ -1,13 +1,13 @@
+import {path,normalize,vehicleId,selectedTripId,orderOf,routeOf,stateOfFeature} from './featureUtils.ts';
 // A single vehicle may have an ended trip and the next planned trip in one
 // includeNotTracking response. Resolve the vehicle first, then the trip.
 export type TripFeature={properties?:Record<string,unknown>;geometry?:{coordinates?:unknown}};
-const at=(value:unknown,path:string):unknown=>path.split('.').reduce<unknown>((obj,key)=>obj&&typeof obj==='object'?(obj as Record<string,unknown>)[key]:undefined,value);
-export const tripIdOf=(f:TripFeature)=>String(at(f,'properties.trip.gtfs.trip_id')??at(f,'properties.trip.trip_id')??'');
-export const vehicleOf=(f:TripFeature)=>String(at(f,'properties.trip.vehicle_registration_number')??at(f,'properties.trip.vehicle.id')??at(f,'properties.trip.vehicle_id')??'');
-export const orderOfTrip=(f:TripFeature)=>at(f,'properties.trip.sequence_id')??at(f,'properties.trip.cis.order')??at(f,'properties.trip.order')??at(f,'properties.trip.gtfs.run_number');
-export const stateOf=(f:TripFeature)=>String(at(f,'properties.last_position.state_position')??'unknown');
-const routeOf=(f:TripFeature)=>String(at(f,'properties.trip.gtfs.route_short_name')??at(f,'properties.trip.route_short_name')??'');
-const number=(value:unknown)=>String(value??'').replace(/^0+/,'')||'0';
+const at=path;
+export const tripIdOf=(f:TripFeature)=>{const id=selectedTripId(f);return id==='—'?'':id;};
+export const vehicleOf=(f:TripFeature)=>{const id=vehicleId(f);return id==='—'?'':id;};
+export const orderOfTrip=(f:TripFeature)=>orderOf(f);
+export const stateOf=(f:TripFeature)=>stateOfFeature(f)||'unknown';
+const number=normalize;
 const stamp=(value:unknown):number|null=>{
  if(typeof value==='number'&&Number.isFinite(value))return value<1e11?value*1000:value;
  if(typeof value==='string'){const time=Date.parse(value);return Number.isFinite(time)?time:null;}

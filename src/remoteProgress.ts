@@ -21,13 +21,13 @@ function delaySeconds(feature:unknown):number|null{
  const n=Number(raw);
  return raw!==null&&raw!==undefined&&Number.isFinite(n)&&Math.abs(n)<=3600?n:null;
 }
-export function useRemoteProgress(input:{
+export type ProgressInput={
  tripId:string;stops:Stop[];remote:RemoteState;vehicle:unknown;
  now:number;terminalWaiting:boolean;
-}):RemoteProgress{
+};
+export function calculateRemoteProgress(input:ProgressInput,memory:Memory):RemoteProgress{
  const {tripId,stops,remote,vehicle,now,terminalWaiting}=input;
- const memory=useRef<Memory>({tripId:'',index:null,sourceTimestamp:null});
- if(memory.current.tripId!==tripId)memory.current={tripId,index:null,sourceTimestamp:null};
+ if(memory.tripId!==tripId){memory.tripId=tripId;memory.index=null;memory.sourceTimestamp=null;}
  const base=remote.index;
  if(!tripId||!stops.length||base===null){
   return {index:base,predicted:false,reason:remote.reason,atStopAge:null,threshold:null};
@@ -61,12 +61,17 @@ export function useRemoteProgress(input:{
  if(likelyLeft){proposal=stopIndex+1;predicted=true;}
  // Do not bounce back to the previous platform while Golemio repeats the
  // exact same at_stop record. Never leap over an unconfirmed stop.
- const previous=memory.current.index;
+ const previous=memory.index;
  if(previous!==null&&proposal!==null&&proposal<previous)proposal=previous;
- if(proposal!==null&&(previous===null||proposal>previous))memory.current.index=proposal;
- if(remote.sourceTimestamp!==null)memory.current.sourceTimestamp=remote.sourceTimestamp;
+ if(proposal!==null&&(previous===null||proposal>previous))memory.index=proposal;
+ if(remote.sourceTimestamp!==null)memory.sourceTimestamp=remote.sourceTimestamp;
  if(terminalWaiting)return {index:0,predicted:false,reason:'Čekání na konečné.',atStopAge:age,threshold};
  return {index:proposal,predicted:predicted&&proposal===stopIndex+1,
   reason:predicted?'Předpokládaný odjezd: čas od posledního hlášení v zastávce, zpoždění a navazující pořadí.':
    remote.reason,atStopAge:age,threshold};
+}
+
+export function useRemoteProgress(input:ProgressInput):RemoteProgress{
+ const memory=useRef<Memory>({tripId:'',index:null,sourceTimestamp:null});
+ return calculateRemoteProgress(input,memory.current);
 }

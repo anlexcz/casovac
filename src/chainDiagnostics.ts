@@ -1,8 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
 import {golemioJson} from './golemioClient';
+import {path,normalize,vehicleId,orderOf,selectedTripId,routeOf,stateOfFeature,rawTripOf} from './featureUtils';
+import type {Feature,Obj} from './featureUtils';
 
-type Obj=Record<string,unknown>;
-type Feature={properties?:Obj;geometry?:{coordinates?:unknown}};
 export type ChainTrip={
   line:string;order:string;tripId:string;vehicle:string;state:string;
   start:unknown;lastStop:unknown;nextStop:unknown;rawTrip:unknown;source:string;
@@ -13,23 +13,16 @@ export type ChainSnapshot={
   error:string;loading:boolean;
 };
 const pairs:Record<string,string>={'5':'6','6':'5','9':'10','10':'9'};
-const path=(value:unknown,keys:string):unknown=>
- keys.split('.').reduce<unknown>((obj,key)=>obj&&typeof obj==='object'?(obj as Obj)[key]:undefined,value);
-const normalize=(value:unknown)=>String(value??'').replace(/^0+/,'')||'0';
-const vehicle=(f:Feature)=>String(path(f,'properties.trip.vehicle_registration_number')??
- path(f,'properties.trip.vehicle.id')??path(f,'properties.trip.vehicle_id')??'');
-const orderOf=(f:Feature)=>path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??
- path(f,'properties.trip.order')??path(f,'properties.trip.gtfs.run_number');
+const vehicle=(f:Feature)=>{const id=vehicleId(f);return id==='—'?'':id;};
 const summarize=(f:Feature,source:string):ChainTrip=>({
- line:String(path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name')??''),
- order:String(path(f,'properties.trip.sequence_id')??path(f,'properties.trip.cis.order')??
-  path(f,'properties.trip.order')??path(f,'properties.trip.gtfs.run_number')??''),
- tripId:String(path(f,'properties.trip.gtfs.trip_id')??path(f,'properties.trip.trip_id')??''),
- vehicle:vehicle(f),state:String(path(f,'properties.last_position.state_position')??''),
+ line:routeOf(f),
+ order:String(orderOf(f)??''),
+ tripId:selectedTripId(f)==='—'?'':selectedTripId(f),
+ vehicle:vehicle(f),state:stateOfFeature(f),
  start:path(f,'properties.trip.start_timestamp')??null,
  lastStop:path(f,'properties.last_position.last_stop')??null,
  nextStop:path(f,'properties.last_position.next_stop')??null,
- rawTrip:path(f,'properties.trip')??null,source
+ rawTrip:rawTripOf(f),source
 });
 export function useChainDiagnostics(args:{
   active:[string,string]|null;knownVehicle:string;token:string;enabled:boolean;
