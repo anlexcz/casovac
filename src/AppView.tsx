@@ -1,10 +1,11 @@
 import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
+import {formatHeadway} from './lineHeadways';
 import {chooserStop} from './chooserStops';
 import {useAppController,parseOrder,vehicleId} from './useAppController';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  return <main className="appShell">
   <header className="topbar">
    <div><h1>ČASOVAČ<span className="dot">.</span></h1></div>
@@ -37,18 +38,22 @@ export default function AppView({token,setToken,rememberToken,setRememberToken,t
   {error&&<div className="alert" role="status">{error}</div>}
   {active&&<section className="panel journeyPanel compactJourney">
     <div className="compactIdentity">
-      <div className={'serviceBadge '+(active[0].length>=3?'serviceBadgeThree':'')} aria-label={'Linka '+active[0]+', pořadí '+active[1]}>
-       <div className="routeTile">{active[0]}</div>
-       <div className={'orderTile '+(active[1].length>=2?'orderTileTwo':'')}>{active[1]}</div>
+      <div className={'serviceBadge '+(visualLine.length>=3?'serviceBadgeThree':'')} aria-label={'Linka '+visualLine+', pořadí '+visualOrder}>
+       <div className="routeTile">{visualLine}</div>
+       <div className={'orderTile '+(visualOrder.length>=2?'orderTileTwo':'')}>{visualOrder}</div>
       </div>
       <div className="identityDetails">
        <div className="routeDirection">
         <svg viewBox="0 0 24 24" aria-hidden="true" className="identityIcon"><path d="M4 12h16m-7-7 7 7-7 7" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        <span>{destination}</span>
+        <span>{visualDestination}</span>
        </div>
        <div className="vehicleNumber">
         <svg viewBox="0 0 24 24" aria-hidden="true" className="identityIcon"><rect x="5" y="3.5" width="14" height="15" rx="3" fill="none" stroke="currentColor" strokeWidth="1.9"/><path d="M5 11h14M8 7.5h2m4 0h2M8 18.5l-2 3m10-3 2 3M9 21h6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg>
         <span>#{chosen?vehicleId(chosen):lastSeen?.vehicle??'—'}</span>
+       </div>
+       {showHeadways&&<div className="compactHeadways" aria-label="Časové rozestupy spojů stejné linky">
+        <span title="Předchozí spoj před vámi na stejné trase" className="headwayValue"><span aria-hidden="true">↑</span> <span>{formatHeadway(headways?.aheadSeconds??null)}</span></span>
+        <span title="Následující spoj za vámi na stejné trase" className="headwayValue"><span aria-hidden="true">↓</span> <span>{formatHeadway(headways?.behindSeconds??null)}</span></span>
        </div>
       </div>
       <button className={'vehicleStatus '+statusColor} type="button" onClick={()=>setDiagnostics(true)}
@@ -60,7 +65,7 @@ export default function AppView({token,setToken,rememberToken,setRememberToken,t
      <StopBoard stops={trip.stops} index={displayedIndex} tripId={tripId} remaining={highlightedRemaining}
       terminalWaiting={terminalWaiting} expanded={expanded} onExpand={()=>setExpanded(v=>!v)}
       onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}
-      activeLine={active[0]}
+      activeLine={active[0]} visualBoundary={atChainBoundary}
       continuation={continuity.ok&&plannedHandoff&&nextTrip.tripId===plannedHandoff.next.tripId?
        {line:plannedHandoff.next.line,order:plannedHandoff.next.order,stops:nextTrip.stops}:null}
       predecessor={continuity.ok&&previousPartner&&previousTrip.tripId===previousPartner.tripId?
@@ -85,6 +90,9 @@ export default function AppView({token,setToken,rememberToken,setRememberToken,t
     <div className="search"><input id="token" type={tokenVisible?'text':'password'} value={token} onChange={e=>setToken(e.target.value)} autoComplete="off" spellCheck={false} placeholder="X-Access-Token"/><button onClick={()=>setTokenVisible(v=>!v)}>{tokenVisible?'Skrýt':'Ukázat'}</button></div>
     <label className="rememberOption"><input type="checkbox" checked={rememberToken} onChange={e=>setRememberToken(e.target.checked)}/><span>Zapamatovat klíč v tomto prohlížeči</span></label>
     <p className="hint">Při zapamatování se token uloží nešifrovaně v localStorage tohoto prohlížeče. Neukládá se na GitHub ani do URL; čtou ho však skripty stránky a může být dostupný rozšířením.</p>
+    <div className="settingsSectionHeading">Zobrazení</div>
+    <label className="rememberOption"><input type="checkbox" checked={showHeadways} onChange={e=>setShowHeadways(e.target.checked)}/><span>Zobrazovat rozestupy spojů</span></label>
+    <p className="hint">Malé údaje ↑ předchozí a ↓ následující spoj. Pouze při spolehlivých živých datech a na společné části trasy. Nastavení se ukládá v tomto prohlížeči.</p>
     <button className="quiet full" disabled={!token} onClick={forget}>Zapomenout API klíč</button>
     <button className="primary full" onClick={()=>setSettings(false)}>Hotovo</button>
    </div>
