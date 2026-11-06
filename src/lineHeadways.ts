@@ -58,7 +58,7 @@ export function headwayEligiblePeers(
 ):Feature[]{
  if(!selected||!live(selected,now))return [];
  const ownId=selectedTripId(selected),car=vehicleId(selected);
- return features.filter(f=>f!==selected&&(!allowedRoutes?! (routeOf(f)!==routeOf(selected)) : allowedRoutes.has(routeOf(f)))&&
+ return features.filter(f=>f!==selected&&(allowedRoutes?allowedRoutes.has(routeOf(f)):routeOf(f)===routeOf(selected))&&
   selectedTripId(f)!==ownId&&selectedTripId(f)!=='—'&&
   vehicleId(f)!==car&&live(f,now)&&!!stopId(f)&&nextEta(f)!==null)
   .sort((a,b)=>distanceSq(a,selected)-distanceSq(b,selected))
