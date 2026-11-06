@@ -38,7 +38,10 @@ export function useChainTracking({active,chosen,lastSeen,features,token,tripId,t
  const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  const block=useOnlineBlockPair({tripId,line:active?.[0]??'',token:token.trim(),date,
   snapshot:chainDiagnostic,enabled:!!active&&!!chosen&&selectedTrip===''&&['5','6','9','10'].includes(active[0])});
- const pair=block.pair;
+ const resolvedPair=block.pair;
+ const freshPartner=chainDiagnostic?.related.find(candidate=>candidate.tripId===resolvedPair?.partner.tripId);
+ // Block identity is cached, but live state/order must always come from fresh telemetry.
+ const pair=resolvedPair&&freshPartner?{...resolvedPair,partner:freshPartner}:resolvedPair;
  const plannedHandoff:PlannedHandoff|null=pair?.role==='first'?
   {next:pair.partner,reason:pair.reason}:null;
  const nextTrip=useTripData(plannedHandoff?.next.tripId??'',token.trim());
