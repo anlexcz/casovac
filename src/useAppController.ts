@@ -20,6 +20,7 @@ import type {Feature} from './featureUtils';
 import {useVehicleTracking} from './useVehicleTracking';
 import {useGpsTracking} from './useGpsTracking';
 import {calculateLineHeadways} from './lineHeadways';
+import {useHeadwayTimetables} from './useHeadwayTimetables';
 export {vehicleId} from './featureUtils';
 
 
@@ -88,10 +89,14 @@ export function useAppController(){
  const chosen=candidateFeature;
  const tripId=chosen?selectedTripId(chosen):'';
  const trip=useTripData(tripId,token.trim());
+ const peerStops=useHeadwayTimetables({
+  enabled:showHeadways&&!!active,selected:chosen,features,currentStops:trip.stops,
+  token:token.trim(),now
+ });
  const headways=useMemo(()=>showHeadways?
-  calculateLineHeadways({selected:chosen,features,stops:trip.stops,now}):null,
-  // Fresh vehicle snapshots are the source of truth; do not issue more API requests.
-  [showHeadways,chosen,features,trip.stops,Math.floor(now/30000)]);
+  calculateLineHeadways({selected:chosen,features,stops:trip.stops,peerStops,now}):null,
+  // Vehicle polling drives the results; never recalculate on every clock tick.
+  [showHeadways,chosen,features,trip.stops,peerStops,Math.floor(now/30000)]);
  const {chainDiagnostic,plannedHandoff,nextTrip,previousTrip,previousPartner,continuity}=useChainTracking({
   active,chosen,lastSeen,features,token,tripId,trip,selectedTrip,recordChain:recorder.chain
  });

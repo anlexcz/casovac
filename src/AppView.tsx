@@ -51,10 +51,18 @@ export default function AppView({showHeadways,setShowHeadways,headways,visualLin
         <svg viewBox="0 0 24 24" aria-hidden="true" className="identityIcon"><rect x="5" y="3.5" width="14" height="15" rx="3" fill="none" stroke="currentColor" strokeWidth="1.9"/><path d="M5 11h14M8 7.5h2m4 0h2M8 18.5l-2 3m10-3 2 3M9 21h6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg>
         <span>#{chosen?vehicleId(chosen):lastSeen?.vehicle??'—'}</span>
        </div>
-       {showHeadways&&<div className="compactHeadways" aria-label="Časové rozestupy spojů stejné linky">
-        <span title="Předchozí spoj před vámi na stejné trase" className="headwayValue"><span aria-hidden="true">↑</span> <span>{formatHeadway(headways?.aheadSeconds??null)}</span></span>
-        <span title="Následující spoj za vámi na stejné trase" className="headwayValue"><span aria-hidden="true">↓</span> <span>{formatHeadway(headways?.behindSeconds??null)}</span></span>
-       </div>}
+       {showHeadways&&(headways?.aheadSeconds!==null&&headways?.aheadSeconds!==undefined||
+         headways?.behindSeconds!==null&&headways?.behindSeconds!==undefined)&&
+        <div className="compactHeadways" aria-label="Časové rozestupy spojů stejné linky">
+         {headways?.aheadSeconds!==null&&headways?.aheadSeconds!==undefined&&
+          <span title="Předchozí spoj na společné části trasy" className="headwayValue">
+           <span aria-hidden="true">↑</span><span>{formatHeadway(headways.aheadSeconds)}</span>
+          </span>}
+         {headways?.behindSeconds!==null&&headways?.behindSeconds!==undefined&&
+          <span title="Následující spoj na společné části trasy" className="headwayValue">
+           <span aria-hidden="true">↓</span><span>{formatHeadway(headways.behindSeconds)}</span>
+          </span>}
+        </div>}
       </div>
       <button className={'vehicleStatus '+statusColor} type="button" onClick={()=>setDiagnostics(true)}
        aria-label={statusDescription+'; otevřít diagnostiku'} title={statusDescription}>
