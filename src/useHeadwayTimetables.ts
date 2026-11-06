@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState} from 'react';
 import {golemioJson} from './golemioClient';
 import {parseStops} from './tripData';
 import type {Stop} from './tripData';
-import {path,routeOf,selectedTripId,vehicleId} from './featureUtils';
+import {routeOf,selectedTripId,vehicleId} from './featureUtils';
 import type {Feature,Obj} from './featureUtils';
 import {headwayEligiblePeers} from './lineHeadways';
 import {joinHeadwayBlock,possibleBlockPartners} from './headwayChains';
@@ -100,8 +100,12 @@ export function useHeadwayTimetables(args:{
   const id=selectedTripId(selected);
   if(!id||id==='—')return [];
   const peers=headwayEligiblePeers(selected,allFeatures,currentStops,now,24,allowedRoutes);
+  // Always retain a few nearby trips of each operating line, and make the
+  // candidate key independent of geometry-driven ordering changes.
+  const same=peers.filter(f=>routeOf(f)===primaryLine).slice(0,7);
+  const cross=peers.filter(f=>routeOf(f)===foreignLine).slice(0,7);
   return [...new Set([id,...(companionTripId?[companionTripId]:[]),
-   ...peers.map(selectedTripId)])];
+   ...[...same,...cross].map(selectedTripId).sort()])];
   // Vehicle snapshots refresh the candidate set. Do not restart per second.
   // eslint-disable-next-line react-hooks/exhaustive-deps
  },[enabled,selected,allFeatures,currentStops,token,companionTripId,foreignLine,Math.floor(now/30000)]);
