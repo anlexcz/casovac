@@ -1,5 +1,6 @@
 import type {ChainSnapshot,ChainTrip} from './chainDiagnostics';
 import type {Stop} from './tripData';
+import {sameTransitionStop} from './terminalMatch.ts';
 import type {RemoteState} from './remoteTracking';
 import type {DepartureTelemetry} from './departure';
 import type {RemoteProgress} from './remoteProgress';
@@ -14,7 +15,6 @@ const clock=(v:string):number|null=>{
  if(!match)return null;
  return Number(match[1])*3600+Number(match[2])*60+Number(match[3]??0);
 };
-const id=(v:string)=>v.trim().toUpperCase();
 // The other route is a candidate only, never proof of the GTFS connection.
 export function findPlannedHandoff(
  snapshot:ChainSnapshot|null,current:{line:string;order:string;tripId:string;vehicle:string;start:unknown},
@@ -46,14 +46,18 @@ export function findPlannedHandoff(
 export function verifyHandoffStops(oldStops:Stop[],newStops:Stop[]):{ok:boolean;reason:string}{
  if(oldStops.length<2||newStops.length<2)return {ok:false,reason:'Chybí úplný jízdní řád jednoho z tripů.'};
  const from=oldStops[oldStops.length-1],to=newStops[0];
- if(!from.id||!to.id||id(from.id)!==id(to.id))
-  return {ok:false,reason:'Konečná starého a počáteční zastávka nového tripu se neshodují.'};
+ if(!sameTransitionStop(from,to))
+  return {ok:false,reason:'Přechodová zastávka se neshoduje identifikátorem ani polohou.'};
  const arrival=clock(from.arrival||from.departure),departure=clock(to.departure||to.arrival);
  if(arrival===null||departure===null)return {ok:false,reason:'Chybí časy přechodové zastávky.'};
- // GTFS can use >24:00, and a transition may straddle local midnight.
- const difference=Math.min(...[-86400,0,86400].map(offset=>Math.abs(departure+offset-arrival)));
- if(difference>180)return {ok:false,reason:'Časy přechodu se rozcházejí o více než 3 minuty.'};
- return {ok:true,reason:'Shodná přechodová zastávka i čas navazujících tripů.'};
+ // A genuine chained service can wait at the terminal before departing.
+ // GTFS also allows 24:xx and transitions across service-day midnight.
+ const differences=[-86400,0,86400].map(offset=>departure+offset-arrival);
+ const interval=differences.find(diff=>diff>=-180&&diff<=30*60);
+ if(interval===undefined)return {ok:false,reason:'Návazný odjezd není do 30 minut od příjezdu na konečnou.'};
+ return {ok:true,reason:interval>180?
+  'Shodná přechodová zastávka; navazující odjezd po čekání na konečné.':
+  'Shodná přechodová zastávka a čas navazujících tripů.'};
 }
 export function departureForHandoff(args:{
  remote:RemoteState;progress:RemoteProgress;gpsDeparture:DepartureTelemetry;

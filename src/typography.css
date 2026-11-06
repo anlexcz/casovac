@@ -202,3 +202,20 @@ body, button, input, select, textarea { font-family: var(--font-ui); }
  cursor:default;
  min-height:41px;
 }
+
+/* Chained-line status is informational until both GTFS trip boundaries agree. */
+.chainNotice{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:-2px 0 12px;
+  padding:8px 10px;
+  border:1px solid #39434d;
+  border-radius:8px;
+  background:#20262d;
+  color:#b9c4ce;
+  font:500 12px/1.35 var(--font-ui);
+}
+.chainNoticeArrow{font-size:17px;line-height:1;color:#8f9ca8}
+.chainNoticeReady{border-color:#315c52;background:#19382f;color:#d0eadf}
+.chainNoticeReady .chainNoticeArrow{color:#72d4ab}

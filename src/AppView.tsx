@@ -55,6 +55,18 @@ export default function AppView({token,setToken,rememberToken,setRememberToken,t
        <span className="statusDot"/>
       </button>
     </div>
+    {active&&['5','6','9','10'].includes(active[0])&&displayedIndex!==null&&
+      trip.stops.length>0&&trip.stops.length-displayedIndex<=5&&
+      <div className={'chainNotice '+(continuity.ok&&plannedHandoff&&
+       nextTrip.tripId===plannedHandoff.next.tripId?'chainNoticeReady':'chainNoticePending')}
+       role="status">
+       <span className="chainNoticeArrow" aria-hidden="true">↳</span>
+       <span>{plannedHandoff?
+        continuity.ok&&nextTrip.tripId===plannedHandoff.next.tripId?
+         'Navazuje linka '+plannedHandoff.next.line+'/'+plannedHandoff.next.order+' · jízdní řád ověřen':
+         'Prověřuji návaznost '+plannedHandoff.next.line+'/'+plannedHandoff.next.order:
+        'Pokračování linkou '+({'5':'6','6':'5','9':'10','10':'9'} as Record<string,string>)[active[0]]+' zatím nepotvrzeno'}</span>
+      </div>}
     {highlightedStop&&displayedIndex!==null?
      <StopBoard stops={trip.stops} index={displayedIndex} tripId={tripId} remaining={highlightedRemaining}
       terminalWaiting={terminalWaiting} expanded={expanded} onExpand={()=>setExpanded(v=>!v)}

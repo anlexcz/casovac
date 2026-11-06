@@ -43,7 +43,8 @@ test('requires identical boundary stop and adjacent times',()=>{
  const following=[stop('U469Z3P','16:28:00'),stop('AFTER','16:30:00',2)];
  assert.equal(verifyHandoffStops(prev,following).ok,true);
  assert.equal(verifyHandoffStops(prev,[{...following[0],id:'DIFFERENT'},following[1]]).ok,false);
- assert.equal(verifyHandoffStops(prev,[{...following[0],arrival:'16:35:00',departure:'16:35:00'},following[1]]).ok,false);
+ assert.equal(verifyHandoffStops(prev,[{...following[0],arrival:'16:35:00',departure:'16:35:00'},following[1]]).ok,true);
+ assert.equal(verifyHandoffStops(prev,[{...following[0],arrival:'17:05:00',departure:'17:05:00'},following[1]]).ok,false);
 });
 test('handles a GTFS 24:00 boundary',()=>{
  assert.equal(verifyHandoffStops(
@@ -97,4 +98,23 @@ test('declines ambiguous simultaneous vehicle reports for one order',()=>{
  const result=selectTrip([first,second],'6','1',now,'9233');
  assert.equal(result.ambiguous,true);
  assert.equal(result.feature,null);
+});
+
+test('recognizes a shared terminal despite different GTFS platform IDs',()=>{
+ const previous=[stop('BEFORE','12:50:00'),{...stop('STOP-A','12:56:00',2),name:'Nákladové nádraží Žižkov',lat:50.084,lon:14.463}];
+ const following=[{...stop('STOP-B','13:04:00'),name:'Nákladové nádraží Žižkov (ul. Olšanská)',lat:50.0843,lon:14.4633},stop('NEXT','13:06:00',2)];
+ assert.equal(verifyHandoffStops(previous,following).ok,true);
+ assert.deepEqual(continuousStops(previous,following,true).map(x=>x.stop.id),['BEFORE','STOP-A','NEXT']);
+});
+test('does not link same-name stops in different places',()=>{
+ const previous=[stop('BEFORE','12:50:00'),{...stop('STOP-A','12:56:00',2),name:'Nákladové nádraží Žižkov',lat:50.084,lon:14.463}];
+ const following=[{...stop('STOP-B','13:04:00'),name:'Nákladové nádraží Žižkov',lat:50.089,lon:14.467},stop('NEXT','13:06:00',2)];
+ assert.equal(verifyHandoffStops(previous,following).ok,false);
+ assert.equal(continuousStops(previous,following,true).length,2);
+});
+test('rejects unrealistically long chain layover and backward schedule',()=>{
+ const before=[stop('A','12:50:00'),stop('TERMINAL','12:56:00',2)];
+ const after=[stop('TERMINAL','13:29:00'),stop('B','13:31:00',2)];
+ assert.equal(verifyHandoffStops(before,after).ok,false);
+ assert.equal(verifyHandoffStops(before,[{...after[0],arrival:'12:48:00',departure:'12:48:00'},after[1]]).ok,false);
 });
