@@ -26,8 +26,8 @@ export function parseStops(data:unknown):Stop[]{
     const coords=first(stop,['geometry.coordinates','coordinates'])??get(item,'geometry.coordinates');
     const point=Array.isArray(coords)?coords:[];
     return {
-      id:txt(first(item,['stop_id','stopId','stop.id','properties.stop_id','properties.stop.id','properties.id'])??first(stop,['id','stop_id'])),
-      name:txt(first(item,['stop_name','stopName','stop.name','properties.stop_name','properties.stop.name'])??first(stop,['name','stop_name']))||'Neznámá zastávka',
+      id:txt(first(item,['stop_id','stopId','stop.id','properties.stop_id','properties.stop.id','properties.id'])??first(stop,['id','stop_id','properties.stop_id'])),
+      name:txt(first(item,['stop_name','stopName','stop.name','properties.stop_name','properties.stop.name'])??first(stop,['name','stop_name','properties.stop_name','properties.name']))||'Neznámá zastávka',
       sequence:num(first(item,['stop_sequence','stopSequence','sequence','properties.stop_sequence']))??i+1,
       arrival:txt(first(item,['arrival_time','arrivalTime','arrival.time','properties.arrival_time'])),
       departure:txt(first(item,['departure_time','departureTime','departure.time','properties.departure_time'])),
