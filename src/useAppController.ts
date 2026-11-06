@@ -168,7 +168,7 @@ export function useAppController(){
  const atChainBoundary=!!continuity.ok&&!!plannedHandoff&&!!nextTrip.stops.length&&
   displayedIndex!==null&&displayedIndex>=trip.stops.length-1;
  const visualLine=atChainBoundary?plannedHandoff.next.line:active?.[0]??'';
- const visualOrder=atChainBoundary?plannedHandoff.next.order||active?.[1]??'':active?.[1]??'';
+ const visualOrder=atChainBoundary?(plannedHandoff.next.order||active?.[1]||''):active?.[1]??'';
  const visualDestination=atChainBoundary?nextTrip.headsign||destination:destination;
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
  const highlightedTime=highlightedStop?.departure||highlightedStop?.arrival||'';
