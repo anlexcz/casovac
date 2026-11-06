@@ -149,7 +149,8 @@ export function useAppController(){
   stopsCount:trip.stops.length,apiAge:age,now,sourceTripState:lifecycle
  });
  useChainHandoff({
-  active,chosen,plannedHandoff,continuity,nextTrip,trip,tripId,manual,departureEvidence,now,
+  active,chosen,plannedHandoff,continuity,nextTrip,trip,tripId,manual,
+  displayedIndex:remoteProgress.index,currentTripState:lifecycle,
   handoffFallbackRef,recorder,setLastHandoff,setSelectedTrip,setManual,setExpanded,
   setFeatures,setLastSeen,setLastFetch,setQuery,setActive
  });
