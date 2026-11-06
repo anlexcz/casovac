@@ -1,5 +1,5 @@
 import type {Stop} from './tripData';
-import {sameTransitionStop} from './terminalMatch';
+import {sameTransitionStop} from './terminalMatch.ts';
 export type ContinuousStop={stop:Stop;index:number;continuation:boolean};
 export function continuousStops(current:Stop[],next:Stop[]|null,verified:boolean):ContinuousStop[]{
  const base=current.map((stop,index)=>({stop,index,continuation:false}));
