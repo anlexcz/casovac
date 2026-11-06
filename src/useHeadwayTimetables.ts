@@ -48,7 +48,6 @@ async function candidatesForTerminal(stopId:string,date:string,token:string):Pro
  }catch{return [];}
 }
 const stopIdsOk=(stops:Stop[])=>stops.length>1&&stops.every(s=>!!s.id);
-const seenInfo=(features:Feature[],id:string)=>features.find(f=>selectedTripId(f)===id);
 
 /**
  * Only the optional spacing display does these requests. First discover
