@@ -4,7 +4,7 @@ import {chooserStop} from './chooserStops';
 import {useAppController,parseOrder,vehicleId} from './useAppController';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  return <main className="appShell">
   <header className="topbar">
    <div><h1>ČASOVAČ<span className="dot">.</span></h1></div>
@@ -56,24 +56,15 @@ export default function AppView({token,setToken,rememberToken,setRememberToken,t
        <span className="statusDot"/>
       </button>
     </div>
-    {active&&['5','6','9','10'].includes(active[0])&&displayedIndex!==null&&
-      trip.stops.length>0&&trip.stops.length-displayedIndex<=5&&
-      <div className={'chainNotice '+(continuity.ok&&plannedHandoff&&
-       nextTrip.tripId===plannedHandoff.next.tripId?'chainNoticeReady':'chainNoticePending')}
-       role="status">
-       <span className="chainNoticeArrow" aria-hidden="true">↳</span>
-       <span>{plannedHandoff?
-        continuity.ok&&nextTrip.tripId===plannedHandoff.next.tripId?
-         'Navazuje linka '+plannedHandoff.next.line+'/'+plannedHandoff.next.order+' · jízdní řád ověřen':
-         'Prověřuji návaznost '+plannedHandoff.next.line+'/'+plannedHandoff.next.order:
-        'Pokračování linkou '+({'5':'6','6':'5','9':'10','10':'9'} as Record<string,string>)[active[0]]+' zatím nepotvrzeno'}</span>
-      </div>}
     {highlightedStop&&displayedIndex!==null?
      <StopBoard stops={trip.stops} index={displayedIndex} tripId={tripId} remaining={highlightedRemaining}
       terminalWaiting={terminalWaiting} expanded={expanded} onExpand={()=>setExpanded(v=>!v)}
       onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}
+      activeLine={active[0]}
       continuation={continuity.ok&&plannedHandoff&&nextTrip.tripId===plannedHandoff.next.tripId?
-       {line:plannedHandoff.next.line,order:plannedHandoff.next.order,stops:nextTrip.stops}:null}/>
+       {line:plannedHandoff.next.line,order:plannedHandoff.next.order,stops:nextTrip.stops}:null}
+      predecessor={continuity.ok&&previousPartner&&previousTrip.tripId===previousPartner.tripId?
+       {line:previousPartner.line,order:previousPartner.order,stops:previousTrip.stops}:null}/>
      :<div className="compactEmpty">
        {loading||trip.loading?'Načítání…':chosen?trip.error||'Jízdní řád nedostupný':lastSeen?
        'Poslední vůz #'+lastSeen.vehicle+' · '+new Date(lastSeen.lastSeenAt).toLocaleTimeString('cs-CZ'):error?'Data jsou dočasně nedostupná':'Pořadí nenalezeno'}

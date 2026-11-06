@@ -21,9 +21,9 @@ type Inputs={
  trip:{tripId:string;stops:Stop[]};
  tripId:string;
  manual:number|null;
- departureEvidence:{ok:boolean;reason:string};
- now:number;
- handoffFallbackRef:MutableRefObject<HandoffFallback|null>;
+ displayedIndex:number|null;
+ currentTripState:string;
+  handoffFallbackRef:MutableRefObject<HandoffFallback|null>;
  recorder:ReturnType<typeof useRecorder>;
  setLastHandoff:Setter<HandoffRecord|null>;
  setSelectedTrip:Setter<string>;
@@ -36,16 +36,21 @@ type Inputs={
  setActive:Setter<[string,string]|null>;
 };
 export function useChainHandoff({
- active,chosen,plannedHandoff,continuity,nextTrip,trip,tripId,manual,departureEvidence,now,
+ active,chosen,plannedHandoff,continuity,nextTrip,trip,tripId,manual,displayedIndex,currentTripState,
  handoffFallbackRef,recorder,setLastHandoff,setSelectedTrip,setManual,setExpanded,
  setFeatures,setLastSeen,setLastFetch,setQuery,setActive
 }:Inputs){
- const successorActive=plannedHandoff?.next.state==='at_stop'||plannedHandoff?.next.state==='on_track';
- const successorStart=plannedHandoff?Date.parse(String(plannedHandoff.next.start)):NaN;
- const alreadyMoved=successorActive&&Number.isFinite(successorStart)&&
-  successorStart<=now+120000&&successorStart>=now-2*3600000;
+ const nextState=plannedHandoff?.next.state??'';
+ const successorActive=nextState==='at_stop'||nextState==='on_track';
+ const successorPrepared=successorActive||nextState.startsWith('before_track');
+ const completedPrevious=currentTripState.startsWith('after_track');
+ const atTransition=displayedIndex!==null&&displayedIndex>=trip.stops.length-1;
+ // Do not switch on departure from the penultimate platform. Switching on
+ // planned successor preparation is allowed only after the previous trip ends.
+ const transferConfirmed=(completedPrevious&&successorPrepared)||
+  (atTransition&&successorActive);
  const handoffReady=!!active&&!!chosen&&!!plannedHandoff&&
-  continuity.ok&&(departureEvidence.ok||alreadyMoved)&&
+  continuity.ok&&transferConfirmed&&
   nextTrip.tripId===plannedHandoff.next.tripId&&!nextTrip.loading&&
   trip.tripId===tripId&&trip.stops.length>1&&manual===null;
  useEffect(()=>{
@@ -55,7 +60,7 @@ export function useChainHandoff({
   if(!next.line||!next.order||!next.tripId)return;
   const target:[string,string]=[next.line,next.order];
   const from=active.join('/');
-  const reason=(alreadyMoved&&!departureEvidence.ok?'Navazující trip je již aktivní.':departureEvidence.reason)+' '+continuity.reason;
+  const reason=(completedPrevious?'Předchozí trip byl dokončen.':'Navazující trip je již aktivní na přechodové zastávce.')+' '+continuity.reason;
   const synthetic:Feature={
    properties:{trip:next.rawTrip as Obj,
     last_position:{state_position:next.state,last_stop:next.lastStop,next_stop:next.nextStop}}

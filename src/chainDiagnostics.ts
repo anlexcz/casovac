@@ -27,6 +27,7 @@ const summarize=(f:Feature,source:string):ChainTrip=>({
 export function useChainDiagnostics(args:{
   active:[string,string]|null;knownVehicle:string;token:string;enabled:boolean;
   primaryFeatures:Feature[];record:(value:unknown)=>void;
+  watchTripId:string;
 }):ChainSnapshot|null {
  const [snapshot,setSnapshot]=useState<ChainSnapshot|null>(null);
  const line=args.active?.[0]??'';
@@ -35,6 +36,8 @@ export function useChainDiagnostics(args:{
  const known=args.knownVehicle;
  const token=args.token;
  const record=args.record;
+ const watchedTrip=useRef(args.watchTripId);
+ watchedTrip.current=args.watchTripId;
  const enabled=args.enabled;
  // Keep the newest primary-line observations, including prepared trips on that line.
  const primaryFeaturesRef=useRef(args.primaryFeatures);
@@ -67,7 +70,9 @@ export function useChainDiagnostics(args:{
     const all=(response as {features:Feature[]}).features;
     const primary=primaryFeaturesRef.current.filter(f=>normalize(vehicle(f))===normalize(known))
      .map(f=>summarize(f,'původní linka'));
-    const related=all.filter(f=>normalize(orderOf(f))===normalize(order)||!!known&&normalize(vehicle(f))===normalize(known))
+    const related=all.filter(f=>normalize(orderOf(f))===normalize(order)||
+     !!known&&normalize(vehicle(f))===normalize(known)||
+     !!watchedTrip.current&&selectedTripId(f)===watchedTrip.current)
      .map(f=>summarize(f,'návazná linka'));
     const next:ChainSnapshot={
      target:line+'/'+order,vehicle:known,time:Date.now(),relatedLine:paired,
