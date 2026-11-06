@@ -24,7 +24,7 @@ export function validBlockBoundary(first:Stop[],second:Stop[]):boolean{
  const departure=serviceClock(start.departure||start.arrival);
  if(arrival===null||departure===null)return false;
  // GTFS times may wrap at midnight and waiting at a terminal is legitimate.
- return [departure-arrival,departure+86400-arrival].some(diff=>diff>=-180);
+ return [departure-arrival,departure+86400-arrival].some(diff=>diff>=-180&&diff<=12*3600);
 }
 export function findVerifiedBlockPair(
  current:{tripId:string;line:string;start:unknown;detail:OnlineTripDetail},
