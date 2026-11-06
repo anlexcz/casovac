@@ -4,7 +4,7 @@ on:
     branches: [refactor/audit-cleanup-20261105]
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -13,20 +13,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Resolve and lock dependencies
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Install reproducibly
+          cache: npm
+      - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
       - name: Run regression tests
         run: npm test
       - name: Typecheck and bundle
         run: npm run build
-      - name: Commit dependency lockfile
-        run: |
-          git add package-lock.json
-          if ! git diff --cached --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "build: lock resolved npm dependencies"
-            git push
-          fi
