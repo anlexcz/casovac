@@ -61,7 +61,11 @@ export function useHeadwayTimetables(args:{
  const {enabled,selected,features,currentStops,token,now,companionLine,companionTripId}=args;
  const date=dateLocal(now);
  const primaryLine=selected?routeOf(selected):'';
- const foreignLine=companionLine&&companionLine!==primaryLine?companionLine:'';
+ // The selected trip need not itself be a chained block. A neighbouring
+ // service may approach on its partner line before joining our corridor.
+ const linkedRoutes:Record<string,string>={'5':'6','6':'5','9':'10','10':'9'};
+ const foreignLine=companionLine&&companionLine!==primaryLine?companionLine:
+  linkedRoutes[primaryLine]??'';
  const allowedRoutes=useMemo(()=>new Set([primaryLine,...(foreignLine?[foreignLine]:[])]),
   [primaryLine,foreignLine]);
  const [foreign,setForeign]=useState<{line:string;features:Feature[]}>({line:'',features:[]});
