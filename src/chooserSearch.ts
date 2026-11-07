@@ -1,4 +1,4 @@
-import {normalize,orderOf,path,routeOf,stateOfFeature,vehicleId,selectedTripId} from './featureUtils.ts';
+import {normalize,orderOf,path,routeOf,stateOfFeature,vehicleId} from './featureUtils.ts';
 import type {Feature} from './featureUtils.ts';
 import {selectTrip,tripStart} from './tripSelection.ts';
 
