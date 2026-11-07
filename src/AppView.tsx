@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {useNeighbourIdleTimeout} from './useNeighbourIdleTimeout';
 import StopNeighbourSheet from './StopNeighbourSheet';
 import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
@@ -25,6 +26,11 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
   setNeighbourIndex(null);
  };
  const openStopSheet=(i:number)=>{setNeighbourIndex(i);};
+ const manualSheet=neighbourSettings.enabled&&neighbourIndex!==null&&!settings&&!diagnostics;
+ const manualIdle=useNeighbourIdleTimeout(
+  manualSheet,tripId+'|'+String(neighbourIndex),neighbourSettings.manualCloseSeconds,
+  closeNeighbourSheet
+ );
  return <main className="appShell">
   <header className="topbar">
    <div><h1>ČASOVAČ<span className="dot">.</span></h1></div>
@@ -108,6 +114,8 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
    data={stopNeighbours.result} loading={stopNeighbours.loading} error={stopNeighbours.error}
    ownLine={visualLine} ownOrder={visualOrder}
    ownVehicle={chosen?vehicleId(chosen):lastSeen?.vehicle??''}
+   remainingSeconds={manualSheet?manualIdle.remaining:null}
+   onInteraction={manualIdle.reset}
    onClose={closeNeighbourSheet}/>}
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
@@ -143,6 +151,18 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
     <input id="neighbourLead" type="number" min="30" max="180" step="10"
      value={neighbourSettings.autoOpenSeconds}
      onChange={e=>updateNeighbourSettings({autoOpenSeconds:Math.max(30,Math.min(180,Number(e.target.value)||90))})}/>
+    <label htmlFor="neighbourManualTimeout">Automaticky zavřít ručně otevřený panel</label>
+    <select id="neighbourManualTimeout" value={neighbourSettings.manualCloseSeconds}
+     onChange={e=>updateNeighbourSettings({manualCloseSeconds:Number(e.target.value)})}>
+     <option value={0}>Nikdy</option>
+     <option value={15}>Po 15 sekundách</option>
+     <option value={30}>Po 30 sekundách</option>
+     <option value={45}>Po 45 sekundách</option>
+     <option value={60}>Po 60 sekundách</option>
+     <option value={90}>Po 90 sekundách</option>
+     <option value={120}>Po 120 sekundách</option>
+     <option value={180}>Po 180 sekundách</option>
+    </select>
     <label htmlFor="neighbourAuto">Automatické rozbalení</label>
     <select id="neighbourAuto" value={neighbourSettings.mode}
      onChange={e=>updateNeighbourSettings({mode:e.target.value as typeof neighbourSettings.mode})}>
