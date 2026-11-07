@@ -215,7 +215,7 @@ export function useHeadwayTimetables(args:{
        if(found&&joinHeadwayBlock(detail,found)){partner=found;break;}
       }
      }
-     if(partner&&partner.route?.route_short_name!==detail.route.route_short_name){
+     if(partner&&partner.route?.route_short_name!==detail.route?.route_short_name){
       const verified=joinHeadwayBlock(detail,partner);
       if(verified)combined=verified.stops;
      }
