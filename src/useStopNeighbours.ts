@@ -51,8 +51,10 @@ const array=(raw:unknown):Obj[]=>{
  }
  return [];
 };
-async function getPlatform(tripId:string,index:number,date:string,token:string):Promise<StaticPlatform>{
- const ownStops=await getStops(tripId,date,token);
+async function getPlatform(tripId:string,index:number,date:string,token:string,knownOwnStops:Stop[],priority:'high'|'low'='high'):Promise<StaticPlatform>{
+ // The primary Časovač already loaded this online GTFS trip. Reuse it
+ // instead of requesting the same trip detail for each platform.
+ const ownStops=knownOwnStops[index]?.id?knownOwnStops:await getStops(tripId,date,token);
  const stopId=ownStops[index]?.id??'';
  if(!stopId)throw Error('Online GTFS nevrátilo přesné ID této nástupní hrany.');
  const key=date+'|'+stopId,old=platforms.get(key);
@@ -62,7 +64,7 @@ async function getPlatform(tripId:string,index:number,date:string,token:string):
  url.searchParams.set('stopId',stopId);
  url.searchParams.set('limit','2000');
  url.searchParams.set('includeRoute','true');
- const raw=await golemioJson<unknown>(url.toString(),token,STATIC_TTL,'low');
+ const raw=await golemioJson<unknown>(url.toString(),token,STATIC_TTL,priority);
  const items=array(raw);
  const routes=new Set<string>(),tripIds=new Set<string>();
  for(const item of items){
@@ -93,9 +95,9 @@ export function useStopNeighbours(args:{
  const liveKeyRef=useRef('');
  liveKeyRef.current=enabled?key:'';
  const liveBusyRef=useRef('');
- // Warm the static online platform catalogue for the complete condensed
- // stopboard (current + six next stops). Work is low priority and sequential:
- // it never competes with the timer for multiple network slots at once.
+ const knownOwnStops=args.stops;
+ // Cache the first upcoming stops without queueing seven heavy daily
+ // trip-list searches ahead of the user-selected platform.
  const visibleStops=args.stops;
  const prefetchFrom=currentIndex;
  useEffect(()=>{
@@ -103,11 +105,11 @@ export function useStopNeighbours(args:{
   let cancelled=false;
   const timer=window.setTimeout(()=>{
    void (async()=>{
-    const end=Math.min(visibleStops.length,prefetchFrom+7);
+    const end=Math.min(visibleStops.length,prefetchFrom+3);
     for(let i=prefetchFrom;i<end&&!cancelled;i++){
      // The selected stop is already fetched at interactive priority.
      if(i===index)continue;
-     try{await getPlatform(ownTripId,i,date,token);}catch{/* Optional warmup only. */}
+     try{await getPlatform(ownTripId,i,date,token,visibleStops,'low');}catch{/* Optional warmup only. */}
     }
    })();
   },1800);
@@ -123,7 +125,7 @@ export function useStopNeighbours(args:{
   let valid=true;
   setLoadingPlatform(true);
   setPlatform(old=>old.key===key?old:{key,data:null,error:''});
-  void getPlatform(ownTripId,index,date,token).then(data=>{
+  void getPlatform(ownTripId,index,date,token,knownOwnStops,'high').then(data=>{
    if(valid)setPlatform({key,data,error:''});
   }).catch(e=>{
    if(valid)setPlatform({key,data:null,error:e instanceof Error?e.message:String(e)});
