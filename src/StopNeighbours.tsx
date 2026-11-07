@@ -10,7 +10,7 @@ export default function StopNeighbours({data,loading,error,ownLine,ownOrder,ownV
  // A plain integrated timetable: no headers, no nested cards, no textual
  // group titles. Exact service order is always defined by scheduled time.
  const service=(row:NeighbourRow)=><div className="sn-row" key={row.tripId}>
-  <span className="sn-arrow" aria-label={row.relative==='before'?'Patří před tebe':row.relative==='after'?'Patří za tebe':'Shodný čas podle JŘ'}>
+  <span className={"sn-arrow sn-arrow-"+row.relative} aria-label={row.relative==='before'?'Patří před tebe':row.relative==='after'?'Patří za tebe':'Shodný čas podle JŘ'}>
    {row.relative==='before'?'↑':row.relative==='after'?'↓':'→'}
   </span>
   <span className="sn-badge">{row.line}/{row.order}</span>
@@ -19,7 +19,7 @@ export default function StopNeighbours({data,loading,error,ownLine,ownOrder,ownV
   <time className="sn-time" title="Plánovaný čas">{row.scheduled.slice(0,5)}</time>
  </div>;
  const own=<div className="sn-row sn-own" key="own" aria-label="Tvůj spoj">
-  <span className="sn-arrow">→</span>
+  <span className="sn-arrow sn-arrow-same">→</span>
   <span className="sn-badge">{ownLine}/{ownOrder}</span>
   <span className="sn-vehicle">{ownVehicle?'#'+ownVehicle:'—'}</span>
   <span className="sn-delay">{data?.ownDelay===null||data?.ownDelay===undefined?'—':formatNeighbourDelay(data.ownDelay)}</span>
