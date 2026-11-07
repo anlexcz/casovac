@@ -54,3 +54,15 @@ test('service dates roll across midnight for GTFS 24+ hour schedules',()=>{
  assert.equal(serviceBoardTimeFrom('2026-11-07','00:05:00'),
   '2026-11-06T23:55:00');
 });
+
+test('platform badge comes from the exact own-trip result, not another platform with same name',()=>{
+ const board={departures:[
+  {...depart('other','U1','2026-11-07T10:32:00+01:00'),
+   stop:{id:'U1',platform_code:'A'}},
+  {...depart('own','U2','2026-11-07T10:32:00+01:00'),
+   stop:{id:'U2',platform_code:'B'}}
+ ]};
+ const result=resolveOwnPlatform(board,'own','10:32:00');
+ assert.equal(result.id,'U2');
+ assert.equal(result.platformCode,'B');
+});
