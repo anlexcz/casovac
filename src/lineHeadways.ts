@@ -1,6 +1,7 @@
 import {path,routeOf,selectedTripId,vehicleId,stateOfFeature,orderOf} from './featureUtils.ts';
 import type {Feature} from './featureUtils.ts';
 import type {Stop} from './tripData.ts';
+import {relevantCorridor} from './headwayCorridor.ts';
 
 export type HeadwayNeighbour={line:string;order:string;tripId:string;seconds:number;scheduledGap:number};
 export type LineHeadways={aheadSeconds:number|null;behindSeconds:number|null;ahead:HeadwayNeighbour|null;behind:HeadwayNeighbour|null;checkedAt:number;matched:number};
@@ -54,7 +55,7 @@ const distanceSq=(a:Feature,b:Feature):number=>{
  * Their full static GTFS stop sequences are resolved asynchronously.
  */
 export function headwayEligiblePeers(
- selected:Feature|null,features:Feature[],_stops:Stop[],now:number,limit=24,allowedRoutes?:ReadonlySet<string>
+ selected:Feature|null,features:Feature[],_stops:Stop[],now:number,limit=64,allowedRoutes?:ReadonlySet<string>
 ):Feature[]{
  if(!selected||!live(selected,now))return [];
  const ownId=selectedTripId(selected),car=vehicleId(selected);
@@ -71,22 +72,7 @@ export function headwayEligiblePeers(
 export function sharedReference(
  own:Stop[],peer:Stop[],ownNextId:string,peerNextId:string
 ):{ownIndex:number;peerIndex:number;ownRef:number;peerRef:number}|null{
- const ownIndex=indexOfUnique(own,ownNextId),peerIndex=indexOfUnique(peer,peerNextId);
- if(ownIndex<0||peerIndex<0)return null;
- const intersections=own.flatMap((stop,i)=>{
-  const j=indexOfUnique(peer,stop.id);
-  return j<0?[]:[{i,j}];
- });
- // A shared stop by itself is insufficient to prove the same direction.
- const nearby=intersections.filter(p=>Math.abs(p.i-ownIndex)<=10&&Math.abs(p.j-peerIndex)<=10);
- if(nearby.length<2)return null;
- const sorted=[...nearby].sort((a,b)=>a.i-b.i);
- if(!sorted.some((p,i)=>sorted.slice(i+1).some(q=>q.j>p.j)))return null;
- // Reject intersections in inconsistent order (loops or opposite travel).
- if(sorted.some((p,i)=>i>0&&p.j<=sorted[i-1].j))return null;
- const best=[...nearby].sort((a,b)=>Math.abs(a.i-ownIndex)-Math.abs(b.i-ownIndex)||
-  Math.abs(a.j-peerIndex)-Math.abs(b.j-peerIndex))[0];
- return {ownIndex,peerIndex,ownRef:best.i,peerRef:best.j};
+ return relevantCorridor(own,peer,ownNextId,peerNextId);
 }
 /**
  * Estimate temporal spacing at ONE shared reference stop.
@@ -104,7 +90,7 @@ export function calculateLineHeadways(args:{
  if(!selected||ownStops.length<3||!live(selected,now))return result;
  const ownEta=nextEta(selected),ownNextId=stopId(selected);
  if(ownEta===null||indexOfUnique(ownStops,ownNextId)<0)return result;
- for(const peer of headwayEligiblePeers(selected,features,stops,now,24,allowedRoutes)){
+ for(const peer of headwayEligiblePeers(selected,features,stops,now,64,allowedRoutes)){
   const ownTripId=selectedTripId(peer);
   const schedulePeer=peerStops.get(ownTripId);
   if(!schedulePeer?.length)continue;
