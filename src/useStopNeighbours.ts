@@ -126,7 +126,7 @@ export function useStopNeighbours(args:{
   let active=true;
   const stored=new Map(knownFeatures.map(f=>[selectedTripId(f),f]));
   setLive({key,features:[...stored.values()]});
-  const missing=routes.filter(line=>line!==routeOf(ownFeature));
+  const missing=routes.filter(line=>line!==(ownFeature?routeOf(ownFeature):''));
   void Promise.all(missing.map(async line=>{
    const url=new URL('https://api.golemio.cz/v2/vehiclepositions');
    url.searchParams.set('routeShortName',line);
