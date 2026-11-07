@@ -64,16 +64,16 @@ export function useHeadwayTimetables(args:{
  const [discovered,setDiscovered]=useState<{key:string;lines:string[]}>({key:'',lines:[]});
  const [foreign,setForeign]=useState<{key:string;features:Feature[]}>({key:'',features:[]});
  const [revision,setRevision]=useState(0);
- const discoveryKey=date+'|'+primaryLine+'|'+(selected?selectedTripId(selected):'');
+ const discoveryPeers=selected?headwayEligiblePeers(selected,features,currentStops,now,64)
+  .filter(f=>routeOf(f)===primaryLine).slice(0,24).map(selectedTripId).sort():[];
+ const discoveryKey=date+'|'+primaryLine+'|'+(selected?selectedTripId(selected):'')+'|'+discoveryPeers.join('|');
  // Inspect the block identity of the selected service and its same-line
  // neighbours. Different chained services can lead to different lines.
  useEffect(()=>{
   if(!enabled||!token||!selected||!primaryLine){setDiscovered({key:'',lines:[]});return;}
   let alive=true;
   const run=async()=>{
-   const same=headwayEligiblePeers(selected,features,currentStops,now,64)
-    .filter(f=>routeOf(f)===primaryLine).slice(0,24);
-   const ids=[...new Set([selectedTripId(selected),...same.map(selectedTripId)])];
+   const ids=[...new Set([selectedTripId(selected),...discoveryPeers])];
    const found=new Set<string>();
    if(companionLine&&companionLine!==primaryLine)found.add(companionLine);
    for(let i=0;i<ids.length;i+=6){
