@@ -5,7 +5,7 @@ import {chooserStop} from './chooserStops';
 import {useAppController,parseOrder,vehicleId} from './useAppController';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  return <main className="appShell">
   <header className="topbar">
    <div><h1>ČASOVAČ<span className="dot">.</span></h1></div>
@@ -74,6 +74,8 @@ export default function AppView({showHeadways,setShowHeadways,headways,visualLin
       terminalWaiting={terminalWaiting} expanded={expanded} onExpand={()=>setExpanded(v=>!v)}
       onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}
       activeLine={active[0]} visualBoundary={atChainBoundary}
+      neighbours={stopNeighbours.result} neighbourLoading={stopNeighbours.loading} neighbourError={stopNeighbours.error}
+      neighbourSettings={neighbourSettings} neighbourIndex={neighbourIndex} setNeighbourIndex={setNeighbourIndex}
       continuation={continuity.ok&&plannedHandoff&&nextTrip.tripId===plannedHandoff.next.tripId?
        {line:plannedHandoff.next.line,order:plannedHandoff.next.order,stops:nextTrip.stops}:null}
       predecessor={continuity.ok&&previousPartner&&previousTrip.tripId===previousPartner.tripId?
@@ -109,6 +111,39 @@ export default function AppView({showHeadways,setShowHeadways,headways,visualLin
     <div className="settingsSectionHeading">Zobrazení</div>
     <label className="rememberOption"><input type="checkbox" checked={showHeadways} onChange={e=>setShowHeadways(e.target.checked)}/><span>Zobrazovat rozestupy spojů</span></label>
     <p className="hint">Malé údaje ↑ předchozí a ↓ následující spoj. Pouze při spolehlivých živých datech a na společné části trasy. Nastavení se ukládá v tomto prohlížeči.</p>
+    <div className="settingsSectionHeading">Okolní spoje na stejné nástupní hraně</div>
+    <label className="rememberOption"><input type="checkbox" checked={neighbourSettings.enabled}
+     onChange={e=>updateNeighbourSettings({enabled:e.target.checked})}/>
+     <span>Zobrazovat okolní spoje u zastávek</span></label>
+    <label htmlFor="neighbourAuto">Automatické rozbalení</label>
+    <select id="neighbourAuto" value={neighbourSettings.mode}
+     onChange={e=>updateNeighbourSettings({mode:e.target.value as typeof neighbourSettings.mode})}>
+     <option value="off">Vypnuto, pouze ručně</option>
+     <option value="important">Jen významné zastávky</option>
+     <option value="all">Všechny zastávky s blízkými spoji</option>
+    </select>
+    <label htmlFor="neighbourWindow">Časové okno</label>
+    <select id="neighbourWindow" value={neighbourSettings.window}
+     onChange={e=>updateNeighbourSettings({window:e.target.value as typeof neighbourSettings.window})}>
+     <option value="auto">Automatické podle vzdálenosti</option>
+     <option value="manual">Vlastní</option>
+    </select>
+    {neighbourSettings.window==='manual'&&<div className="neighbourSettingsGrid">
+     <label>Před příjezdem (min)
+      <input type="number" min="0" max="20" step="1" value={neighbourSettings.beforeMinutes}
+       onChange={e=>updateNeighbourSettings({beforeMinutes:Math.max(0,Math.min(20,Number(e.target.value)||0))})}/>
+     </label>
+     <label>Po příjezdu (min)
+      <input type="number" min="0" max="20" step="1" value={neighbourSettings.afterMinutes}
+       onChange={e=>updateNeighbourSettings({afterMinutes:Math.max(0,Math.min(20,Number(e.target.value)||0))})}/>
+     </label>
+    </div>}
+    <label htmlFor="neighbourLookahead">Ruční zobrazení: kolik zastávek dopředu</label>
+    <input id="neighbourLookahead" type="number" min="1" max="10" step="1"
+     value={neighbourSettings.lookahead} onChange={e=>updateNeighbourSettings({
+      lookahead:Math.max(1,Math.min(10,Number(e.target.value)||1))
+     })}/>
+    <p className="hint">Spoje se filtrují podle očekávaného příjezdu, ale řadí výhradně podle JŘ. Používá se přesné ID nástupní hrany. Aktualizace nevyžaduje restart sledování.</p>
     <button className="quiet full" disabled={!token} onClick={forget}>Zapomenout API klíč</button>
     <button className="primary full" onClick={()=>setSettings(false)}>Hotovo</button>
    </div>
