@@ -10,8 +10,6 @@
  transform:translateY(105%);transition:transform 240ms cubic-bezier(.22,1,.36,1);
  will-change:transform}
 .sn-sheet-open .sn-sheet{transform:translateY(0)}
-.sn-sheet-countdown{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#aebfcd;white-space:nowrap;font-variant-numeric:tabular-nums}
-.sn-sheet-countdown-label{color:#8193a4;font-size:10px;letter-spacing:.2px;text-transform:uppercase}
 .sn-sheet-header{flex:0 0 auto;display:flex;align-items:center;gap:9px;position:relative;
  min-height:63px;margin:0;padding:18px 15px 9px;border-bottom:1px solid #343e48;touch-action:pan-y}
 .sn-sheet-grip{position:absolute;top:7px;left:50%;width:35px;height:3px;border-radius:10px;
@@ -34,7 +32,7 @@
 .sn-sheet .sn-vehicle{font-size:13px}
 .sn-sheet .sn-time{font-size:18px;font-weight:750;color:#f3f7fb}
 .sn-sheet .sn-delay{font-size:13px;font-weight:500}
-.sn-sheet .sn-own{background:#ffffff09}
+.sn-sheet .sn-own{background:rgba(0,86,130,.14);box-shadow:inset 3px 0 0 #005682}
 .boardStack .sb-current-interactive{cursor:pointer}
 .boardStack .sb-current-interactive:focus-visible{outline:2px solid #dce5eb;outline-offset:2px}
 @media(max-width:370px){
@@ -52,8 +50,12 @@
 .sn-sheet-refresh.sn-refresh-error{color:#ec8a85}
 
 /* Icons distinguish data age from the optional manual close timer. */
-.sn-sheet-refresh,.sn-sheet-countdown{gap:5px;font-variant-numeric:tabular-nums}
+.sn-sheet-refresh{gap:5px;font-variant-numeric:tabular-nums}
 .sn-sheet-refresh svg{color:#76b9be;flex:0 0 15px}
-.sn-sheet-countdown svg{color:#a9b7c6;flex:0 0 15px}
 .sn-sheet-close{margin-left:2px}
-@media(max-width:390px){.sn-sheet-header{gap:7px;padding-left:11px;padding-right:9px}.sn-sheet-refresh,.sn-sheet-countdown{font-size:11px;gap:3px}.sn-sheet-close{width:34px;height:34px;flex-basis:34px}}
+@media(max-width:390px){.sn-sheet-header{gap:7px;padding-left:11px;padding-right:9px}.sn-sheet-refresh{font-size:11px;gap:3px}.sn-sheet-close{width:34px;height:34px;flex-basis:34px}}
+
+/* Manual idle time: understated progress indicator, never a second countdown label. */
+.sn-sheet-timer{position:absolute;top:0;left:17px;right:17px;height:2px;overflow:hidden;pointer-events:none;border-radius:3px}
+.sn-sheet-timer-fill{height:100%;width:100%;background:#788995;opacity:.75;transform-origin:left center;transition:transform 1s linear}
+@media(prefers-reduced-motion:reduce){.sn-sheet-timer-fill{transition:none}}
