@@ -32,7 +32,7 @@ export default function StopNeighbours({
  const ownDelay=ownData?.ownDelay??null;
  const service=(entry:(typeof stable.entries)[number])=>{
   const row=entry.row;
-  const difference=ownSeconds!==null&&ownDelay!==null?
+  const difference=ownSeconds!==null&&ownDelay!==null&&row.delay!==null?
    row.scheduledSeconds+row.delay-(ownSeconds+ownDelay):null;
   const stale=entry.missingCycles>0;
   const previous=colours.current.get(row.tripId)??'neutral';

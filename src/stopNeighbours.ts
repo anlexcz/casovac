@@ -14,7 +14,7 @@ export const DEFAULT_NEIGHBOUR_SETTINGS:NeighbourSettings={
 };
 export type NeighbourRow={
  tripId:string;line:string;order:string;vehicle:string;
- scheduled:string;scheduledSeconds:number;delay:number;
+ scheduled:string;scheduledSeconds:number;delay:number|null;
  relative:'before'|'same'|'after';predictedDifference:number;
  previousId:string;nextId:string;
 };
@@ -93,7 +93,8 @@ export function calculateStopNeighbours(args:{
  // incoming or outgoing stop, not simply to many lines sharing the platform.
  return {rows,significant:incomingBranch,stopId:own.id,ownSchedule:schedule(own),ownDelay};
 }
-export function formatNeighbourDelay(value:number):string{
+export function formatNeighbourDelay(value:number|null):string{
+ if(value===null||!Number.isFinite(value))return '—';
  const abs=Math.abs(value);
  return (value<0?'−':'+')+String(Math.floor(abs/60)).padStart(2,'0')+':'+String(Math.floor(abs%60)).padStart(2,'0');
 }
