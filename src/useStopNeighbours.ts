@@ -78,9 +78,9 @@ async function getPlatform(tripId:string,index:number,date:string,token:string):
 export function useStopNeighbours(args:{
  enabled:boolean;token:string;now:number;ownFeature:Feature|null;
  ownTripId:string;stops:Stop[];currentIndex:number|null;
- requestedIndex:number|null;settings:NeighbourSettings;
+ requestedIndex:number|null;settings:NeighbourSettings;knownFeatures:Feature[];
 }){
- const {enabled,token,now,ownFeature,ownTripId,currentIndex,requestedIndex,settings}=args;
+ const {enabled,token,now,ownFeature,ownTripId,currentIndex,requestedIndex,settings,knownFeatures}=args;
  const index=requestedIndex??currentIndex;
  const date=dateLocal(now);
  const key=date+'|'+ownTripId+'|'+String(index??'');
@@ -125,9 +125,32 @@ export function useStopNeighbours(args:{
   const run=async()=>{
    const routes=[...new Set([routeOf(ownFeature),...activePlatform.routes])].filter(Boolean).slice(0,9);
    const received:Feature[]=[];
-   // Fast first paint: query routes first, then only matching live trip details.
-   // No per-vehicle GTFS fetches for trams absent from this precise platform.
-   for(const line of routes){
+   const schedules=new Map<string,Stop[]>();
+   const seen=new Set<string>();
+   const candidates:Feature[]=[];
+   // The tracked line is already refreshed independently by Časovač.
+   // Reusing it avoids an unnecessary second network request.
+   const appendCandidates=async(incoming:Feature[])=>{
+    const fresh=incoming.filter(f=>{
+     const id=selectedTripId(f);
+     if(id==='—'||id===ownTripId||vehicleId(f)===vehicleId(ownFeature)||
+      seen.has(id)||!activePlatform.tripIds.has(id))return false;
+     seen.add(id);
+     return true;
+    }).slice(0,Math.max(0,24-candidates.length));
+    candidates.push(...fresh);
+    for(let i=0;i<fresh.length;i+=6){
+     const slice=fresh.slice(i,i+6);
+     const results=await Promise.all(slice.map(f=>getStops(selectedTripId(f),date,token).catch(()=>[])));
+     if(!valid())return;
+     slice.forEach((f,n)=>{if(results[n].length)schedules.set(selectedTripId(f),results[n]);});
+     setSnapshot({key,features:[...candidates],schedules:new Map(schedules),
+      ownStops:activePlatform.ownStops,loading:true,error:'',updatedAt:Date.now()});
+    }
+   };
+   await appendCandidates(knownFeatures);
+   if(!valid())return;
+   for(const line of routes.filter(line=>line!==routeOf(ownFeature))){
     const url=new URL('https://api.golemio.cz/v2/vehiclepositions');
     url.searchParams.set('routeShortName',line);
     url.searchParams.set('limit','1000');
@@ -137,24 +160,10 @@ export function useStopNeighbours(args:{
      if(Array.isArray(v))received.push(...v as Feature[]);
     }catch{/* Other lines remain usable. */}
     if(!valid())return;
-   }
-   const seen=new Set<string>();
-   const candidates=received.filter(f=>{
-    const id=selectedTripId(f);
-    if(id==='—'||id===ownTripId||vehicleId(f)===vehicleId(ownFeature)||
-     seen.has(id)||!activePlatform.tripIds.has(id))return false;
-    seen.add(id);
-    return true;
-   }).slice(0,24);
-   const schedules=new Map<string,Stop[]>();
-   for(let i=0;i<candidates.length;i+=6){
-    const slice=candidates.slice(i,i+6);
-    const results=await Promise.all(slice.map(f=>getStops(selectedTripId(f),date,token).catch(()=>[])));
-    if(!valid())return;
-    slice.forEach((f,n)=>{if(results[n].length)schedules.set(selectedTripId(f),results[n]);});
-    // Incremental reveal, not an empty spinner until the very last trip loads.
-    setSnapshot({key,features:candidates,schedules:new Map(schedules),
-     ownStops:activePlatform.ownStops,loading:i+6<candidates.length,error:'',updatedAt:Date.now()});
+    if(received.length){
+     await appendCandidates(received.splice(0));
+     if(!valid())return;
+    }
    }
    if(valid())setSnapshot({key,features:candidates,schedules,
     ownStops:activePlatform.ownStops,loading:false,error:'',updatedAt:Date.now()});
