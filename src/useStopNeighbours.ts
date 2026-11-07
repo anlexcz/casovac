@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import type {Feature,Obj} from './featureUtils.ts';
 import {path,routeOf,selectedTripId,vehicleId} from './featureUtils.ts';
 import type {Stop} from './tripData.ts';
@@ -88,6 +88,9 @@ export function useStopNeighbours(args:{
  const [snapshot,setSnapshot]=useState<Snapshot>(EMPTY);
  const [loadingPlatform,setLoadingPlatform]=useState(false);
  const poll=Math.floor(now/30000);
+ const liveKeyRef=useRef('');
+ liveKeyRef.current=enabled?key:'';
+ const liveBusyRef=useRef('');
  // Static data are obtained once per selected stop and GTFS service day.
  // Crucially, the 30-second live refresh never restarts this request chain.
  useEffect(()=>{
@@ -110,7 +113,11 @@ export function useStopNeighbours(args:{
  // result stays visible while a refresh is in progress.
  useEffect(()=>{
   if(!enabled||!token||!activePlatform||!ownFeature)return;
-  let valid=true;
+  // A 30-second tick must not cancel a slower in-progress batch. Otherwise
+  // platforms with many routes can stay stuck at "Načítám" indefinitely.
+  if(liveBusyRef.current===key)return;
+  liveBusyRef.current=key;
+  const valid=()=>liveKeyRef.current===key;
   setSnapshot(old=>({...old,key,loading:true,error:''}));
   const run=async()=>{
    const routes=[...new Set([routeOf(ownFeature),...activePlatform.routes])].filter(Boolean).slice(0,9);
@@ -126,7 +133,7 @@ export function useStopNeighbours(args:{
      const v=path(raw,'features');
      if(Array.isArray(v))received.push(...v as Feature[]);
     }catch{/* Other lines remain usable. */}
-    if(!valid)return;
+    if(!valid())return;
    }
    const seen=new Set<string>();
    const candidates=received.filter(f=>{
@@ -140,17 +147,18 @@ export function useStopNeighbours(args:{
    for(let i=0;i<candidates.length;i+=6){
     const slice=candidates.slice(i,i+6);
     const results=await Promise.all(slice.map(f=>getStops(selectedTripId(f),date,token).catch(()=>[])));
-    if(!valid)return;
+    if(!valid())return;
     slice.forEach((f,n)=>{if(results[n].length)schedules.set(selectedTripId(f),results[n]);});
     // Incremental reveal, not an empty spinner until the very last trip loads.
     setSnapshot({key,features:candidates,schedules:new Map(schedules),
      ownStops:activePlatform.ownStops,loading:i+6<candidates.length,error:'',updatedAt:Date.now()});
    }
-   if(valid)setSnapshot({key,features:candidates,schedules,
+   if(valid())setSnapshot({key,features:candidates,schedules,
     ownStops:activePlatform.ownStops,loading:false,error:'',updatedAt:Date.now()});
   };
-  void run().catch(e=>{if(valid)setSnapshot(old=>({...old,key,loading:false,error:String(e)}));});
-  return()=>{valid=false;};
+  void run().catch(e=>{
+   if(valid())setSnapshot(old=>({...old,key,loading:false,error:String(e)}));
+  }).finally(()=>{if(liveBusyRef.current===key)liveBusyRef.current='';});
  },[enabled,token,key,routeKey,poll,activePlatform?.stopId,ownTripId]);
  const result=useMemo(()=>{
   if(!enabled||snapshot.key!==key||index===null||!ownFeature)return null;
