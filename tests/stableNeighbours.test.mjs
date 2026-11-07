@@ -20,14 +20,15 @@ test('partial Golemio batches never remove old rows',()=>{
  assert.deepEqual(state.entries.map(e=>[e.row.tripId,e.missingCycles]),[['a',0],['b',0]]);
  assert.equal(state.entries.some(e=>e.exiting),false);
 });
-test('absence in one completed poll is tolerated, then an exit animation begins',()=>{
+test('verified predecessor persists even after passing platform and many completed polls',()=>{
  let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440)],1000,true,1000);
  state=reconcileNeighbours(state,[],4000,true,24000);
  assert.equal(state.entries[0].exiting,false);
  state=reconcileNeighbours(state,[],4000,true,25000);
  assert.equal(state.entries[0].missingCycles,1);
  state=reconcileNeighbours(state,[],35000,true,36000);
- assert.equal(state.entries[0].exiting,true);
+ assert.equal(state.entries[0].exiting,false);
+ assert.equal(state.entries[0].row.tripId,'a');
 });
 test('a briefly missing tram can return without remounting the existing row',()=>{
  let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440,50)],1000,true,1000);
