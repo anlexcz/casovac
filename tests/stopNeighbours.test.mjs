@@ -58,3 +58,16 @@ test('vehicle that already passed the platform must be excluded',()=>{
  const passed=feature('before','3',12,9154,'Y',100);
  assert.equal(run([passed]).rows.length,0);
 });
+
+test('diverging line after the same incoming stop does not trigger automatic opening',()=>{
+ const diverging=[st('A','08:00:00'),st('B','08:02:00'),st('Z','08:08:00')];
+ const result=run([before],{candidateStops:new Map([['before',diverging]])});
+ assert.equal(result.rows.length,1);
+ assert.equal(result.significant,false);
+});
+test('different incoming branch at one shared platform triggers automatic opening',()=>{
+ const arriving=[st('X','07:58:00'),st('B','08:01:00'),st('C','08:07:00')];
+ const result=run([before],{candidateStops:new Map([['before',arriving]])});
+ assert.equal(result.rows.length,1);
+ assert.equal(result.significant,true);
+});
