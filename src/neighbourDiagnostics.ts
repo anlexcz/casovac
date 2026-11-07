@@ -101,26 +101,56 @@ export function summarizeNeighbourBoardCounts(raw:unknown,selectedStopId:string)
  * Useful when the public GTFS trip detail has names/times but no stop_id.
  */
 export function summarizeTripStopSchema(raw:unknown):NonNullable<NeighbourDiagnosticEvent['shape']>{
- const root=obj(raw);
- const candidates:unknown[]=[root.stop_times,root.stopTimes,root.stoptimes,root.stops,
-  obj(root.data).stop_times,obj(root.data).stops,obj(root.trip).stop_times];
- const list=candidates.find(Array.isArray);
- const rows=Array.isArray(list)?list:[];
+ // Mirror parseStops traversal, so diagnostics inspect the SAME array the
+ // timer parsed. The previous diagnostic inspected only a top-level array,
+ // falsely reporting zero although the timer displayed 37 stops.
+ const queue:Array<{value:unknown;location:string}>=[{value:raw,location:'root'}];
+ const seen=new Set<unknown>();
+ let found:unknown[]=[];
+ let location='not found';
+ const containers=['stop_times','stopTimes','stoptimes','stops','features',
+  'data','result','items','trip','records'];
+ for(let i=0;queue.length&&i<40;i++){
+  const node=queue.shift()!;
+  const value=node.value;
+  if(value===null||value===undefined||seen.has(value))continue;
+  seen.add(value);
+  if(Array.isArray(value)){
+   if(value.length&&value.some(item=>{
+    const entry=obj(item);
+    const props=obj(entry.properties);
+    return ['stop_id','stop_sequence','arrival_time','departure_time','stop_name',
+     'stop','properties'].some(k=>entry[k]!==undefined||props[k]!==undefined);
+   })){
+    found=value;location=node.location;break;
+   }
+   continue;
+  }
+  if(typeof value==='object')for(const key of containers)
+   if(key in obj(value))queue.push({value:obj(value)[key],location:node.location+'.'+key});
+ }
+ const idFields=['stop_id','stopId','id','stop_sequence','stop_name',
+  'arrival_time','departure_time','stop_platform_code','stop_code'];
+ const sample=found.slice(0,3).map(item=>{
+  const entry=obj(item),result:Record<string,unknown>={
+   keys:keys(item),
+   sourcePath:location
+  };
+  for(const field of ['stop','properties','stop_info','stop_data']){
+   if(entry[field]!==undefined){
+    const nested=obj(entry[field]);
+    result[field]={keys:keys(nested),propertiesKeys:keys(nested.properties),
+     stopKeys:keys(nested.stop)};
+   }
+  }
+  result.fields=Object.fromEntries(idFields.filter(k=>entry[k]!==undefined)
+   .map(k=>[k,typeof entry[k]==='string'||typeof entry[k]==='number'?entry[k]:typeof entry[k]]));
+  return result;
+ });
  return {
   topLevelKeys:keys(raw),
-  departuresType:'GTFS stop-times array ('+rows.length+')',
-  samples:rows.slice(0,3).map(item=>{
-   const rec=obj(item);
-   const result:Record<string,unknown>={keys:keys(item)};
-   for(const field of ['stop','properties','stop_info','stop_data']){
-    if(rec[field]!==undefined)result[field]={keys:keys(rec[field]),
-     propertiesKeys:keys(obj(rec[field]).properties)};
-   }
-   const idFields=['stop_id','stopId','id','stop_sequence','stop_name','arrival_time','departure_time'];
-   result.fields=Object.fromEntries(idFields.filter(k=>rec[k]!==undefined)
-    .map(k=>[k,typeof rec[k]==='string'||typeof rec[k]==='number'?rec[k]:typeof rec[k]]));
-   return result;
-  })
+  departuresType:'GTFS stop-times '+found.length+' · '+location,
+  samples:sample
  };
 }
 export function downloadNeighbourDiagnostics():void{
