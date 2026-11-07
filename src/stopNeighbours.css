@@ -3,16 +3,16 @@
 .sn-rows{display:flex;flex-direction:column}
 .sn-row{display:grid;grid-template-columns:18px minmax(48px,auto) minmax(35px,1fr) 64px 47px;align-items:center;gap:7px;min-height:36px;padding:3px 5px;color:#d5dfe9;font-variant-numeric:tabular-nums}
 .sn-row+.sn-row{border-top:1px solid #ffffff0b}
-.sn-arrow{color:#a3b2be;font-size:21px;font-weight:700;text-align:center}
-.sn-arrow-before{color:#42c98a}
-.sn-arrow-after{color:#f36a70}
-.sn-arrow-same{color:#a7b3be}
-.sn-badge{background:#343e4a;border:1px solid #46525f;border-radius:4px;padding:2px 5px;font-size:12px;font-weight:650;white-space:nowrap;width:max-content}
+.sn-arrow{color:#8795a2;font-size:17px;font-weight:600;text-align:center}
+.sn-arrow-before{color:#8795a2}
+.sn-arrow-after{color:#8795a2}
+.sn-arrow-same{color:#8795a2}
+.sn-badge{background:#2b323b;border:1px solid #3b4550;border-radius:4px;padding:2px 5px;font-size:12px;font-weight:650;white-space:nowrap;width:max-content}
 .sn-vehicle{font-size:12px;color:#9baab8;white-space:nowrap}
 .sn-delay{font-size:12px;font-weight:450;text-align:right;color:#adb9c4;white-space:nowrap}
 .sn-time{font-size:17px;font-weight:750;text-align:right;color:#f2f6fa;white-space:nowrap}
-.sn-own{background:#ffffff09;border-radius:4px}
-.sn-own .sn-badge{background:#3c444e}
+.sn-own{background:rgba(0,86,130,.14);border-radius:4px;box-shadow:inset 3px 0 0 #005682}
+.sn-own .sn-badge{background:#2b3945}
 .sn-own .sn-time{color:#fff}
 .sn-tone-good{color:#4dd094!important}
 .sn-tone-risk{color:#f47779!important}
