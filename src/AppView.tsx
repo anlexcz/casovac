@@ -15,7 +15,8 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
  const sheetIndex=neighbourIndex??autoNeighbourIndex;
  const sheetStop=sheetIndex===null?null:trip.stops[sheetIndex]??null;
  const sheetKey=neighbourStopIdentity(tripId,sheetIndex,sheetStop);
- const verifiedNeighbourData=neighbourResultMatchesStop(stopNeighbours.result,sheetStop)?stopNeighbours.result:null;
+ const verifiedNeighbourData=neighbourResultMatchesStop(stopNeighbours.result,
+  sheetStop&&stopNeighbours.gate.selectedStopId?{...sheetStop,id:stopNeighbours.gate.selectedStopId}:sheetStop)?stopNeighbours.result:null;
  const hasNearby=(verifiedNeighbourData?.rows.length??0)>0;
  // The live-data criteria decide WHEN to open, not whether an already
  // opened automatic sheet should stay on screen. Delays and API refreshes
