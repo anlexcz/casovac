@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import type {NeighbourResult,NeighbourRow} from './stopNeighbours.ts';
+import type {NeighbourResult} from './stopNeighbours.ts';
 import {emptyStableNeighbours,reconcileNeighbours} from './stableNeighbours.ts';
 import type {StableNeighbourState} from './stableNeighbours.ts';
 import {formatNeighbourDelay} from './stopNeighbours.ts';
@@ -25,7 +25,7 @@ export default function StopNeighbours({data,loading,error,updatedAt,ownLine,own
     setStable(old=>({...old,entries:old.entries.filter(e=>!e.exiting)}));
   },280);
   return()=>window.clearTimeout(timer);
- },[stable]);
+ },[stable.entries.filter(e=>e.exiting).map(e=>e.row.tripId).join('|')]);
  const shown=stable.entries;
  const ownTime=data?.ownSchedule.slice(0,5)||'—';
  // A plain integrated timetable: no headers, no nested cards, no textual
