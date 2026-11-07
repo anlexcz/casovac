@@ -1,3 +1,5 @@
+import {useState} from 'react';
+import StopNeighbourSheet from './StopNeighbourSheet';
 import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
 import {formatHeadway} from './lineHeadways';
@@ -5,7 +7,23 @@ import {chooserStop} from './chooserStops';
 import {useAppController,parseOrder,vehicleId} from './useAppController';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+ const [dismissedStop,setDismissedStop]=useState('');
+ const sheetIndex=neighbourIndex??autoNeighbourIndex;
+ const sheetStop=sheetIndex===null?null:trip.stops[sheetIndex]??null;
+ const sheetKey=tripId+'|'+(sheetStop?.id??String(sheetIndex??''));
+ const hasNearby=(stopNeighbours.result?.rows.length??0)>0;
+ const autoOpen=neighbourSettings.enabled&&neighbourSettings.mode!=='off'&&
+  neighbourIndex===null&&sheetIndex!==null&&sheetStop!==null&&
+  dismissedStop!==sheetKey&&hasNearby&&
+  (neighbourSettings.mode==='all'||!!stopNeighbours.result?.significant);
+ const sheetOpen=neighbourSettings.enabled&&!diagnostics&&!settings&&
+  (neighbourIndex!==null||autoOpen);
+ const closeNeighbourSheet=()=>{
+  setDismissedStop(sheetKey);
+  setNeighbourIndex(null);
+ };
+ const openStopSheet=(i:number)=>{setNeighbourIndex(i);};
  return <main className="appShell">
   <header className="topbar">
    <div><h1>ČASOVAČ<span className="dot">.</span></h1></div>
@@ -72,11 +90,9 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
     {highlightedStop&&displayedIndex!==null?
      <StopBoard stops={trip.stops} index={displayedIndex} tripId={tripId} remaining={highlightedRemaining}
       terminalWaiting={terminalWaiting} expanded={expanded} onExpand={()=>setExpanded(v=>!v)}
-      onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}
+      onOpenStop={openStopSheet} animate={manual===null&&!diagnostics}
       activeLine={active[0]} visualBoundary={atChainBoundary}
-      neighbours={stopNeighbours.result} neighbourLoading={stopNeighbours.loading} neighbourError={stopNeighbours.error}
-      neighbourSettings={neighbourSettings} neighbourIndex={neighbourIndex} setNeighbourIndex={setNeighbourIndex}
-      ownOrder={visualOrder} ownVehicle={chosen?vehicleId(chosen):lastSeen?.vehicle??''}
+
       continuation={continuity.ok&&plannedHandoff&&nextTrip.tripId===plannedHandoff.next.tripId?
        {line:plannedHandoff.next.line,order:plannedHandoff.next.order,stops:nextTrip.stops}:null}
       predecessor={continuity.ok&&previousPartner&&previousTrip.tripId===previousPartner.tripId?
@@ -86,6 +102,12 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
        'Poslední vůz #'+lastSeen.vehicle+' · '+new Date(lastSeen.lastSeenAt).toLocaleTimeString('cs-CZ'):error?'Data jsou dočasně nedostupná':'Pořadí nenalezeno'}
       </div>}
   </section>}
+  {active&&<StopNeighbourSheet open={sheetOpen}
+   name={sheetStop?.name??''} platformCode={sheetStop?.platformCode??''}
+   data={stopNeighbours.result} loading={stopNeighbours.loading} error={stopNeighbours.error}
+   ownLine={visualLine} ownOrder={visualOrder}
+   ownVehicle={chosen?vehicleId(chosen):lastSeen?.vehicle??''}
+   onClose={closeNeighbourSheet}/>}
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
   <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
@@ -116,6 +138,10 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
     <label className="rememberOption"><input type="checkbox" checked={neighbourSettings.enabled}
      onChange={e=>updateNeighbourSettings({enabled:e.target.checked})}/>
      <span>Zobrazovat okolní spoje u zastávek</span></label>
+    <label htmlFor="neighbourLead">Automaticky otevřít před příjezdem (sekundy)</label>
+    <input id="neighbourLead" type="number" min="30" max="180" step="10"
+     value={neighbourSettings.autoOpenSeconds}
+     onChange={e=>updateNeighbourSettings({autoOpenSeconds:Math.max(30,Math.min(180,Number(e.target.value)||90))})}/>
     <label htmlFor="neighbourAuto">Automatické rozbalení</label>
     <select id="neighbourAuto" value={neighbourSettings.mode}
      onChange={e=>updateNeighbourSettings({mode:e.target.value as typeof neighbourSettings.mode})}>
