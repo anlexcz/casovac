@@ -143,7 +143,7 @@ export function calculateLineHeadways(args:{
   if(plannedGap<0&&(!result.behind||neighbour.scheduledGap<result.behind.scheduledGap)){
    result.behind=neighbour;
   }
-  note(routeOf(peer)===routeOf(selected)?'Vhodný spoj stejné linky':
+  note(routeOf(peer)===routeOf(selected)?'Vhodný spoj':
    'Ověřený přeběh přes konečnou',plannedGap>0?'ahead':'behind',plannedGap);
   result.matched++;
  }
