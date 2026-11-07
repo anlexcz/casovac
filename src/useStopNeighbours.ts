@@ -7,7 +7,7 @@ import {golemioJson} from './golemioClient.ts';
 import type {NeighbourSettings} from './stopNeighbours.ts';
 import {departureBoardUrl,parseNeighbourBoard} from './stopNeighbourBoard.ts';
 import type {DepartureBoard} from './stopNeighbourBoard.ts';
-import {recordNeighbourDiagnostic,summarizeNeighbourBoardResponse,summarizeNeighbourBoardCounts} from './neighbourDiagnostics.ts';
+import {recordNeighbourDiagnostic,summarizeNeighbourBoardResponse,summarizeNeighbourBoardCounts,summarizeTripStopSchema} from './neighbourDiagnostics.ts';
 
 type BoardState={key:string;board:DepartureBoard|null;at:number;error:string;loading:boolean};
 type FeatureState={key:string;features:Feature[]};
@@ -39,7 +39,7 @@ function collectFeatures(raw:unknown):Feature[]{
 }
 const boardId=(date:string,stopId:string)=>date+'|'+stopId;
 export function useStopNeighbours(args:{
- enabled:boolean;token:string;now:number;ownFeature:Feature|null;
+ enabled:boolean;token:string;now:number;ownFeature:Feature|null;rawTrip?:unknown;
  ownTripId:string;stops:Stop[];currentIndex:number|null;
  requestedIndex:number|null;settings:NeighbourSettings;knownFeatures:Feature[];
 }){
@@ -75,7 +75,9 @@ export function useStopNeighbours(args:{
    recordNeighbourDiagnostic({
     at:Date.now(),kind:'blocked',stopId:selectedStopId,stopName:stop?.name??'',
     tripId:ownTripId,endpoint:'/v2/pid/departureboards',
-    note:reasons.join('; ')
+    note:reasons.join('; '),
+    shape:!selectedStopId&&!!args.rawTrip?summarizeTripStopSchema(args.rawTrip):undefined,
+    counts:!selectedStopId&&stops.length?{tripStops:stops.length,missingPlatformIds:stops.filter(x=>!x.id).length}:undefined
    });
    setBoardState(EMPTY);return;
   }

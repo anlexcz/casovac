@@ -12,7 +12,7 @@ function findStopArray(input:unknown):unknown[]{
   for(let i=0;queue.length&&i<40;i++){
     const value=queue.shift();if(value===null||value===undefined||seen.has(value))continue;seen.add(value);
     if(Array.isArray(value)){
-      if(value.length&&value.some(item=>typeof item==='object'&&item!==null&&first(item,['stop_id','stop_sequence','arrival_time','departure_time','properties.stop_id','properties.stop_sequence','stop.name','stop_name','properties.stop_name'])!==undefined))return value;
+      if(value.length&&value.some(item=>typeof item==='object'&&item!==null&&first(item,['stop_id','stop_sequence','arrival_time','departure_time','properties.stop_id','properties.stop_sequence','stop.name','stop_name','properties.stop_name','properties.stop.stop_name','stop.stop_name'])!==undefined))return value;
       continue;
     }
     if(typeof value==='object')for(const key of ['stop_times','stopTimes','stoptimes','stops','features','data','result','items','trip','records'])if(key in (value as RecordValue))queue.push((value as RecordValue)[key]);
@@ -26,7 +26,7 @@ export function parseStops(data:unknown):Stop[]{
     const coords=first(stop,['geometry.coordinates','coordinates'])??get(item,'geometry.coordinates');
     const point=Array.isArray(coords)?coords:[];
     return {
-      id:txt(first(item,['stop_id','stopId','stop.id','properties.stop_id','properties.stop.id','properties.id'])??first(stop,['id','stop_id','properties.stop_id'])),
+      id:txt(first(item,['stop_id','stopId','stop.id','properties.stop_id','properties.stop.id','properties.id','stop.properties.id','stop.properties.stop_id','stop.stopId','properties.stop.stopId','stop.stop_id','stop.stop.stop_id'])??first(stop,['id','stop_id','properties.stop_id'])),
       name:txt(first(item,['stop_name','stopName','stop.name','properties.stop_name','properties.stop.name'])??first(stop,['name','stop_name','properties.stop_name','properties.name']))||'Neznámá zastávka',
       sequence:num(first(item,['stop_sequence','stopSequence','sequence','properties.stop_sequence']))??i+1,
       arrival:txt(first(item,['arrival_time','arrivalTime','arrival.time','properties.arrival_time'])),
@@ -36,6 +36,22 @@ export function parseStops(data:unknown):Stop[]{
       platformCode:txt(first(item,['platform_code','platformCode','stop.platform_code','stop.platformCode','properties.platform_code'])??first(stop,['platform_code','platformCode','properties.platform_code']))
     };
   }).sort((a,b)=>a.sequence-b.sequence);
+}
+/** Fill missing IDs only from a second authoritative GTFS stop-times record.
+ * We never infer boarding edges from the display name or geographic proximity.
+ */
+export function mergeVerifiedStopIds(primary:Stop[],alternate:Stop[]):Stop[]{
+ if(!primary.length||!alternate.length)return primary;
+ return primary.map(original=>{
+  if(original.id)return original;
+  const options=alternate.filter(candidate=>
+   !!candidate.id&&candidate.sequence===original.sequence&&
+   candidate.name===original.name&&
+   (!original.arrival||!candidate.arrival||original.arrival===candidate.arrival)&&
+   (!original.departure||!candidate.departure||original.departure===candidate.departure));
+  if(options.length!==1)return original;
+  return {...original,id:options[0].id,platformCode:original.platformCode||options[0].platformCode};
+ });
 }
 export type TripData={tripId:string;stops:Stop[];headsign:string;route:string;raw:unknown;error:string;loading:boolean;source:string};
 type TripContent=Omit<TripData,'tripId'>;
@@ -74,10 +90,25 @@ export function useTripData(tripId:string,token:string):TripData{
     let stops=parseStops(data);
     let source='GTFS Lookup / trip';
     let fallbackError='';
-    if(!stops.length){
-     const fallback=await fetch('https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(tripId),{headers,cache:'no-store',signal:abort.signal});
-     if(fallback.ok){const item:unknown=await fallback.json();stops=parseStops(item);source='GTFS stop_times';}
-     else fallbackError='Záložní stop_times HTTP '+fallback.status;
+    if(!stops.length||stops.some(stop=>!stop.id)){
+     // A usable timetable without stop_id cannot drive departureboards.
+     // The backup endpoint might expose the missing authoritative platform ID.
+     try{
+      const fallback=await fetch('https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(tripId),{headers,cache:'no-store',signal:abort.signal});
+      if(fallback.ok){
+       const item:unknown=await fallback.json();
+       const alternative=parseStops(item);
+       if(!stops.length){stops=alternative;source='GTFS stop_times';}
+       else {
+        const completed=mergeVerifiedStopIds(stops,alternative);
+        if(completed.some((stop,i)=>!!stop.id&&!stops[i].id))source+=' + ověřená ID z GTFS stop_times';
+        stops=completed;
+       }
+      }else fallbackError='Záložní stop_times HTTP '+fallback.status;
+     }catch(e){
+      if(abort.signal.aborted)return;
+      fallbackError='Záložní stop_times: '+(e instanceof Error?e.message:String(e));
+     }
     }
     if(!abort.signal.aborted){
      const content:TripContent={
