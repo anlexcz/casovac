@@ -204,9 +204,12 @@ export function useAppController(){
  const liveDelayRaw=path(chosen,'properties.last_position.delay.actual');
  const liveDelaySeconds=typeof liveDelayRaw==='number'&&Number.isFinite(liveDelayRaw)&&Math.abs(liveDelayRaw)<3600?liveDelayRaw:0;
  const nextNeighbourCountdown=nextNeighbourSchedule?countdownSeconds(nextNeighbourSchedule,now):null;
- const autoNeighbourIndex=nextNeighbourIndex!==null&&nextNeighbourCountdown!==null&&
-  nextNeighbourCountdown+liveDelaySeconds>=-30&&
-  nextNeighbourCountdown+liveDelaySeconds<=neighbourSettings.autoOpenSeconds?
+ const nextNeighbourEta=nextNeighbourCountdown===null?null:nextNeighbourCountdown+liveDelaySeconds;
+ const autoNeighbourReady=nextNeighbourEta!==null&&nextNeighbourEta>=-30&&
+  nextNeighbourEta<=neighbourSettings.autoOpenSeconds;
+ // Start loading online stop data earlier than the sheet animation.
+ const autoNeighbourIndex=nextNeighbourIndex!==null&&nextNeighbourEta!==null&&
+  nextNeighbourEta>=-30&&nextNeighbourEta<=Math.max(180,neighbourSettings.autoOpenSeconds+90)?
    nextNeighbourIndex:displayedIndex;
  const stopNeighbours=useStopNeighbours({
   enabled:neighbourSettings.enabled&&!!active,token:token.trim(),now,
@@ -271,5 +274,5 @@ export function useAppController(){
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setNeighbourIndex(null);setSelectedTrip(id);setManual(null);}
- return {neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ return {neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }
