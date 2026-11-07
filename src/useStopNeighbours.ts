@@ -26,10 +26,10 @@ const tripUrl=(id:string,date:string)=>{
  url.searchParams.set('includeRoute','true');
  return url.toString();
 };
-async function getStops(id:string,date:string,token:string):Promise<Stop[]>{
+async function getStops(id:string,date:string,token:string,priority:'high'|'low'='low'):Promise<Stop[]>{
  const key=date+'|'+id,old=details.get(key);
  if(old&&Date.now()-old.at<STATIC_TTL)return old.stops;
- const json=await golemioJson<unknown>(tripUrl(id,date),token,STATIC_TTL,'low');
+ const json=await golemioJson<unknown>(tripUrl(id,date),token,STATIC_TTL,priority);
  const stops=parseStops(json);
  if(stops.length){
   details.set(key,{stops,at:Date.now()});
@@ -51,8 +51,10 @@ const array=(raw:unknown):Obj[]=>{
  }
  return [];
 };
-async function getPlatform(tripId:string,index:number,date:string,token:string):Promise<StaticPlatform>{
- const ownStops=await getStops(tripId,date,token);
+async function getPlatform(tripId:string,index:number,date:string,token:string,knownOwnStops:Stop[],priority:'high'|'low'='high'):Promise<StaticPlatform>{
+ // The primary Časovač already loaded this online GTFS trip. Reuse it
+ // instead of requesting the same trip detail for each platform.
+ const ownStops=knownOwnStops[index]?.id?knownOwnStops:await getStops(tripId,date,token);
  const stopId=ownStops[index]?.id??'';
  if(!stopId)throw Error('Online GTFS nevrátilo přesné ID této nástupní hrany.');
  const key=date+'|'+stopId,old=platforms.get(key);
@@ -62,7 +64,7 @@ async function getPlatform(tripId:string,index:number,date:string,token:string):
  url.searchParams.set('stopId',stopId);
  url.searchParams.set('limit','2000');
  url.searchParams.set('includeRoute','true');
- const raw=await golemioJson<unknown>(url.toString(),token,STATIC_TTL,'low');
+ const raw=await golemioJson<unknown>(url.toString(),token,STATIC_TTL,priority);
  const items=array(raw);
  const routes=new Set<string>(),tripIds=new Set<string>();
  for(const item of items){
@@ -88,14 +90,65 @@ export function useStopNeighbours(args:{
  const key=date+'|'+ownTripId+'|'+String(index??'');
  const [platform,setPlatform]=useState<{key:string;data:StaticPlatform|null;error:string}>({key:'',data:null,error:''});
  const [snapshot,setSnapshot]=useState<Snapshot>(EMPTY);
+ const [fastSnapshot,setFastSnapshot]=useState<Snapshot>(EMPTY);
  const [loadingPlatform,setLoadingPlatform]=useState(false);
  const poll=Math.floor(now/30000);
+ // FAST LANE: show same-line peers immediately without waiting for the
+ // potentially large daily /gtfs/trips?stopId catalogue. A peer is still
+ // displayed only after its *exact* platform and GTFS time are validated
+ // by calculateStopNeighbours, so there is no geographical guessing.
+ useEffect(()=>{
+  const target= index===null?null:args.stops[index];
+  if(!enabled||!token||!ownFeature||!ownTripId||!target?.id){
+   setFastSnapshot(EMPTY);return;
+  }
+  let alive=true;
+  const targetIndex=index!;
+  const nearIds=new Set(args.stops.slice(Math.max(0,targetIndex-2),targetIndex+1).map(stop=>stop.id));
+  const selectedCar=vehicleId(ownFeature);
+  const peers=knownFeatures.filter(f=>{
+   const id=selectedTripId(f);
+   if(id==='—'||id===ownTripId||vehicleId(f)===selectedCar)return false;
+   const next=String(path(f,'properties.last_position.next_stop.id')??'');
+   return nearIds.has(next);
+  }).slice(0,10);
+  setFastSnapshot(old=>old.key===key?old:{
+   key,features:[],schedules:new Map(),ownStops:args.stops,
+   loading:true,error:'',updatedAt:0
+  });
+  void (async()=>{
+   const schedules=new Map<string,Stop[]>();
+   const features:Feature[]=[];
+   for(let start=0;start<peers.length;start+=4){
+    const batch=peers.slice(start,start+4);
+    const loaded=await Promise.all(batch.map(f=>
+     getStops(selectedTripId(f),date,token,'high').catch(()=>[])));
+    if(!alive)return;
+    batch.forEach((f,i)=>{
+     if(loaded[i].length){
+      features.push(f);
+      schedules.set(selectedTripId(f),loaded[i]);
+     }
+    });
+    setFastSnapshot({key,features:[...features],schedules:new Map(schedules),
+     ownStops:args.stops,loading:start+4<peers.length,
+     error:'',updatedAt:Date.now()});
+   }
+   if(alive)setFastSnapshot({key,features,schedules,
+    ownStops:args.stops,loading:false,error:'',updatedAt:Date.now()});
+  })().catch(()=>{if(alive)setFastSnapshot(old=>({...old,loading:false}));});
+  return()=>{alive=false;};
+ // Keep the fast lane tied to the 30-second vehicle refresh, not the
+ // per-second countdown updates.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[enabled,token,key,ownTripId,index,poll,knownFeatures]);
+
  const liveKeyRef=useRef('');
  liveKeyRef.current=enabled?key:'';
  const liveBusyRef=useRef('');
- // Warm the static online platform catalogue for the complete condensed
- // stopboard (current + six next stops). Work is low priority and sequential:
- // it never competes with the timer for multiple network slots at once.
+ const knownOwnStops=args.stops;
+ // Cache the first upcoming stops without queueing seven heavy daily
+ // trip-list searches ahead of the user-selected platform.
  const visibleStops=args.stops;
  const prefetchFrom=currentIndex;
  useEffect(()=>{
@@ -103,11 +156,11 @@ export function useStopNeighbours(args:{
   let cancelled=false;
   const timer=window.setTimeout(()=>{
    void (async()=>{
-    const end=Math.min(visibleStops.length,prefetchFrom+7);
+    const end=Math.min(visibleStops.length,prefetchFrom+3);
     for(let i=prefetchFrom;i<end&&!cancelled;i++){
      // The selected stop is already fetched at interactive priority.
      if(i===index)continue;
-     try{await getPlatform(ownTripId,i,date,token);}catch{/* Optional warmup only. */}
+     try{await getPlatform(ownTripId,i,date,token,visibleStops,'low');}catch{/* Optional warmup only. */}
     }
    })();
   },1800);
@@ -123,7 +176,7 @@ export function useStopNeighbours(args:{
   let valid=true;
   setLoadingPlatform(true);
   setPlatform(old=>old.key===key?old:{key,data:null,error:''});
-  void getPlatform(ownTripId,index,date,token).then(data=>{
+  void getPlatform(ownTripId,index,date,token,knownOwnStops,'high').then(data=>{
    if(valid)setPlatform({key,data,error:''});
   }).catch(e=>{
    if(valid)setPlatform({key,data:null,error:e instanceof Error?e.message:String(e)});
@@ -207,14 +260,32 @@ export function useStopNeighbours(args:{
   }).finally(()=>{if(liveBusyRef.current===key)liveBusyRef.current='';});
  },[enabled,token,key,routeKey,poll,activePlatform?.stopId,ownTripId]);
  const result=useMemo(()=>{
-  if(!enabled||snapshot.key!==key||index===null||!ownFeature)return null;
+  if(!enabled||index===null||!ownFeature)return null;
+  const available=[fastSnapshot,snapshot].filter(item=>
+   item.key===key&&item.ownStops[index]?.id);
+  if(!available.length)return null;
+  const schedules=new Map<string,Stop[]>();
+  const features:Feature[]=[];
+  const seen=new Set<string>();
+  for(const availableSnapshot of available){
+   for(const [tripId,stops] of availableSnapshot.schedules)schedules.set(tripId,stops);
+   for(const feature of availableSnapshot.features){
+    const id=selectedTripId(feature);
+    if(!seen.has(id)){seen.add(id);features.push(feature);}
+   }
+  }
   return calculateStopNeighbours({
-   ownTripId,ownStops:snapshot.ownStops,ownIndex:index,ownFeature,
-   candidates:snapshot.features,candidateStops:snapshot.schedules,now,settings,
+   ownTripId,ownStops:args.stops,ownIndex:index,ownFeature,
+   candidates:features,candidateStops:schedules,now,settings,
    distance:currentIndex===null?0:Math.max(0,index-currentIndex)
   });
- },[enabled,snapshot,key,index,ownTripId,ownFeature,now,settings,currentIndex]);
+ },[enabled,fastSnapshot,snapshot,key,index,ownTripId,ownFeature,now,settings,currentIndex,args.stops]);
  const staticError=platform.key===key?platform.error:'';
- return {result,loading:loadingPlatform||(snapshot.key===key&&snapshot.loading),
-  error:staticError||(snapshot.key===key?snapshot.error:''),updatedAt:snapshot.key===key?snapshot.updatedAt:0};
+ const fastReady=fastSnapshot.key===key&&fastSnapshot.features.length>0;
+ const liveReady=snapshot.key===key&&snapshot.features.length>0;
+ return {result,loading:loadingPlatform||(snapshot.key===key&&snapshot.loading)||
+  (fastSnapshot.key===key&&fastSnapshot.loading),
+  error:fastReady||liveReady?'':staticError||(snapshot.key===key?snapshot.error:''),
+  updatedAt:Math.max(snapshot.key===key?snapshot.updatedAt:0,
+   fastSnapshot.key===key?fastSnapshot.updatedAt:0)};
 }
