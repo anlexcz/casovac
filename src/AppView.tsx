@@ -86,6 +86,14 @@ export default function AppView({showHeadways,setShowHeadways,headways,visualLin
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
   <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
+   {showHeadways&&<section className="panel" aria-label="Diagnostika rozestupů spojů">
+    <h3>Výběr sousedních spojů</h3>
+    <p className="hint">Rozhoduje plánovaný jízdní řád a společný úsek. Diagnostika zobrazuje pouze kandidáty s dostupnou čerstvou telemetrií.</p>
+    <p className="hint">Předchozí: {headways?.ahead?headways.ahead.line+'/'+headways.ahead.order:'—'} · Následující: {headways?.behind?headways.behind.line+'/'+headways.behind.order:'—'}</p>
+    {headways?.decisions.length?<details><summary>Kandidáti a důvody ({headways.decisions.length})</summary>
+      <ul>{headways.decisions.map((decision,i)=><li key={decision.tripId+'-'+i}>{decision.line}/{decision.order||'?'} · {decision.reason}{decision.direction?' ('+(decision.direction==='ahead'?'před':'za')+')':''}</li>)}</ul>
+    </details>:<p className="hint">Žádní vhodní kandidáti s dostupnými daty.</p>}
+   </section>}
    <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} remoteProgress={remoteProgress} lastSeen={lastSeen} relatedVehicle={relatedVehicle} chainDiagnostic={chainDiagnostic} lastHandoff={lastHandoff} plannedHandoff={plannedHandoff?.next??null} handoffContinuity={continuity.reason} handoffDeparture={departureEvidence.reason} recorder={recorder}/>
   </div>
 
