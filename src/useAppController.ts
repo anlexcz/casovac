@@ -213,7 +213,7 @@ export function useAppController(){
    nextNeighbourIndex:displayedIndex;
  const stopNeighbours=useStopNeighbours({
   enabled:neighbourSettings.enabled&&!!active,token:token.trim(),now,
-  ownFeature:chosen,ownTripId:tripId,stops:trip.stops,currentIndex:displayedIndex,
+  ownFeature:chosen,ownTripId:tripId,stops:trip.stops,knownFeatures:features,currentIndex:displayedIndex,
   requestedIndex:neighbourIndex??autoNeighbourIndex,settings:neighbourSettings
  });
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
