@@ -6,9 +6,11 @@ export type NeighbourMode='off'|'important'|'all';
 export type NeighbourSettings={
  enabled:boolean;mode:NeighbourMode;window:'auto'|'manual';
  beforeMinutes:number;afterMinutes:number;lookahead:number;autoOpenSeconds:number;manualCloseSeconds:number;
+ colourOrder:boolean;orderToleranceSeconds:number;orderHysteresisSeconds:number;
 };
 export const DEFAULT_NEIGHBOUR_SETTINGS:NeighbourSettings={
- enabled:false,mode:'important',window:'auto',beforeMinutes:3,afterMinutes:4,lookahead:4,autoOpenSeconds:90,manualCloseSeconds:60
+ enabled:false,mode:'important',window:'auto',beforeMinutes:3,afterMinutes:4,lookahead:4,autoOpenSeconds:90,manualCloseSeconds:60,
+ colourOrder:true,orderToleranceSeconds:30,orderHysteresisSeconds:10
 };
 export type NeighbourRow={
  tripId:string;line:string;order:string;vehicle:string;
