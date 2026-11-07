@@ -14,21 +14,36 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
  const sheetStop=sheetIndex===null?null:trip.stops[sheetIndex]??null;
  const sheetKey=tripId+'|'+(sheetStop?.id??String(sheetIndex??''));
  const hasNearby=(stopNeighbours.result?.rows.length??0)>0;
- const autoOpen=neighbourSettings.enabled&&neighbourSettings.mode!=='off'&&
+ // The live-data criteria decide WHEN to open, not whether an already
+ // opened automatic sheet should stay on screen. Delays and API refreshes
+ // must not make it disappear during the same stop.
+ const pinnedActive=pinnedAutoNeighbour?.tripId===tripId&&
+  displayedIndex!==null&&displayedIndex<=pinnedAutoNeighbour.index&&
+  pinnedAutoNeighbour.index<trip.stops.length;
+ const eligibleAuto=neighbourSettings.enabled&&neighbourSettings.mode!=='off'&&
   neighbourIndex===null&&sheetIndex!==null&&sheetStop!==null&&
   dismissedStop!==sheetKey&&hasNearby&&
   (autoNeighbourIndex===displayedIndex||autoNeighbourReady)&&
   (neighbourSettings.mode==='all'||!!stopNeighbours.result?.significant);
+ const autoOpen=neighbourIndex===null&&dismissedStop!==sheetKey&&
+  (pinnedActive||eligibleAuto);
  const sheetOpen=neighbourSettings.enabled&&!diagnostics&&!settings&&
   (neighbourIndex!==null||autoOpen);
  useEffect(()=>{
-  if(!autoOpen||sheetIndex===null||neighbourIndex!==null)return;
-  if(pinnedAutoNeighbour?.tripId===tripId&&pinnedAutoNeighbour.index===sheetIndex)return;
+  if(!eligibleAuto||sheetIndex===null||neighbourIndex!==null||pinnedActive)return;
   setPinnedAutoNeighbour({tripId,index:sheetIndex});
- },[autoOpen,sheetIndex,neighbourIndex,tripId,pinnedAutoNeighbour,setPinnedAutoNeighbour]);
+ },[eligibleAuto,sheetIndex,neighbourIndex,tripId,pinnedActive,setPinnedAutoNeighbour]);
+ useEffect(()=>{
+  // When the highlighted stop advances, release the old automatic panel.
+  if(!pinnedAutoNeighbour)return;
+  if(pinnedAutoNeighbour.tripId===tripId&&displayedIndex!==null&&
+   displayedIndex<=pinnedAutoNeighbour.index)return;
+  setPinnedAutoNeighbour(null);
+ },[pinnedAutoNeighbour,tripId,displayedIndex,setPinnedAutoNeighbour]);
  const closeNeighbourSheet=()=>{
   setDismissedStop(sheetKey);
   setNeighbourIndex(null);
+  setPinnedAutoNeighbour(null);
  };
  const openStopSheet=(i:number)=>{setNeighbourIndex(i);};
  const manualSheet=neighbourSettings.enabled&&neighbourIndex!==null&&!settings&&!diagnostics;
