@@ -20,3 +20,15 @@
 .neighbourSettingsGrid label{min-width:0;font-size:12px}
 .neighbourSettingsGrid input{width:100%;box-sizing:border-box}
 @media(max-width:370px){.sn-row{gap:4px;grid-template-columns:16px minmax(44px,auto) minmax(30px,1fr) 57px 42px}.sn-badge{padding:2px 4px}.sn-panel{padding-left:5px;padding-right:5px}}
+
+/* Animate changes in membership, never normal telemetry value updates. */
+.sn-rows>.sn-row:not(.sn-own){animation:sn-appear 230ms cubic-bezier(.2,.8,.2,1) both;
+ transform-origin:top center;overflow:hidden}
+.sn-rows>.sn-row.sn-row-exit{animation:sn-disappear 260ms ease-in forwards;pointer-events:none}
+@keyframes sn-appear{from{opacity:0;max-height:0;min-height:0;padding-top:0;padding-bottom:0;transform:translateY(-5px)}
+ to{opacity:1;max-height:64px;transform:translateY(0)}}
+@keyframes sn-disappear{from{opacity:1;max-height:64px;transform:translateY(0)}
+ to{opacity:0;max-height:0;min-height:0;padding-top:0;padding-bottom:0;transform:translateY(-4px)}}
+@media(prefers-reduced-motion:reduce){
+ .sn-rows>.sn-row:not(.sn-own),.sn-rows>.sn-row.sn-row-exit{animation:none}
+}
