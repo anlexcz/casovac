@@ -28,7 +28,7 @@ function sameTime(a:number,b:number){
  * calendar arithmetic intentionally avoids the browser's own timezone.
  */
 export function serviceBoardTimeFrom(serviceDate:string,scheduled:string,leadMinutes=10):string|null{
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(serviceDate))return null;
+ if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(serviceDate))return null;
  const planned=seconds(scheduled);
  if(planned===null)return null;
  const start=new Date(serviceDate+'T00:00:00Z');
