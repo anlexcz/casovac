@@ -129,14 +129,15 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
     <span className="liveOffset" aria-label="Časový rozdíl vůči jízdnímu řádu">{signed(remaining)}</span>
     <time className="scheduledTime" aria-label="Čas podle jízdního řádu">{formatStopTime(current.departure||current.arrival)}</time>
    </span>
-  </div>
-  {neighbourSettings.enabled&&(currentOpen||neighbours?.rows.length||neighbourLoading)&&
-   <button type="button" className="sn-current-toggle"
+   {neighbourSettings.enabled&&<button type="button" className="sn-current-toggle"
     aria-label="Okolní spoje u aktuální zastávky"
     aria-expanded={currentOpen||selectedOpen&&neighbourIndex===index}
     onClick={()=>toggleNeighbour(index!)}><span aria-hidden="true">↔</span>
-     <span>{neighbours?.rows.length??0}</span><span aria-hidden="true">{currentOpen?'⌃':'⌄'}</span>
+     {neighbours?.rows.length>0&&<span>{neighbours.rows.length}</span>}
+     <span aria-hidden="true">{currentOpen?'⌃':'⌄'}</span>
    </button>}
+  </div>
+
   {table(index!)}
   {shown.map(entry=>{
    const {stop,index:n,continuation:isNext,changeTo,localIndex}=entry;
