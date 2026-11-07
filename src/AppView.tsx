@@ -128,8 +128,9 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
       </div>}
   </section>}
   {active&&<StopNeighbourSheet open={sheetOpen}
-   name={sheetStop?.name??''} platformCode={sheetStop?.platformCode??''}
-   data={stopNeighbours.result} loading={stopNeighbours.loading} error={stopNeighbours.error}
+   stopKey={sheetKey} name={sheetStop?.name??''} platformCode={sheetStop?.platformCode??''}
+   data={stopNeighbours.result} updatedAt={stopNeighbours.updatedAt}
+   loading={stopNeighbours.loading} error={stopNeighbours.error}
    ownLine={visualLine} ownOrder={visualOrder}
    ownVehicle={chosen?vehicleId(chosen):lastSeen?.vehicle??''}
    remainingSeconds={manualSheet?manualIdle.remaining:null}
