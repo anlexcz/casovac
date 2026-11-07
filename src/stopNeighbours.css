@@ -1,0 +1,25 @@
+/* Single stopboard grid extension: no nested cards and no table headings. */
+.sn-panel{margin:0;padding:1px 8px 7px;border-bottom:1px solid #35414c;background:#20262d}
+.sn-rows{display:flex;flex-direction:column}
+.sn-row{display:grid;grid-template-columns:18px minmax(48px,auto) minmax(35px,1fr) 64px 47px;align-items:center;gap:7px;min-height:36px;padding:3px 5px;color:#d5dfe9;font-variant-numeric:tabular-nums}
+.sn-row+.sn-row{border-top:1px solid #ffffff0b}
+.sn-arrow{color:#a3b2be;font-size:17px;font-weight:700;text-align:center}
+.sn-badge{background:#343e4a;border:1px solid #46525f;border-radius:4px;padding:2px 5px;font-size:12px;font-weight:650;white-space:nowrap;width:max-content}
+.sn-vehicle{font-size:12px;color:#9baab8;white-space:nowrap}
+.sn-delay{font-size:12px;font-weight:650;text-align:right;color:#dbe5ed;white-space:nowrap}
+.sn-time{font-size:12px;text-align:right;color:#b7c4d1;white-space:nowrap}
+.sn-own{background:#ffffff09;border-radius:4px}
+.sn-own .sn-badge{background:#3c444e}
+.sn-own .sn-time{color:#e6edf4}
+.sn-status{margin:0;padding:10px 6px;font-size:12px;color:#9babb9}
+.sn-updating{font-size:11px;color:#8699a9;padding-left:6px}
+.boardStack>.activeDeparture{position:relative;padding-bottom:20px}
+.boardStack>.activeDeparture>.sn-current-toggle{position:absolute;bottom:2px;left:11px;display:inline-flex;align-items:center;gap:5px;padding:3px 5px;border:0;background:transparent;color:#ffffffad;min-height:20px;font-size:12px;line-height:1.2}
+.boardStack>.activeDeparture>.sn-current-toggle[aria-expanded="true"]{color:#fff}
+.boardStack .neighbourExpandFuture{border:0;background:transparent;padding:0;min-height:38px;min-width:29px;font-size:16px;color:#7d92a4}
+.boardStack .upcomingStop:has(.neighbourExpandFuture){display:grid;grid-template-columns:minmax(0,1fr) 29px;gap:0;padding-right:5px}
+.boardStack .upcomingStop:has(.neighbourExpandFuture)>.upcomingButton{min-width:0;width:100%}
+.neighbourSettingsGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.neighbourSettingsGrid label{min-width:0;font-size:12px}
+.neighbourSettingsGrid input{width:100%;box-sizing:border-box}
+@media(max-width:370px){.sn-row{gap:4px;grid-template-columns:16px minmax(44px,auto) minmax(30px,1fr) 57px 42px}.sn-badge{padding:2px 4px}.sn-panel{padding-left:5px;padding-right:5px}}
