@@ -1,5 +1,6 @@
 import {useEffect,useState} from 'react';
 import {useNeighbourIdleTimeout} from './useNeighbourIdleTimeout';
+import {isAutoStopActive} from './autoStopSheet';
 import StopNeighbourSheet from './StopNeighbourSheet';
 import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
@@ -17,9 +18,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
  // The live-data criteria decide WHEN to open, not whether an already
  // opened automatic sheet should stay on screen. Delays and API refreshes
  // must not make it disappear during the same stop.
- const pinnedActive=pinnedAutoNeighbour?.tripId===tripId&&
-  displayedIndex!==null&&displayedIndex<=pinnedAutoNeighbour.index&&
-  pinnedAutoNeighbour.index<trip.stops.length;
+ const pinnedActive=isAutoStopActive(pinnedAutoNeighbour,tripId,displayedIndex,trip.stops.length);
  const eligibleAuto=neighbourSettings.enabled&&neighbourSettings.mode!=='off'&&
   neighbourIndex===null&&sheetIndex!==null&&sheetStop!==null&&
   dismissedStop!==sheetKey&&hasNearby&&
@@ -36,10 +35,9 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
  useEffect(()=>{
   // When the highlighted stop advances, release the old automatic panel.
   if(!pinnedAutoNeighbour)return;
-  if(pinnedAutoNeighbour.tripId===tripId&&displayedIndex!==null&&
-   displayedIndex<=pinnedAutoNeighbour.index)return;
+  if(isAutoStopActive(pinnedAutoNeighbour,tripId,displayedIndex,trip.stops.length))return;
   setPinnedAutoNeighbour(null);
- },[pinnedAutoNeighbour,tripId,displayedIndex,setPinnedAutoNeighbour]);
+ },[pinnedAutoNeighbour,tripId,displayedIndex,trip.stops.length,setPinnedAutoNeighbour]);
  const closeNeighbourSheet=()=>{
   setDismissedStop(sheetKey);
   setNeighbourIndex(null);
