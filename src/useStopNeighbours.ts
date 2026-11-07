@@ -16,6 +16,10 @@ type DetailState={key:string;stops:Map<string,Stop[]>};
 const EMPTY:BoardState={key:'',board:null,at:0,error:'',loading:false};
 const boardCache=new Map<string,{board:DepartureBoard;at:number}>();
 const tripCache=new Map<string,Stop[]>();
+const platformCache=new Map<string,{id:string;platformCode:string;at:number}>();
+const vehicleCache=new Map<string,{features:Feature[];at:number}>();
+const PLATFORM_TTL=15*60000;
+const VEHICLE_TTL=60000;
 const dateLocal=(now:number)=>new Intl.DateTimeFormat('sv-SE',{
  timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'
 }).format(new Date(now));
@@ -50,8 +54,10 @@ export function useStopNeighbours(args:{
  const date=dateLocal(now);
  const unresolvedKey=date+'|'+ownTripId+'|'+String(index??-1)+'|'+(stop?.name??'')+'|'+(stop?.arrival||stop?.departure||'');
  const [resolved,setResolved]=useState<{key:string;id:string;platformCode:string;error:string}>({key:'',id:'',platformCode:'',error:''});
- const selectedStopId=stop?.id||(resolved.key===unresolvedKey?resolved.id:'');
- const selectedPlatformCode=stop?.platformCode||(resolved.key===unresolvedKey?resolved.platformCode:'');
+ const prefetchedPlatform=platformCache.get(unresolvedKey);
+ const rememberedPlatform=prefetchedPlatform&&Date.now()-prefetchedPlatform.at<PLATFORM_TTL?prefetchedPlatform:null;
+ const selectedStopId=stop?.id||(resolved.key===unresolvedKey?resolved.id:rememberedPlatform?.id??'');
+ const selectedPlatformCode=stop?.platformCode||(resolved.key===unresolvedKey?resolved.platformCode:rememberedPlatform?.platformCode??'');
  const effectiveStop=useMemo(()=>stop&&selectedStopId?{...stop,id:selectedStopId}:stop,[stop,selectedStopId]);
  const key=date+'|'+ownTripId+'|'+String(index??-1)+'|'+selectedStopId+'|'+(stop?.arrival||stop?.departure||'');
  const gate={
@@ -63,7 +69,7 @@ export function useStopNeighbours(args:{
  // geometry, name, sequence and times but no stop_id. Recover it via the
  // operator's departure board, accepting ONLY the exact own trip and time.
  useEffect(()=>{
-  if(!enabled||!token||!stop?.name||!!stop.id||!ownTripId||ownTripId==='—')return;
+  if(!enabled||!token||!stop?.name||!!stop.id||!!rememberedPlatform||!ownTripId||ownTripId==='—')return;
   let active=true;
   const started=Date.now();
   const context={stopId:'',stopName:stop.name,tripId:ownTripId,
@@ -80,6 +86,7 @@ export function useStopNeighbours(args:{
      counts:{...summarizeNeighbourBoardCounts(board,''),ownTripMatches:resolution.matches,
       resolvedPlatform:resolution.id?1:0},
      note:resolution.reason+(resolution.id?' · '+resolution.id:'')});
+    if(resolution.id)platformCache.set(unresolvedKey,{id:resolution.id,platformCode:resolution.platformCode,at});
     if(active)setResolved({key:unresolvedKey,id:resolution.id,platformCode:resolution.platformCode,error:resolution.reason});
    }).catch(e=>{
     const message=e instanceof Error?e.message:String(e);
@@ -88,7 +95,53 @@ export function useStopNeighbours(args:{
     if(active)setResolved({key:unresolvedKey,id:'',platformCode:'',error:message});
    });
   return()=>{active=false;};
- },[enabled,token,unresolvedKey,stop?.name,stop?.id,stop?.arrival,stop?.departure,ownTripId]);
+ },[enabled,token,unresolvedKey,stop?.name,stop?.id,stop?.arrival,stop?.departure,ownTripId,!!rememberedPlatform]);
+ // The public GTFS trip contains names but often no platform IDs. A
+ // short, sequential, low-priority warmup resolves only the next TWO stop
+ // occurrences before the tram reaches them. No speculative full-day scan.
+ useEffect(()=>{
+  if(!enabled||!token||!ownFeature||!ownTripId||ownTripId==='—'||
+   currentIndex===null||!stops.length)return;
+  let active=true;
+  const upcoming=stops.slice(currentIndex+1,currentIndex+3)
+   .map((candidate,offset)=>({candidate,index:currentIndex+1+offset}))
+   .filter(({candidate})=>!!candidate.name&&!candidate.id);
+  const timer=window.setTimeout(()=>{
+   void (async()=>{
+    for(const {candidate,index:futureIndex} of upcoming){
+     if(!active)return;
+     const futureKey=date+'|'+ownTripId+'|'+futureIndex+'|'+candidate.name+'|'+
+      (candidate.arrival||candidate.departure||'');
+     const cached=platformCache.get(futureKey);
+     if(cached&&Date.now()-cached.at<PLATFORM_TTL)continue;
+     try{
+      const body=await golemioJson<DepartureBoard>(
+       departureBoardNameUrl(candidate.name,candidate.arrival||candidate.departure,date),
+       token,60000,'low');
+      const resolved=resolveOwnPlatform(body,ownTripId,candidate.arrival||candidate.departure);
+      if(resolved.id){
+       const at=Date.now();
+       platformCache.set(futureKey,{
+        id:resolved.id,platformCode:resolved.platformCode,at
+       });
+       // Name-based discovery is anchored to our OWN scheduled visit, so it
+       // already contains a consistent set of nearby trips. Preserve that
+       // exact boarding-edge subset for immediate first paint upon arrival.
+       // The normal high-priority board poll will still update live delays.
+       const departures=(body.departures??[]).filter(d=>d.stop?.id===resolved.id);
+       if(departures.length){
+        const cacheKey=boardId(date,resolved.id);
+        const previous=boardCache.get(cacheKey);
+        if(!previous||previous.at<at)
+         boardCache.set(cacheKey,{board:{departures},at});
+       }
+      }
+     }catch{/* Optional warmup must not block the selected stop. */}
+    }
+   })();
+  },1500);
+  return()=>{active=false;window.clearTimeout(timer);};
+ },[enabled,token,ownTripId,date,currentIndex,stops,!!ownFeature]);
  const poll=Math.floor(now/20000);
  const [boardState,setBoardState]=useState<BoardState>(EMPTY);
  const [live,setLive]=useState<FeatureState>({key:'',features:[]});
@@ -190,9 +243,9 @@ export function useStopNeighbours(args:{
   return()=>{active=false;window.clearTimeout(timer);};
  },[enabled,token,ownTripId,date,currentIndex,selectedStopId,stops.length]);
 
- // Immediately enrich the board with vehicles already known to the main
- // tracker; fetch missing lines independently in the background. Boarding
- // list remains usable even if a line's vehiclepositions request fails.
+ // Build ONE enrichment snapshot per platform/refresh rather than
+ // progressively re-rendering after every route's individual API response.
+ // Known live positions are used immediately; cached lines avoid re-querying.
  const routes=useMemo(()=>{
   if(!readyBoard||!selectedStopId)return [];
   return [...new Set((readyBoard.departures??[]).filter(d=>
@@ -203,37 +256,59 @@ export function useStopNeighbours(args:{
  useEffect(()=>{
   if(!enabled||!token||!readyBoard||!routes.length)return;
   let active=true;
-  const stored=new Map(knownFeatures.map(f=>[selectedTripId(f),f]));
-  setLive({key,features:[...stored.values()]});
-  const missing=routes.filter(line=>line!==(ownFeature?routeOf(ownFeature):''));
-  void Promise.all(missing.map(async line=>{
-   const started=Date.now();
-   const context={stopId:selectedStopId,stopName:stop?.name??'',tripId:ownTripId,
-    endpoint:'/v2/vehiclepositions · routeShortName='+line};
-   const url=new URL('https://api.golemio.cz/v2/vehiclepositions');
-   url.searchParams.set('routeShortName',line);
-   url.searchParams.set('limit','1000');
-   try{
-    const response=await golemioJson<unknown>(url.toString(),token,20000,'low');
-    const fetched=collectFeatures(response);
-    recordNeighbourDiagnostic({...context,kind:'vehicle',at:Date.now(),
-     elapsedMs:Date.now()-started,counts:{positions:fetched.length},
-     note:active?'Vehicle positions decoded':'Result discarded after target change'});
-    if(!active)return;
-    for(const feature of fetched){
+  const ownLine=ownFeature?routeOf(ownFeature):'';
+  const initial=new Map(knownFeatures.map(f=>[selectedTripId(f),f]));
+  const toFetch:string[]=[];
+  for(const line of routes){
+   if(line===ownLine)continue;
+   const cache=vehicleCache.get(line);
+   if(cache&&Date.now()-cache.at<VEHICLE_TTL){
+    for(const feature of cache.features){
      const id=selectedTripId(feature);
-     if(id&&id!=='—')stored.set(id,feature);
+     if(id&&id!=='—')initial.set(id,feature);
     }
-    setLive({key,features:[...stored.values()]});
-   }catch(e){
-    recordNeighbourDiagnostic({...context,kind:'error',at:Date.now(),
-     elapsedMs:Date.now()-started,note:'Vehicle enrichment: '+
-      (e instanceof Error?e.message:String(e)).slice(0,300)});
+   }else toFetch.push(line);
+  }
+  setLive({key,features:[...initial.values()]});
+  if(!toFetch.length)return;
+  // Requests are bounded to three concurrent routes and published as a
+  // single complete snapshot. Late individual responses only warm the
+  // cache, never reshuffle the visible list part-way through the batch.
+  void (async()=>{
+   for(let start=0;start<toFetch.length;start+=3){
+    const batch=toFetch.slice(start,start+3);
+    const values=await Promise.all(batch.map(async line=>{
+     const started=Date.now();
+     const context={stopId:selectedStopId,stopName:stop?.name??'',
+      tripId:ownTripId,endpoint:'/v2/vehiclepositions · routeShortName='+line};
+     try{
+      const url=new URL('https://api.golemio.cz/v2/vehiclepositions');
+      url.searchParams.set('routeShortName',line);
+      url.searchParams.set('limit','1000');
+      const response=await golemioJson<unknown>(url.toString(),token,60000,'low');
+      const fetched=collectFeatures(response);
+      vehicleCache.set(line,{features:fetched,at:Date.now()});
+      recordNeighbourDiagnostic({...context,kind:'vehicle',at:Date.now(),
+       elapsedMs:Date.now()-started,counts:{positions:fetched.length},
+       note:'Vehiclepositions prepared as one coordinated batch'});
+      return fetched;
+     }catch(e){
+      recordNeighbourDiagnostic({...context,kind:'error',at:Date.now(),
+       elapsedMs:Date.now()-started,note:'Vehicle enrichment: '+
+        (e instanceof Error?e.message:String(e)).slice(0,300)});
+      return [] as Feature[];
+     }
+    }));
+    for(const group of values)for(const feature of group){
+     const id=selectedTripId(feature);
+     if(id&&id!=='—')initial.set(id,feature);
+    }
    }
-  }));
+   if(active)setLive({key,features:[...initial.values()]});
+  })();
   return()=>{active=false;};
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[enabled,token,key,routeKey,Math.floor(now/30000)]);
+ },[enabled,token,key,routeKey,Math.floor(now/60000)]);
 
  // Exact previous-stop comparison is only needed for the automatic
  // "new incoming line" trigger. It is deliberately NOT a prerequisite

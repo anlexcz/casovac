@@ -192,7 +192,25 @@ export function useHeadwayTimetables(args:{
     const batch=ids.slice(start,start+6);
     const values=await Promise.all(batch.map(id=>getDetail(id,date,token)));
     if(!alive)return;
-    batch.forEach((id,i)=>{if(values[i])details.set(id,values[i]!);});
+    batch.forEach((id,i)=>{
+     const detail=values[i];
+     if(!detail)return;
+     details.set(id,detail);
+     // Publish the usable same-line timetable as soon as it arrives.
+     // Previously NOTHING reached lineHeadways until all GTFS batches and
+     // optional cross-route terminal lookups had completed. On a 30-second
+     // candidate refresh the slow run could be abandoned before publication.
+     if(detail.route?.route_short_name===primaryLine){
+      const rawStops=parseStops(detail);
+      if(stopIdsOk(rawStops)){
+       const cacheKey=date+'|'+id;
+       if(!serviceCache.has(cacheKey)){
+        serviceCache.set(cacheKey,{stops:rawStops,at:Date.now()});
+        if(alive)setRevision(v=>v+1);
+       }
+      }
+     }
+    });
    }
    const selectedId=selectedTripId(selected);
    const selectedDetail=details.get(selectedId);
