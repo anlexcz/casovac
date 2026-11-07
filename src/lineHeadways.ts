@@ -3,6 +3,7 @@ import type {Feature} from './featureUtils.ts';
 import type {Stop} from './tripData.ts';
 import {relevantCorridor,assessCorridor} from './headwayCorridor.ts';
 import {foreignLineAtTransition} from './headwayLinkEligibility.ts';
+import {observationTimestamp} from './remoteTracking.ts';
 import type {HeadwayLink} from './headwayLinkEligibility.ts';
 
 export type HeadwayNeighbour={line:string;order:string;tripId:string;seconds:number;scheduledGap:number};
@@ -23,7 +24,7 @@ const stopSeconds=(value:string):number|null=>{
 const schedule=(stop:Stop):number|null=>stopSeconds(stop.arrival||stop.departure);
 const stopId=(feature:Feature):string=>String(path(feature,'properties.last_position.next_stop.id')??'');
 const live=(feature:Feature,now:number):boolean=>{
- const time=timestamp(path(feature,'properties.last_position.origin_timestamp'));
+ const time=observationTimestamp(feature);
  return (stateOfFeature(feature)==='on_track'||stateOfFeature(feature)==='at_stop')&&
   time!==null&&Math.abs(now-time)<=90000;
 };
@@ -36,7 +37,7 @@ const delaySeconds=(f:Feature):number|null=>{
 };
 const nextEta=(f:Feature):number|null=>{
  const next=path(f,'properties.last_position.next_stop');
- const scheduled=timestamp(path(next,'arrival_time')??path(next,'departure_time'));
+ const scheduled=timestamp(path(next,'arrival_time')??path(next,'departure_time')??path(next,'scheduled_arrival')??path(next,'scheduled_departure'));
  const delay=delaySeconds(f);
  return scheduled!==null&&delay!==null?scheduled+delay*1000:null;
 };
@@ -64,7 +65,7 @@ export function headwayEligiblePeers(
  const ownId=selectedTripId(selected),car=vehicleId(selected);
  return features.filter(f=>f!==selected&&(allowedRoutes?allowedRoutes.has(routeOf(f)):routeOf(f)===routeOf(selected))&&
   selectedTripId(f)!==ownId&&selectedTripId(f)!=='—'&&
-  vehicleId(f)!==car&&live(f,now)&&!!stopId(f)&&nextEta(f)!==null)
+  vehicleId(f)!==car&&live(f,now)&&!!stopId(f))
   .sort((a,b)=>distanceSq(a,selected)-distanceSq(b,selected))
   .slice(0,limit);
 }
@@ -93,7 +94,7 @@ export function calculateLineHeadways(args:{
  const result:LineHeadways={...EMPTY_HEADWAYS,checkedAt:now,decisions:[]};
  if(!selected||ownStops.length<3||!live(selected,now))return result;
  const ownEta=nextEta(selected),ownNextId=stopId(selected);
- if(ownEta===null||indexOfUnique(ownStops,ownNextId)<0)return result;
+ if(indexOfUnique(ownStops,ownNextId)<0)return result;
  for(const peer of headwayEligiblePeers(selected,features,stops,now,64,allowedRoutes)){
   const ownTripId=selectedTripId(peer);
   const schedulePeer=peerStops.get(ownTripId);
@@ -115,15 +116,27 @@ export function calculateLineHeadways(args:{
    note('Jiná linka: mimo ověřenou přechodovou konečnou');
    continue;
   }
-  const peerEta=nextEta(peer);
-  if(peerEta===null)continue;
+  // The live feed may omit next_stop scheduled timestamps. The verified GTFS
+  // schedule still provides the time; use it with live delay, never as a
+  // substitute for a missing delay or stale vehicle observation.
   const ownNext=schedule(ownStops[shared.ownIndex]);
   const ownRef=schedule(ownStops[shared.ownRef]);
   const peerNext=schedule(schedulePeer[shared.peerIndex]);
   const peerRef=schedule(schedulePeer[shared.peerRef]);
   if(ownNext===null||ownRef===null||peerNext===null||peerRef===null){note('Chybí plánovaný čas na společné zastávce');continue;}
-  const ownProjected=ownEta+(ownRef-ownNext)*1000;
-  const peerProjected=peerEta+(peerRef-peerNext)*1000;
+  const peerEta=nextEta(peer);
+  const projectedFromSchedule=(planned:number,delay:number|null):number|null=>{
+   if(delay===null)return null;
+   const local=new Date(now);
+   const midnight=new Date(local.getFullYear(),local.getMonth(),local.getDate()).getTime();
+   const options=[-1,0,1].map(day=>midnight+day*86400000+planned*1000+delay*1000);
+   return options.sort((a,b)=>Math.abs(a-now)-Math.abs(b-now))[0];
+  };
+  const ownBase=ownEta??projectedFromSchedule(ownNext,delaySeconds(selected));
+  const peerBase=peerEta??projectedFromSchedule(peerNext,delaySeconds(peer));
+  if(ownBase===null||peerBase===null){note('Chybí skutečná odchylka nebo čas polohy');continue;}
+  const ownProjected=ownBase+(ownRef-ownNext)*1000;
+  const peerProjected=peerBase+(peerRef-peerNext)*1000;
   // GTFS, NEVER live prediction, determines the preceding/following vehicle.
   // Compare schedules at exactly the same shared stop. Delays cannot swap sides.
   const plannedGap=ownRef-peerRef;
