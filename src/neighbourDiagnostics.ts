@@ -43,7 +43,8 @@ export function useNeighbourDiagnostics():NeighbourDiagnosticSnapshot{
 const obj=(value:unknown):Record<string,unknown>=>
  value!==null&&typeof value==='object'&&!Array.isArray(value)?
  value as Record<string,unknown>:{};
-const keys=(value:unknown):string[]=>Object.keys(obj(value)).slice(0,35);
+const SENSITIVE_KEY=/(api.?key|token|auth|cookie|secret|private|password|gps|latitude|longitude|coordinates|location|vehicle|headers|email|phone|user.?id|ip.?address)/i;
+const keys=(value:unknown):string[]=>Object.keys(obj(value)).filter(key=>!SENSITIVE_KEY.test(key)).slice(0,35);
 const SAFE_FIELDS=new Set([
  'id','trip_id','short_name','route_short_name','type',
  'is_canceled','scheduled','predicted','is_available','seconds',
