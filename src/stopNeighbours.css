@@ -1,0 +1,32 @@
+/* Single stopboard grid extension: no nested cards and no table headings. */
+.sn-panel{margin:0;padding:1px 8px 7px;border-bottom:1px solid #35414c;background:#20262d}
+.sn-rows{display:flex;flex-direction:column}
+.sn-row{display:grid;grid-template-columns:18px minmax(48px,auto) minmax(35px,1fr) 64px 47px;align-items:center;gap:7px;min-height:36px;padding:3px 5px;color:#d5dfe9;font-variant-numeric:tabular-nums}
+.sn-row+.sn-row{border-top:1px solid #ffffff0b}
+.sn-arrow{color:#a3b2be;font-size:21px;font-weight:700;text-align:center}
+.sn-arrow-before{color:#42c98a}
+.sn-arrow-after{color:#f36a70}
+.sn-arrow-same{color:#a7b3be}
+.sn-badge{background:#343e4a;border:1px solid #46525f;border-radius:4px;padding:2px 5px;font-size:12px;font-weight:650;white-space:nowrap;width:max-content}
+.sn-vehicle{font-size:12px;color:#9baab8;white-space:nowrap}
+.sn-delay{font-size:12px;font-weight:450;text-align:right;color:#adb9c4;white-space:nowrap}
+.sn-time{font-size:17px;font-weight:750;text-align:right;color:#f2f6fa;white-space:nowrap}
+.sn-own{background:#ffffff09;border-radius:4px}
+.sn-own .sn-badge{background:#3c444e}
+.sn-own .sn-time{color:#fff}
+.sn-tone-good{color:#4dd094!important}
+.sn-tone-risk{color:#f47779!important}
+.sn-tone-uncertain{color:#f5b45c!important}
+.sn-tone-neutral{color:#aab8c6}
+.sn-stale{opacity:.63;font-style:italic}
+.sn-status{margin:0;padding:10px 6px;font-size:12px;color:#9babb9}
+.sn-updating{font-size:11px;color:#8699a9;padding-left:6px}
+.neighbourSettingsGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.neighbourSettingsGrid label{min-width:0;font-size:12px}
+.neighbourSettingsGrid input{width:100%;box-sizing:border-box}
+@media(max-width:370px){.sn-row{gap:4px;grid-template-columns:16px minmax(44px,auto) minmax(30px,1fr) 57px 42px}.sn-badge{padding:2px 4px}.sn-panel{padding-left:5px;padding-right:5px}}
+
+/* Only new rows animate. Existing keyed rows update their values in place. */
+.sn-rows>.sn-row:not(.sn-own){animation:sn-appear 220ms ease-out both}
+@keyframes sn-appear{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.sn-rows>.sn-row:not(.sn-own){animation:none}}

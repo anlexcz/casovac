@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useState} from 'react';
 
-export type Stop = {id:string;name:string;sequence:number;arrival:string;departure:string;lat:number|null;lon:number|null};
+export type Stop = {id:string;name:string;sequence:number;arrival:string;departure:string;lat:number|null;lon:number|null;platformCode?:string};
 type RecordValue=Record<string,unknown>;
 const get=(value:unknown,path:string):unknown=>path.split('.').reduce<unknown>((v,key)=>v&&typeof v==='object'?(v as RecordValue)[key]:undefined,value);
 const first=(object:unknown,keys:string[])=>keys.map(key=>get(object,key)).find(value=>value!==undefined&&value!==null&&value!=='');
@@ -32,7 +32,8 @@ export function parseStops(data:unknown):Stop[]{
       arrival:txt(first(item,['arrival_time','arrivalTime','arrival.time','properties.arrival_time'])),
       departure:txt(first(item,['departure_time','departureTime','departure.time','properties.departure_time'])),
       lat:num(first(item,['stop_lat','lat','stop.lat','properties.stop_lat'])??point[1]),
-      lon:num(first(item,['stop_lon','lon','stop.lon','properties.stop_lon'])??point[0])
+      lon:num(first(item,['stop_lon','lon','stop.lon','properties.stop_lon'])??point[0]),
+      platformCode:txt(first(item,['platform_code','platformCode','stop.platform_code','stop.platformCode','properties.platform_code'])??first(stop,['platform_code','platformCode','properties.platform_code']))
     };
   }).sort((a,b)=>a.sequence-b.sequence);
 }

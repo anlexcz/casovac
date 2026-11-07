@@ -21,6 +21,9 @@ import {useVehicleTracking} from './useVehicleTracking';
 import {useGpsTracking} from './useGpsTracking';
 import {calculateLineHeadways} from './lineHeadways';
 import {useHeadwayTimetables} from './useHeadwayTimetables';
+import {useStopNeighbours} from './useStopNeighbours';
+import {DEFAULT_NEIGHBOUR_SETTINGS} from './stopNeighbours';
+import type {NeighbourSettings} from './stopNeighbours';
 export {vehicleId} from './featureUtils';
 
 
@@ -38,6 +41,18 @@ export function useAppController(){
  const [active,setActive]=useState<[string,string]|null>(()=>stored(TOKEN_KEY)?recentTracking():null);
  const [diagnostics,setDiagnostics]=useState(false);
  const [showHeadways,setShowHeadways]=useState(()=>stored('casovac:show-headways:v1')==='true');
+ const [neighbourSettings,setNeighbourSettings]=useState<NeighbourSettings>(()=>{
+  try{
+   const json=JSON.parse(stored('casovac:neighbour-settings:v1')) as Partial<NeighbourSettings>;
+   return {...DEFAULT_NEIGHBOUR_SETTINGS,...json};
+  }catch{return DEFAULT_NEIGHBOUR_SETTINGS;}
+ });
+ const [neighbourIndex,setNeighbourIndex]=useState<number|null>(null);
+ const [pinnedAutoNeighbour,setPinnedAutoNeighbour]=useState<{tripId:string;index:number}|null>(null);
+ useEffect(()=>{save('casovac:neighbour-settings:v1',JSON.stringify(neighbourSettings));},[neighbourSettings]);
+ const updateNeighbourSettings=(patch:Partial<NeighbourSettings>)=>
+  setNeighbourSettings(old=>({...old,...patch}));
+
  useEffect(()=>{save('casovac:show-headways:v1',showHeadways?'true':'false');},[showHeadways]);
  const [selectedTrip,setSelectedTrip]=useState('');
  const [manual,setManual]=useState<number|null>(null);
@@ -180,6 +195,32 @@ export function useAppController(){
  const visualLine=atChainBoundary?plannedHandoff.next.line:active?.[0]??'';
  const visualOrder=atChainBoundary?(plannedHandoff.next.order||active?.[1]||''):active?.[1]??'';
  const visualDestination=atChainBoundary?nextTrip.headsign||destination:destination;
+ // Prepare the next shared platform before reaching its junction.
+ // The detection uses the current live deviation but never changes the
+ // timetable-based ordering of other vehicles.
+ const nextNeighbourIndex=displayedIndex===null?null:
+  displayedIndex+1<trip.stops.length?displayedIndex+1:null;
+ const nextNeighbourStop=nextNeighbourIndex===null?null:trip.stops[nextNeighbourIndex];
+ const nextNeighbourSchedule=nextNeighbourStop?.arrival||nextNeighbourStop?.departure||'';
+ const liveDelayRaw=path(chosen,'properties.last_position.delay.actual');
+ const liveDelaySeconds=typeof liveDelayRaw==='number'&&Number.isFinite(liveDelayRaw)&&Math.abs(liveDelayRaw)<3600?liveDelayRaw:0;
+ const nextNeighbourCountdown=nextNeighbourSchedule?countdownSeconds(nextNeighbourSchedule,now):null;
+ const nextNeighbourEta=nextNeighbourCountdown===null?null:nextNeighbourCountdown+liveDelaySeconds;
+ const autoNeighbourReady=nextNeighbourEta!==null&&nextNeighbourEta>=-30&&
+  nextNeighbourEta<=neighbourSettings.autoOpenSeconds;
+ // Start loading online stop data earlier than the sheet animation.
+ const autoNeighbourIndex=nextNeighbourIndex!==null&&nextNeighbourEta!==null&&
+  nextNeighbourEta>=-30&&nextNeighbourEta<=Math.max(180,neighbourSettings.autoOpenSeconds+90)?
+   nextNeighbourIndex:displayedIndex;
+ const effectivePinnedAutoIndex=pinnedAutoNeighbour?.tripId===tripId&&
+  displayedIndex!==null&&displayedIndex<=pinnedAutoNeighbour.index?
+  pinnedAutoNeighbour.index:null;
+ const effectiveAutoNeighbourIndex=effectivePinnedAutoIndex??autoNeighbourIndex;
+ const stopNeighbours=useStopNeighbours({
+  enabled:neighbourSettings.enabled&&!!active,token:token.trim(),now,
+  ownFeature:chosen,ownTripId:tripId,stops:trip.stops,knownFeatures:features,currentIndex:displayedIndex,
+  requestedIndex:neighbourIndex??effectiveAutoNeighbourIndex,settings:neighbourSettings
+ });
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
  const highlightedTime=highlightedStop?.departure||highlightedStop?.arrival||'';
  const highlightedRemaining=terminalWaiting?terminalCountdown:
@@ -221,7 +262,7 @@ export function useAppController(){
   const parsed=parseOrder(value);if(!parsed){setError('Zadej linku a pořadí, například 25/5.');return;}
   if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v Nastavení.');return;}
   setQuery(parsed[0]+'/'+parsed[1]);
-  setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);setLastHandoff(null);handoffFallbackRef.current=null;
+  setNeighbourIndex(null);setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);setLastHandoff(null);handoffFallbackRef.current=null;
   // Reuse the already retrieved line snapshot immediately on selection.
   // The running timer shares its Golemio URL and its 20-second cache.
   if(lookup.line===parsed[0]&&lookup.items.length){
@@ -234,8 +275,9 @@ export function useAppController(){
   setActive(parsed);
  }
  function forget(){
+  setNeighbourIndex(null);
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
- function chooseTrip(id:string){setSelectedTrip(id);setManual(null);}
- return {showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ function chooseTrip(id:string){setNeighbourIndex(null);setSelectedTrip(id);setManual(null);}
+ return {neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }

@@ -5,7 +5,7 @@ import {chainBoard} from './chainStops';
 
 type Props={
  stops:Stop[];index:number|null;tripId:string;remaining:number|null;terminalWaiting:boolean;
- expanded:boolean;onExpand:()=>void;onChoose:(index:number)=>void;animate:boolean;
+ expanded:boolean;onExpand:()=>void;onOpenStop:(index:number)=>void;onChoose:(index:number)=>void;animate:boolean;
  continuation:{line:string;order:string;stops:Stop[]}|null;
  predecessor:{line:string;order:string;stops:Stop[]}|null;
  activeLine:string;visualBoundary:boolean;
@@ -19,7 +19,18 @@ type Snapshot={
  trip:string;index:number;rects:Map<number,DOMRect>;
  previousName:string;previousTime:string;previousOffset:string;
 };
-export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate,continuation,predecessor,activeLine,visualBoundary}:Props){
+export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onOpenStop,onChoose,animate,continuation,predecessor,activeLine,visualBoundary}:Props){
+ const heldStop=useRef(false);
+ const heldTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+ const cancelHold=()=>{if(heldTimer.current!==null)clearTimeout(heldTimer.current);heldTimer.current=null;};
+ const beginHold=(i:number)=>{
+  cancelHold();heldStop.current=false;
+  heldTimer.current=setTimeout(()=>{heldStop.current=true;onChoose(i);},600);
+ };
+ const openUnlessHeld=(i:number)=>{
+  if(heldStop.current){heldStop.current=false;return;}
+  onOpenStop(i);
+ };
  const stack=useRef<HTMLDivElement|null>(null);
  const activeCard=useRef<HTMLDivElement|null>(null);
  const previous=useRef<Snapshot|null>(null);
@@ -98,7 +109,10 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
  },[currentIndex,tripId,stops,expanded,animate,terminalWaiting]);
  if(!current)return null;
  return <div className="boardStack" ref={stack}>
-  <div ref={activeCard} className={'activeDeparture '+clock}>
+  <div ref={activeCard} className={'activeDeparture '+clock+' sb-current-interactive'}
+   role="button" tabIndex={0} aria-label={'Zobrazit okolní spoje: '+current.name}
+   onClick={()=>onOpenStop(index!)}
+   onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpenStop(index!);}}}>
    <span className="activeStopName">{current.name}</span>
    <span className="departureNumbers">
     <span className="liveOffset" aria-label="Časový rozdíl vůči jízdnímu řádu">{signed(remaining)}</span>
@@ -116,8 +130,11 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
        <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
       </div>
      ):(
-      <button type="button" className="upcomingButton" onClick={()=>onChoose(localIndex)}
-       title="Vybrat zastávku">
+      <button type="button" className="upcomingButton" onClick={()=>openUnlessHeld(localIndex)}
+       onPointerDown={()=>beginHold(localIndex)} onPointerUp={cancelHold}
+       onPointerCancel={cancelHold} onPointerLeave={cancelHold}
+       onContextMenu={e=>{e.preventDefault();cancelHold();onChoose(localIndex);}}
+       title={'Okolní spoje: '+stop.name+' (podržet pro ruční výběr zastávky)'}>
        <span className="upcomingName">{stop.name}</span>
        <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
       </button>

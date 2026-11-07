@@ -1,3 +1,7 @@
+import {useEffect,useState} from 'react';
+import {useNeighbourIdleTimeout} from './useNeighbourIdleTimeout';
+import {isAutoStopActive} from './autoStopSheet';
+import StopNeighbourSheet from './StopNeighbourSheet';
 import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
 import {formatHeadway} from './lineHeadways';
@@ -5,7 +9,46 @@ import {chooserStop} from './chooserStops';
 import {useAppController,parseOrder,vehicleId} from './useAppController';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+ const [dismissedStop,setDismissedStop]=useState('');
+ const sheetIndex=neighbourIndex??autoNeighbourIndex;
+ const sheetStop=sheetIndex===null?null:trip.stops[sheetIndex]??null;
+ const sheetKey=tripId+'|'+(sheetStop?.id??String(sheetIndex??''));
+ const hasNearby=(stopNeighbours.result?.rows.length??0)>0;
+ // The live-data criteria decide WHEN to open, not whether an already
+ // opened automatic sheet should stay on screen. Delays and API refreshes
+ // must not make it disappear during the same stop.
+ const pinnedActive=isAutoStopActive(pinnedAutoNeighbour,tripId,displayedIndex,trip.stops.length);
+ const eligibleAuto=neighbourSettings.enabled&&neighbourSettings.mode!=='off'&&
+  neighbourIndex===null&&sheetIndex!==null&&sheetStop!==null&&
+  dismissedStop!==sheetKey&&hasNearby&&
+  (autoNeighbourIndex===displayedIndex||autoNeighbourReady)&&
+  (neighbourSettings.mode==='all'||!!stopNeighbours.result?.significant);
+ const autoOpen=neighbourIndex===null&&dismissedStop!==sheetKey&&
+  (pinnedActive||eligibleAuto);
+ const sheetOpen=neighbourSettings.enabled&&!diagnostics&&!settings&&
+  (neighbourIndex!==null||autoOpen);
+ useEffect(()=>{
+  if(!eligibleAuto||sheetIndex===null||neighbourIndex!==null||pinnedActive)return;
+  setPinnedAutoNeighbour({tripId,index:sheetIndex});
+ },[eligibleAuto,sheetIndex,neighbourIndex,tripId,pinnedActive,setPinnedAutoNeighbour]);
+ useEffect(()=>{
+  // When the highlighted stop advances, release the old automatic panel.
+  if(!pinnedAutoNeighbour)return;
+  if(isAutoStopActive(pinnedAutoNeighbour,tripId,displayedIndex,trip.stops.length))return;
+  setPinnedAutoNeighbour(null);
+ },[pinnedAutoNeighbour,tripId,displayedIndex,trip.stops.length,setPinnedAutoNeighbour]);
+ const closeNeighbourSheet=()=>{
+  setDismissedStop(sheetKey);
+  setNeighbourIndex(null);
+  setPinnedAutoNeighbour(null);
+ };
+ const openStopSheet=(i:number)=>{setNeighbourIndex(i);};
+ const manualSheet=neighbourSettings.enabled&&neighbourIndex!==null&&!settings&&!diagnostics;
+ const manualIdle=useNeighbourIdleTimeout(
+  manualSheet,tripId+'|'+String(neighbourIndex),neighbourSettings.manualCloseSeconds,
+  closeNeighbourSheet
+ );
  return <main className="appShell">
   <header className="topbar">
    <div><h1>ČASOVAČ<span className="dot">.</span></h1></div>
@@ -72,8 +115,9 @@ export default function AppView({showHeadways,setShowHeadways,headways,visualLin
     {highlightedStop&&displayedIndex!==null?
      <StopBoard stops={trip.stops} index={displayedIndex} tripId={tripId} remaining={highlightedRemaining}
       terminalWaiting={terminalWaiting} expanded={expanded} onExpand={()=>setExpanded(v=>!v)}
-      onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}
+      onOpenStop={openStopSheet} onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}
       activeLine={active[0]} visualBoundary={atChainBoundary}
+
       continuation={continuity.ok&&plannedHandoff&&nextTrip.tripId===plannedHandoff.next.tripId?
        {line:plannedHandoff.next.line,order:plannedHandoff.next.order,stops:nextTrip.stops}:null}
       predecessor={continuity.ok&&previousPartner&&previousTrip.tripId===previousPartner.tripId?
@@ -83,6 +127,17 @@ export default function AppView({showHeadways,setShowHeadways,headways,visualLin
        'Poslední vůz #'+lastSeen.vehicle+' · '+new Date(lastSeen.lastSeenAt).toLocaleTimeString('cs-CZ'):error?'Data jsou dočasně nedostupná':'Pořadí nenalezeno'}
       </div>}
   </section>}
+  {active&&<StopNeighbourSheet open={sheetOpen}
+   stopKey={sheetKey} name={sheetStop?.name??''} platformCode={sheetStop?.platformCode??''}
+   data={stopNeighbours.result} updatedAt={stopNeighbours.updatedAt}
+   colourOrder={neighbourSettings.colourOrder} tolerance={neighbourSettings.orderToleranceSeconds}
+   hysteresis={neighbourSettings.orderHysteresisSeconds}
+   loading={stopNeighbours.loading} error={stopNeighbours.error}
+   ownLine={visualLine} ownOrder={visualOrder}
+   ownVehicle={chosen?vehicleId(chosen):lastSeen?.vehicle??''}
+   remainingSeconds={manualSheet?manualIdle.remaining:null}
+   onInteraction={manualIdle.reset}
+   onClose={closeNeighbourSheet}/>}
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
 
   <div className={diagnostics?'diagnosticVisible':'diagnosticHidden'}><div className="diagHeading"><h2>Diagnostika</h2><button onClick={()=>setDiagnostics(false)} className="quiet">Zavřít</button></div>
@@ -109,6 +164,69 @@ export default function AppView({showHeadways,setShowHeadways,headways,visualLin
     <div className="settingsSectionHeading">Zobrazení</div>
     <label className="rememberOption"><input type="checkbox" checked={showHeadways} onChange={e=>setShowHeadways(e.target.checked)}/><span>Zobrazovat rozestupy spojů</span></label>
     <p className="hint">Malé údaje ↑ předchozí a ↓ následující spoj. Pouze při spolehlivých živých datech a na společné části trasy. Nastavení se ukládá v tomto prohlížeči.</p>
+    <div className="settingsSectionHeading">Okolní spoje na stejné nástupní hraně</div>
+    <label className="rememberOption"><input type="checkbox" checked={neighbourSettings.enabled}
+     onChange={e=>updateNeighbourSettings({enabled:e.target.checked})}/>
+     <span>Zobrazovat okolní spoje u zastávek</span></label>
+    <label htmlFor="neighbourLead">Automaticky otevřít před příjezdem (sekundy)</label>
+    <input id="neighbourLead" type="number" min="30" max="180" step="10"
+     value={neighbourSettings.autoOpenSeconds}
+     onChange={e=>updateNeighbourSettings({autoOpenSeconds:Math.max(30,Math.min(180,Number(e.target.value)||90))})}/>
+    <label htmlFor="neighbourManualTimeout">Automaticky zavřít ručně otevřený panel</label>
+    <select id="neighbourManualTimeout" value={neighbourSettings.manualCloseSeconds}
+     onChange={e=>updateNeighbourSettings({manualCloseSeconds:Number(e.target.value)})}>
+     <option value={0}>Nikdy</option>
+     <option value={15}>Po 15 sekundách</option>
+     <option value={30}>Po 30 sekundách</option>
+     <option value={45}>Po 45 sekundách</option>
+     <option value={60}>Po 60 sekundách</option>
+     <option value={90}>Po 90 sekundách</option>
+     <option value={120}>Po 120 sekundách</option>
+     <option value={180}>Po 180 sekundách</option>
+    </select>
+    <label htmlFor="neighbourAuto">Automatické rozbalení</label>
+    <select id="neighbourAuto" value={neighbourSettings.mode}
+     onChange={e=>updateNeighbourSettings({mode:e.target.value as typeof neighbourSettings.mode})}>
+     <option value="off">Vypnuto, pouze ručně</option>
+     <option value="important">Jen významné zastávky</option>
+     <option value="all">Všechny zastávky s blízkými spoji</option>
+    </select>
+    <label htmlFor="neighbourWindow">Časové okno</label>
+    <select id="neighbourWindow" value={neighbourSettings.window}
+     onChange={e=>updateNeighbourSettings({window:e.target.value as typeof neighbourSettings.window})}>
+     <option value="auto">Automatické podle vzdálenosti</option>
+     <option value="manual">Vlastní</option>
+    </select>
+    {neighbourSettings.window==='manual'&&<div className="neighbourSettingsGrid">
+     <label>Před příjezdem (min)
+      <input type="number" min="0" max="20" step="1" value={neighbourSettings.beforeMinutes}
+       onChange={e=>updateNeighbourSettings({beforeMinutes:Math.max(0,Math.min(20,Number(e.target.value)||0))})}/>
+     </label>
+     <label>Po příjezdu (min)
+      <input type="number" min="0" max="20" step="1" value={neighbourSettings.afterMinutes}
+       onChange={e=>updateNeighbourSettings({afterMinutes:Math.max(0,Math.min(20,Number(e.target.value)||0))})}/>
+     </label>
+    </div>}
+    <div className="settingsSectionHeading">Vyhodnocení pořadí dle aktuální odchylky</div>
+    <label className="rememberOption"><input type="checkbox" checked={neighbourSettings.colourOrder}
+     onChange={e=>updateNeighbourSettings({colourOrder:e.target.checked})}/>
+     <span>Barevně hodnotit pravděpodobné pořadí</span></label>
+    <label htmlFor="neighbourTolerance">Tolerance blízkých příjezdů (sekundy)</label>
+    <input id="neighbourTolerance" type="number" min="0" max="120" step="5"
+     value={neighbourSettings.orderToleranceSeconds}
+     onChange={e=>updateNeighbourSettings({orderToleranceSeconds:
+      Math.max(0,Math.min(120,Number(e.target.value)||0))})}/>
+    <label htmlFor="neighbourHysteresis">Hysterze změny barvy (sekundy)</label>
+    <input id="neighbourHysteresis" type="number" min="0" max="30" step="5"
+     value={neighbourSettings.orderHysteresisSeconds}
+     onChange={e=>updateNeighbourSettings({orderHysteresisSeconds:
+      Math.max(0,Math.min(30,Number(e.target.value)||0))})}/>
+    <label htmlFor="neighbourLookahead">Ruční zobrazení: kolik zastávek dopředu</label>
+    <input id="neighbourLookahead" type="number" min="1" max="10" step="1"
+     value={neighbourSettings.lookahead} onChange={e=>updateNeighbourSettings({
+      lookahead:Math.max(1,Math.min(10,Number(e.target.value)||1))
+     })}/>
+    <p className="hint">Spoje se filtrují podle očekávaného příjezdu, ale řadí výhradně podle JŘ. Používá se přesné ID nástupní hrany. Aktualizace nevyžaduje restart sledování.</p>
     <button className="quiet full" disabled={!token} onClick={forget}>Zapomenout API klíč</button>
     <button className="primary full" onClick={()=>setSettings(false)}>Hotovo</button>
    </div>
