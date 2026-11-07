@@ -76,6 +76,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
       activeLine={active[0]} visualBoundary={atChainBoundary}
       neighbours={stopNeighbours.result} neighbourLoading={stopNeighbours.loading} neighbourError={stopNeighbours.error}
       neighbourSettings={neighbourSettings} neighbourIndex={neighbourIndex} setNeighbourIndex={setNeighbourIndex}
+      ownOrder={visualOrder} ownVehicle={chosen?vehicleId(chosen):lastSeen?.vehicle??''}
       continuation={continuity.ok&&plannedHandoff&&nextTrip.tripId===plannedHandoff.next.tripId?
        {line:plannedHandoff.next.line,order:plannedHandoff.next.order,stops:nextTrip.stops}:null}
       predecessor={continuity.ok&&previousPartner&&previousTrip.tripId===previousPartner.tripId?
