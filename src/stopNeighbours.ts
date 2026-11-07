@@ -16,7 +16,7 @@ export type NeighbourRow={
  relative:'before'|'same'|'after';predictedDifference:number;
  previousId:string;nextId:string;
 };
-export type NeighbourResult={rows:NeighbourRow[];significant:boolean;stopId:string;ownSchedule:string};
+export type NeighbourResult={rows:NeighbourRow[];significant:boolean;stopId:string;ownSchedule:string;ownDelay:number|null};
 const serviceSeconds=(text:string):number|null=>{
  const m=/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(text);
  if(!m||Number(m[2])>59||Number(m[3]??0)>59)return null;
@@ -46,15 +46,14 @@ export function calculateStopNeighbours(args:{
 }):NeighbourResult{
  const {ownTripId,ownStops,ownIndex,ownFeature,candidates,candidateStops,now,settings,distance}=args;
  const own=ownStops[ownIndex];
- const empty={rows:[],significant:false,stopId:own?.id??'',ownSchedule:own?schedule(own):''};
+ const empty={rows:[],significant:false,stopId:own?.id??'',ownSchedule:own?schedule(own):'',ownDelay:null};
  if(!own?.id||!ownFeature)return empty;
  const ownTime=serviceSeconds(schedule(own)),ownDelay=delay(ownFeature);
  if(ownTime===null||ownDelay===null)return empty;
  const win=relevantWindows(settings,distance);
  const rows:NeighbourRow[]=[];
- const neighbours=new Set<string>();
+ let incomingBranch=false;
  const ownPrevious=ownStops[ownIndex-1]?.id??'';
- const ownNext=ownStops[ownIndex+1]?.id??'';
  const seen=new Set<string>();
  for(const f of candidates){
   const id=selectedTripId(f),car=vehicleId(f),state=stateOfFeature(f);
@@ -77,7 +76,7 @@ export function calculateStopNeighbours(args:{
   const predictedDifference=targetTime+peerDelay-(ownTime+ownDelay);
   if(predictedDifference< -win.before||predictedDifference>win.after)continue;
   const prev=stops[index-1]?.id??'',next=stops[index+1]?.id??'';
-  if(prev!==ownPrevious||next!==ownNext)neighbours.add(prev+'|'+next);
+  if(prev!==ownPrevious)incomingBranch=true;
   rows.push({
    tripId:id,line:routeOf(f),order:String(orderOf(f)??'?'),vehicle:car==='—'?'':car,
    scheduled:schedule(stops[index]),scheduledSeconds:targetTime,delay:peerDelay,
@@ -90,7 +89,7 @@ export function calculateStopNeighbours(args:{
   a.line.localeCompare(b.line, 'cs')||a.order.localeCompare(b.order,'cs'));
  // Significance is tied to a real, near-time service using a different
  // incoming or outgoing stop, not simply to many lines sharing the platform.
- return {rows,significant:neighbours.size>0,stopId:own.id,ownSchedule:schedule(own)};
+ return {rows,significant:incomingBranch,stopId:own.id,ownSchedule:schedule(own),ownDelay};
 }
 export function formatNeighbourDelay(value:number):string{
  const abs=Math.abs(value);
