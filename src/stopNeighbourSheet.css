@@ -50,3 +50,10 @@
 .sn-sheet-refresh{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:30px;color:#91a3b3;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .sn-sheet-refresh-label{color:#8193a4;font-size:10px;letter-spacing:.2px;text-transform:uppercase}
 .sn-sheet-refresh.sn-refresh-error{color:#ec8a85}
+
+/* Icons distinguish data age from the optional manual close timer. */
+.sn-sheet-refresh,.sn-sheet-countdown{gap:5px;font-variant-numeric:tabular-nums}
+.sn-sheet-refresh svg{color:#76b9be;flex:0 0 15px}
+.sn-sheet-countdown svg{color:#a9b7c6;flex:0 0 15px}
+.sn-sheet-close{margin-left:2px}
+@media(max-width:390px){.sn-sheet-header{gap:7px;padding-left:11px;padding-right:9px}.sn-sheet-refresh,.sn-sheet-countdown{font-size:11px;gap:3px}.sn-sheet-close{width:34px;height:34px;flex-basis:34px}}
