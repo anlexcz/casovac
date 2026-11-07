@@ -1,10 +1,12 @@
 import {path,routeOf,selectedTripId,vehicleId,stateOfFeature,orderOf} from './featureUtils.ts';
 import type {Feature} from './featureUtils.ts';
 import type {Stop} from './tripData.ts';
+import {relevantCorridor,assessCorridor} from './headwayCorridor.ts';
 
 export type HeadwayNeighbour={line:string;order:string;tripId:string;seconds:number;scheduledGap:number};
-export type LineHeadways={aheadSeconds:number|null;behindSeconds:number|null;ahead:HeadwayNeighbour|null;behind:HeadwayNeighbour|null;checkedAt:number;matched:number};
-export const EMPTY_HEADWAYS:LineHeadways={aheadSeconds:null,behindSeconds:null,ahead:null,behind:null,checkedAt:0,matched:0};
+export type HeadwayDecision={line:string;order:string;tripId:string;reason:string;direction:'ahead'|'behind'|null;plannedGap:number|null};
+export type LineHeadways={aheadSeconds:number|null;behindSeconds:number|null;ahead:HeadwayNeighbour|null;behind:HeadwayNeighbour|null;checkedAt:number;matched:number;decisions:HeadwayDecision[]};
+export const EMPTY_HEADWAYS:LineHeadways={aheadSeconds:null,behindSeconds:null,ahead:null,behind:null,checkedAt:0,matched:0,decisions:[]};
 
 const timestamp=(value:unknown):number|null=>{
  if(typeof value!=='string'||!value)return null;
@@ -54,7 +56,7 @@ const distanceSq=(a:Feature,b:Feature):number=>{
  * Their full static GTFS stop sequences are resolved asynchronously.
  */
 export function headwayEligiblePeers(
- selected:Feature|null,features:Feature[],_stops:Stop[],now:number,limit=24,allowedRoutes?:ReadonlySet<string>
+ selected:Feature|null,features:Feature[],_stops:Stop[],now:number,limit=64,allowedRoutes?:ReadonlySet<string>
 ):Feature[]{
  if(!selected||!live(selected,now))return [];
  const ownId=selectedTripId(selected),car=vehicleId(selected);
@@ -71,22 +73,7 @@ export function headwayEligiblePeers(
 export function sharedReference(
  own:Stop[],peer:Stop[],ownNextId:string,peerNextId:string
 ):{ownIndex:number;peerIndex:number;ownRef:number;peerRef:number}|null{
- const ownIndex=indexOfUnique(own,ownNextId),peerIndex=indexOfUnique(peer,peerNextId);
- if(ownIndex<0||peerIndex<0)return null;
- const intersections=own.flatMap((stop,i)=>{
-  const j=indexOfUnique(peer,stop.id);
-  return j<0?[]:[{i,j}];
- });
- // A shared stop by itself is insufficient to prove the same direction.
- const nearby=intersections.filter(p=>Math.abs(p.i-ownIndex)<=10&&Math.abs(p.j-peerIndex)<=10);
- if(nearby.length<2)return null;
- const sorted=[...nearby].sort((a,b)=>a.i-b.i);
- if(!sorted.some((p,i)=>sorted.slice(i+1).some(q=>q.j>p.j)))return null;
- // Reject intersections in inconsistent order (loops or opposite travel).
- if(sorted.some((p,i)=>i>0&&p.j<=sorted[i-1].j))return null;
- const best=[...nearby].sort((a,b)=>Math.abs(a.i-ownIndex)-Math.abs(b.i-ownIndex)||
-  Math.abs(a.j-peerIndex)-Math.abs(b.j-peerIndex))[0];
- return {ownIndex,peerIndex,ownRef:best.i,peerRef:best.j};
+ return relevantCorridor(own,peer,ownNextId,peerNextId);
 }
 /**
  * Estimate temporal spacing at ONE shared reference stop.
@@ -100,31 +87,35 @@ export function calculateLineHeadways(args:{
 }):LineHeadways{
  const {selected,features,stops,peerStops,now,allowedRoutes}=args;
  const ownStops=peerStops.get(selected?selectedTripId(selected):'')??stops;
- const result:LineHeadways={...EMPTY_HEADWAYS,checkedAt:now};
+ const result:LineHeadways={...EMPTY_HEADWAYS,checkedAt:now,decisions:[]};
  if(!selected||ownStops.length<3||!live(selected,now))return result;
  const ownEta=nextEta(selected),ownNextId=stopId(selected);
  if(ownEta===null||indexOfUnique(ownStops,ownNextId)<0)return result;
- for(const peer of headwayEligiblePeers(selected,features,stops,now,24,allowedRoutes)){
+ for(const peer of headwayEligiblePeers(selected,features,stops,now,64,allowedRoutes)){
   const ownTripId=selectedTripId(peer);
   const schedulePeer=peerStops.get(ownTripId);
-  if(!schedulePeer?.length)continue;
-  const shared=sharedReference(ownStops,schedulePeer,ownNextId,stopId(peer));
-  if(!shared)continue;
+  const note=(reason:string,direction:'ahead'|'behind'|null=null,plannedGap:number|null=null)=>{
+   result.decisions.push({line:routeOf(peer),order:String(orderOf(peer)??''),tripId:ownTripId,reason,direction,plannedGap});
+  };
+  if(!schedulePeer?.length){note('Jízdní řád kandidáta není dostupný');continue;}
+  const assessed=assessCorridor(ownStops,schedulePeer,ownNextId,stopId(peer));
+  const shared=assessed.reference;
+  if(!shared){note('Koridor: '+assessed.reason);continue;}
   const peerEta=nextEta(peer);
   if(peerEta===null)continue;
   const ownNext=schedule(ownStops[shared.ownIndex]);
   const ownRef=schedule(ownStops[shared.ownRef]);
   const peerNext=schedule(schedulePeer[shared.peerIndex]);
   const peerRef=schedule(schedulePeer[shared.peerRef]);
-  if(ownNext===null||ownRef===null||peerNext===null||peerRef===null)continue;
+  if(ownNext===null||ownRef===null||peerNext===null||peerRef===null){note('Chybí plánovaný čas na společné zastávce');continue;}
   const ownProjected=ownEta+(ownRef-ownNext)*1000;
   const peerProjected=peerEta+(peerRef-peerNext)*1000;
   // GTFS, NEVER live prediction, determines the preceding/following vehicle.
   // Compare schedules at exactly the same shared stop. Delays cannot swap sides.
   const plannedGap=ownRef-peerRef;
-  if(!plannedGap||Math.abs(plannedGap)>90*60)continue;
+  if(!plannedGap||Math.abs(plannedGap)>90*60){note('Nulový nebo příliš vzdálený plánovaný rozestup',null,plannedGap);continue;}
   const liveGap=Math.round((ownProjected-peerProjected)/1000);
-  if(!Number.isFinite(liveGap)||Math.abs(liveGap)>90*60)continue;
+  if(!Number.isFinite(liveGap)||Math.abs(liveGap)>90*60){note('Neplatný nebo příliš vzdálený živý rozestup',null,plannedGap);continue;}
   const neighbour:HeadwayNeighbour={
    line:routeOf(peer),order:String(orderOf(peer)??''),tripId:selectedTripId(peer),
    seconds:plannedGap>0?Math.max(0,liveGap):Math.max(0,-liveGap),
@@ -138,6 +129,7 @@ export function calculateLineHeadways(args:{
   if(plannedGap<0&&(!result.behind||neighbour.scheduledGap<result.behind.scheduledGap)){
    result.behind=neighbour;
   }
+  note('Vhodný spoj',plannedGap>0?'ahead':'behind',plannedGap);
   result.matched++;
  }
  result.aheadSeconds=result.ahead?.seconds??null;

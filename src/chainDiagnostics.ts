@@ -12,7 +12,6 @@ export type ChainSnapshot={
   primary:ChainTrip[];related:ChainTrip[];relatedTotal:number;
   error:string;loading:boolean;
 };
-const pairs:Record<string,string>={'5':'6','6':'5','9':'10','10':'9'};
 const vehicle=(f:Feature)=>{const id=vehicleId(f);return id==='—'?'':id;};
 const summarize=(f:Feature,source:string):ChainTrip=>({
  line:routeOf(f),
@@ -25,14 +24,14 @@ const summarize=(f:Feature,source:string):ChainTrip=>({
  rawTrip:rawTripOf(f),source
 });
 export function useChainDiagnostics(args:{
-  active:[string,string]|null;knownVehicle:string;token:string;enabled:boolean;
+  active:[string,string]|null;knownVehicle:string;token:string;enabled:boolean;companionLine:string;
   primaryFeatures:Feature[];record:(value:unknown)=>void;
   watchTripId:string;
 }):ChainSnapshot|null {
  const [snapshot,setSnapshot]=useState<ChainSnapshot|null>(null);
  const line=args.active?.[0]??'';
  const order=args.active?.[1]??'';
- const paired=pairs[line]??'';
+ const paired=args.companionLine&&args.companionLine!==line?args.companionLine:'';
  const known=args.knownVehicle;
  const token=args.token;
  const record=args.record;

@@ -61,32 +61,85 @@ export function useHeadwayTimetables(args:{
  const {enabled,selected,features,currentStops,token,now,companionLine,companionTripId}=args;
  const date=dateLocal(now);
  const primaryLine=selected?routeOf(selected):'';
- const foreignLine=companionLine&&companionLine!==primaryLine?companionLine:'';
- const allowedRoutes=useMemo(()=>new Set([primaryLine,...(foreignLine?[foreignLine]:[])]),
-  [primaryLine,foreignLine]);
- const [foreign,setForeign]=useState<{line:string;features:Feature[]}>({line:'',features:[]});
+ const [discovered,setDiscovered]=useState<{key:string;lines:string[]}>({key:'',lines:[]});
+ const [foreign,setForeign]=useState<{key:string;features:Feature[]}>({key:'',features:[]});
  const [revision,setRevision]=useState(0);
- // Keep the second line's live positions fresh, without disturbing existing
- // position tracking and without querying it if the chain is not verified.
+ const discoveryPeers=selected?headwayEligiblePeers(selected,features,currentStops,now,64)
+  .filter(f=>routeOf(f)===primaryLine).slice(0,24).map(selectedTripId).sort():[];
+ const discoveryKey=date+'|'+primaryLine+'|'+(selected?selectedTripId(selected):'')+'|'+discoveryPeers.join('|');
+ // Inspect the block identity of the selected service and its same-line
+ // neighbours. Different chained services can lead to different lines.
+ useEffect(()=>{
+  if(!enabled||!token||!selected||!primaryLine){setDiscovered({key:'',lines:[]});return;}
+  let alive=true;
+  const run=async()=>{
+   const ids=[...new Set([selectedTripId(selected),...discoveryPeers])];
+   const found=new Set<string>();
+   if(companionLine&&companionLine!==primaryLine)found.add(companionLine);
+   for(let i=0;i<ids.length;i+=6){
+    const details=await Promise.all(ids.slice(i,i+6).map(id=>getDetail(id,date,token)));
+    if(!alive)return;
+    for(const detail of details){
+     if(!detail?.block_id)continue;
+     const stops=parseStops(detail);
+     const candidates:HeadwayTripDetail[]=[];
+     if(detail.block_id!==detail.trip_id){
+      const first=await getDetail(detail.block_id,date,token);
+      if(first)candidates.push(first);
+     }
+     if(stops.length){
+      const terminal=stops[stops.length-1]?.id;
+      const listed=await candidatesForTerminal(terminal,date,token);
+      for(const item of listed.filter(item=>item.block_id===detail.block_id&&item.trip_id!==detail.trip_id).slice(0,12)){
+       const full=await getDetail(item.trip_id!,date,token);
+       if(full)candidates.push(full);
+      }
+     }
+     if(!alive)return;
+     for(const candidate of candidates){
+      if(joinHeadwayBlock(detail,candidate)){
+       const line=candidate.route?.route_short_name;
+       if(line&&line!==primaryLine)found.add(line);
+      }
+     }
+    }
+   }
+   if(alive)setDiscovered({key:discoveryKey,lines:[...found].slice(0,6)});
+  };
+  void run();
+  return()=>{alive=false;};
+ // Discovery is tied to service identity, not per-second UI ticks.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[enabled,token,discoveryKey]);
+ const foreignLines=discovered.key===discoveryKey?discovered.lines:
+  companionLine&&companionLine!==primaryLine?[companionLine]:[];
+ const foreignKey=foreignLines.join('|');
+ const allowedRoutes=useMemo(()=>new Set([primaryLine,...foreignLines]),[primaryLine,foreignKey]);
  const interval=Math.floor(now/20000);
  useEffect(()=>{
-  if(!enabled||!token||!foreignLine){setForeign({line:'',features:[]});return;}
+  if(!enabled||!token||!foreignLines.length){setForeign({key:'',features:[]});return;}
   let alive=true;
-  const url=new URL('https://api.golemio.cz/v2/vehiclepositions');
-  url.searchParams.set('routeShortName',foreignLine);
-  url.searchParams.set('limit','1000');
-  url.searchParams.set('includeNotTracking','true');
-  void golemioJson<unknown>(url.toString(),token,20000,'low').then(body=>{
-   if(!alive)return;
-   const list=body&&typeof body==='object'&&Array.isArray((body as Obj).features)?
-    (body as {features:Feature[]}).features:[];
-   setForeign({line:foreignLine,features:list});
-  }).catch(()=>{if(alive)setForeign({line:foreignLine,features:[]});});
+  const run=async()=>{
+   const values=await Promise.all(foreignLines.map(async line=>{
+    try{
+     const url=new URL('https://api.golemio.cz/v2/vehiclepositions');
+     url.searchParams.set('routeShortName',line);
+     url.searchParams.set('limit','1000');
+     url.searchParams.set('includeNotTracking','true');
+     const body=await golemioJson<unknown>(url.toString(),token,20000,'low');
+     return body&&typeof body==='object'&&Array.isArray((body as Obj).features)?
+      (body as {features:Feature[]}).features:[];
+    }catch{return [];}
+   }));
+   if(alive)setForeign({key:foreignKey,features:values.flat()});
+  };
+  void run();
   return()=>{alive=false;};
- },[enabled,token,foreignLine,interval]);
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[enabled,token,foreignKey,interval]);
  const allFeatures=useMemo(()=>{
   const result=[...features];
-  if(foreign.line===foreignLine&&foreignLine){
+  if(foreign.key===foreignKey&&foreignKey){
    const seen=new Set(features.map(f=>routeOf(f)+'|'+selectedTripId(f)+'|'+vehicleId(f)));
    for(const candidate of foreign.features){
     const key=routeOf(candidate)+'|'+selectedTripId(candidate)+'|'+vehicleId(candidate);
@@ -94,22 +147,22 @@ export function useHeadwayTimetables(args:{
    }
   }
   return result;
- },[features,foreign,foreignLine]);
+ },[features,foreign,foreignKey]);
  const ids=useMemo(()=>{
   if(!enabled||!selected||!token)return [];
   const id=selectedTripId(selected);
   if(!id||id==='—')return [];
-  const peers=headwayEligiblePeers(selected,allFeatures,currentStops,now,24,allowedRoutes);
+  const peers=headwayEligiblePeers(selected,allFeatures,currentStops,now,64,allowedRoutes);
   // Always retain a few nearby trips of each operating line, and make the
   // candidate key independent of geometry-driven ordering changes.
-  const same=peers.filter(f=>routeOf(f)===primaryLine).slice(0,7);
-  const cross=peers.filter(f=>routeOf(f)===foreignLine).slice(0,7);
+  const same=peers.filter(f=>routeOf(f)===primaryLine).slice(0,24);
+  const cross=peers.filter(f=>foreignLines.includes(routeOf(f))).slice(0,48);
   return [...new Set([id,...(companionTripId?[companionTripId]:[]),
    ...[...same,...cross].map(selectedTripId).sort()])];
   // Vehicle snapshots refresh the candidate set. Do not restart per second.
   // eslint-disable-next-line react-hooks/exhaustive-deps
- },[enabled,selected,allFeatures,currentStops,token,companionTripId,foreignLine,Math.floor(now/30000)]);
- const activeKey=date+'|'+ids.join('|')+'|'+foreignLine;
+ },[enabled,selected,allFeatures,currentStops,token,companionTripId,foreignKey,Math.floor(now/30000)]);
+ const activeKey=date+'|'+ids.join('|')+'|'+foreignKey;
  useEffect(()=>{
   if(!enabled||!token||!selected||!ids.length)return;
   let alive=true;
@@ -118,16 +171,19 @@ export function useHeadwayTimetables(args:{
    // Rendering only uses the latest active set; abandoned requests do not
    // overwrite any current-trip identity.
    const details=new Map<string,HeadwayTripDetail>();
-   for(const id of ids){
-    const detail=await getDetail(id,date,token);
+   // Bounded concurrency avoids serial delays with many diversions/short
+   // turns, while respecting the existing shared request cache.
+   for(let start=0;start<ids.length;start+=6){
+    const batch=ids.slice(start,start+6);
+    const values=await Promise.all(batch.map(id=>getDetail(id,date,token)));
     if(!alive)return;
-    if(detail)details.set(id,detail);
+    batch.forEach((id,i)=>{if(values[i])details.set(id,values[i]!);});
    }
    const selectedId=selectedTripId(selected);
    const selectedDetail=details.get(selectedId);
    // If a verified companion is already known from the existing chain module,
    // it can be used even if live GPS has switched to the second trip.
-   const selectedCompanion=companionTripId?details.get(companionTripId):null;
+   const selectedCompanion=companionTripId?details.get(companionTripId)??await getDetail(companionTripId,date,token):null;
    const activePair=selectedDetail&&selectedCompanion?joinHeadwayBlock(selectedDetail,selectedCompanion):null;
    const lookups=new Map<string,Promise<HeadwayTripDetail[]>>();
    const listed=(stopId:string)=>{
@@ -142,7 +198,7 @@ export function useHeadwayTimetables(args:{
     if(!stopIdsOk(rawStops))continue;
     let combined:Stop[]=rawStops;
     if(id===selectedId&&activePair)combined=activePair.stops;
-    else if(foreignLine&&id!==selectedId&&detail.route?.route_short_name===foreignLine&&detail.block_id){
+    else if(foreignLines.includes(detail.route?.route_short_name??'')&&id!==selectedId&&detail.block_id){
      let partner:HeadwayTripDetail|null=null;
      // The first trip of a PID block is commonly addressable as block_id.
      if(detail.block_id!==id){
@@ -151,7 +207,7 @@ export function useHeadwayTimetables(args:{
       // The successor is not identifiable from the first trip ID. Search
       // the common terminal's GTFS trip list for an exact matching block.
       const lastId=rawStops[rawStops.length-1]?.id;
-      const possible=possibleBlockPartners(detail,await listed(lastId),foreignLine)
+      const possible=possibleBlockPartners(detail,await listed(lastId),primaryLine)
        .slice(0,6);
       for(const candidateId of possible){
        if(candidateId===id)continue;
@@ -159,7 +215,7 @@ export function useHeadwayTimetables(args:{
        if(found&&joinHeadwayBlock(detail,found)){partner=found;break;}
       }
      }
-     if(partner&&partner.route?.route_short_name!==detail.route.route_short_name){
+     if(partner&&partner.route?.route_short_name!==detail.route?.route_short_name){
       const verified=joinHeadwayBlock(detail,partner);
       if(verified)combined=verified.stops;
      }

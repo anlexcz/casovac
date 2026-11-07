@@ -30,17 +30,19 @@ export function useChainTracking({active,chosen,lastSeen,features,token,tripId,t
   if(target)chainRecordRef.current(target[0],target[1],value);
  }).current;
  const watchTripId=useRef('');
- const chainDiagnostic=useChainDiagnostics({
-  active,knownVehicle:chosen?vehicleId(chosen):lastSeen?.vehicle??'',
-  token:token.trim(),
-  enabled:!!active&&['5','6','9','10'].includes(active[0]),
-  primaryFeatures:features,record:chainRecord,watchTripId:watchTripId.current
- });
  const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ // Discover the GTFS pair independently of line numbers. Only after it is
+ // verified do we poll the companion line for live handoff telemetry.
  const block=useOnlineBlockPair({tripId,line:active?.[0]??'',token:token.trim(),date,
-  snapshot:chainDiagnostic,enabled:!!active&&!!chosen&&selectedTrip===''&&['5','6','9','10'].includes(active[0])});
+  snapshot:null,enabled:!!active&&!!chosen&&selectedTrip===''});
  const resolvedPair=block.pair;
  watchTripId.current=resolvedPair?.partner.tripId??'';
+ const chainDiagnostic=useChainDiagnostics({
+  active,knownVehicle:chosen?vehicleId(chosen):lastSeen?.vehicle??'',
+  token:token.trim(),enabled:!!active&&!!resolvedPair,
+  companionLine:resolvedPair?.partner.line??'',
+  primaryFeatures:features,record:chainRecord,watchTripId:watchTripId.current
+ });
  const freshPartner=chainDiagnostic?.related.find(candidate=>candidate.tripId===resolvedPair?.partner.tripId);
  // Block identity is cached, but live state/order must always come from fresh telemetry.
  const pair=resolvedPair&&freshPartner?{...resolvedPair,partner:freshPartner}:resolvedPair;

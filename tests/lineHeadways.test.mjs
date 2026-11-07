@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {calculateLineHeadways,formatHeadway,sharedReference,headwayEligiblePeers} from '../src/lineHeadways.ts';
 import {joinHeadwayBlock,possibleBlockPartners} from '../src/headwayChains.ts';
+import {findVerifiedBlockPair} from '../src/blockPair.ts';
+import {assessCorridor} from '../src/headwayCorridor.ts';
 
 const now=Date.parse('2026-11-06T14:54:00+01:00');
 const stops=['A','B','C','D','E','F'].map((id,i)=>({
@@ -156,3 +158,111 @@ function stopsOf(detail){
   arrival:s.arrival_time,departure:s.departure_time,lat:null,lon:null
  }));
 }
+
+test('diverted predecessor is replaced by the next eligible planned service',()=>{
+ const mine=f('9_current',9300,'C',now+10000,{order:23});
+ const diverted=f('9_divert',9301,'X',now+10000,{order:22});
+ const replacement=f('9_replace',9302,'D',now+10000,{order:21});
+ const peerDivert=shifted(stops.slice(0,4),-4).concat([
+  {...stops[4],id:'X',arrival:'14:58:00',departure:'14:58:00'},
+  {...stops[5],id:'Y',arrival:'15:00:00',departure:'15:00:00'}
+ ]);
+ const map=new Map([['9_current',stops],['9_divert',peerDivert],['9_replace',shifted(stops,-8)]]);
+ const r=calculateLineHeadways({selected:mine,features:[mine,diverted,replacement],
+  stops,peerStops:map,now});
+ assert.equal(r.ahead.tripId,'9_replace');
+});
+test('short turning peer stays eligible until its last shared stop',()=>{
+ const mine=f('9_current',9300,'C',now+10000,{order:23});
+ const short=f('9_short',9301,'D',now+10000,{order:22});
+ const shortStops=shifted(stops.slice(0,4),-4);
+ const r=calculateLineHeadways({selected:mine,features:[mine,short],
+  stops,peerStops:new Map([['9_current',stops],['9_short',shortStops]]),now});
+ assert.equal(r.ahead.tripId,'9_short');
+});
+test('vehicle approaching common section through verified chained schedule remains eligible',()=>{
+ const mine=f('10_now',9200,'U',now+10000,{line:'10',order:11});
+ const approaching=f('9_approach',9201,'Q',now+10000,{line:'9',order:12});
+ const ownStops=[
+  {id:'T',name:'T',sequence:1,arrival:'14:54:00',departure:'14:54:00'},
+  {id:'U',name:'U',sequence:2,arrival:'14:56:00',departure:'14:56:00'},
+  {id:'V',name:'V',sequence:3,arrival:'14:58:00',departure:'14:58:00'}
+ ];
+ const linked=[
+  {id:'P',arrival:'14:50:00',departure:'14:50:00'},
+  {id:'Q',arrival:'14:52:00',departure:'14:52:00'},
+  ...shifted(ownStops,4)
+ ].map((v,i)=>({name:v.id,sequence:i+1,...v}));
+ const r=calculateLineHeadways({selected:mine,features:[mine,approaching],
+  stops:ownStops,peerStops:new Map([['10_now',ownStops],['9_approach',linked]]),
+  now,allowedRoutes:new Set(['9','10'])});
+ assert.equal(r.behind?.tripId,'9_approach');
+});
+test('unrelated later intersection does not keep diverted vehicle eligible',()=>{
+ const mine=f('9_current',9300,'C',now+10000,{order:23});
+ const diverted=f('9_divert',9301,'X',now+10000,{order:22});
+ const detour=['A','B','C','D','X','Y','F'].map((id,i)=>({
+  ...stops[Math.min(i,stops.length-1)],id,sequence:i+1
+ }));
+ const r=calculateLineHeadways({selected:mine,features:[mine,diverted],
+  stops,peerStops:new Map([['9_current',stops],['9_divert',detour]]),now});
+ assert.equal(r.ahead,null);
+});
+
+test('corridor diagnostics identify a peer that already left on a depot branch',()=>{
+ const peer=['A','B','C','D','X','Y'].map((id,i)=>({...stops[i],id}));
+ const decision=assessCorridor(stops,peer,'C','X');
+ assert.equal(decision.reference,null);
+ assert.equal(decision.reason,'peer-past-corridor');
+});
+test('approaching peer of a verified chained route may be behind us',()=>{
+ const own=['T','U','V'].map((id,i)=>({...stops[i],id}));
+ const peer=['P','Q','T','U','V'].map((id,i)=>({...stops[i%stops.length],id}));
+ assert.ok(assessCorridor(own,peer,'U','Q').reference);
+});
+test('our route approaching a future common section is not compared prematurely',()=>{
+ const own=['A','B','C','D','E'].map((id,i)=>({...stops[i],id}));
+ const peer=['X','Y','C','D','E'].map((id,i)=>({...stops[i],id}));
+ assert.equal(assessCorridor(own,peer,'B','Y').reason,'own-before-corridor');
+});
+test('our route past the common section does not retain a previous peer',()=>{
+ const own=['A','B','C','D','E'].map((id,i)=>({...stops[i],id}));
+ const peer=['A','B','C','X','Y'].map((id,i)=>({...stops[i],id}));
+ assert.equal(assessCorridor(own,peer,'E','B').reason,'own-past-corridor');
+});
+test('diagnostics report why a diversion is excluded and which alternative was chosen',()=>{
+ const mine=f('9_diag',9300,'C',now+10000,{order:23});
+ const left=f('9_left',9301,'X',now+10000,{order:22});
+ const replacement=f('9_next',9302,'D',now+10000,{order:21});
+ const leftStops=['A','B','C','D','X','Y'].map((id,i)=>({...shifted(stops,-4)[i],id}));
+ const mapped=new Map([
+  ['9_diag',stops],['9_left',leftStops],['9_next',shifted(stops,-8)]
+ ]);
+ const result=calculateLineHeadways({selected:mine,features:[mine,left,replacement],
+  stops,peerStops:mapped,now});
+ assert.equal(result.ahead?.tripId,'9_next');
+ assert.equal(result.decisions.find(d=>d.tripId==='9_left')?.reason,'Koridor: peer-past-corridor');
+ assert.equal(result.decisions.find(d=>d.tripId==='9_next')?.reason,'Vhodný spoj');
+});
+
+test('block verification is not restricted to enumerated line pairs (6 to 34)',()=>{
+ const first=details('6_A','6','BLOCK_634',['K','L','M'],0);
+ const second=details('34_A','34','BLOCK_634',['M','N','O'],4);
+ const trip={tripId:'34_A',line:'34',order:'',vehicle:'',state:'before_track',
+  start:null,lastStop:null,nextStop:null,rawTrip:null,source:'GTFS'};
+ const verified=findVerifiedBlockPair(
+  {tripId:'6_A',line:'6',start:null,detail:first},[{trip,detail:second}]
+ );
+ assert.equal(verified?.partner.line,'34');
+ assert.equal(verified?.role,'first');
+ assert.equal(joinHeadwayBlock(first,second)?.stops.length,5);
+});
+test('unrelated line cannot become chained merely by sharing stop or block identifier',()=>{
+ const first=details('6_A','6','BLOCK_634',['K','L','M'],0);
+ const other=details('34_B','34','OTHER_BLOCK',['M','N','O'],4);
+ const trip={tripId:'34_B',line:'34',order:'',vehicle:'',state:'before_track',
+  start:null,lastStop:null,nextStop:null,rawTrip:null,source:'GTFS'};
+ assert.equal(findVerifiedBlockPair(
+  {tripId:'6_A',line:'6',start:null,detail:first},[{trip,detail:other}]
+ ),null);
+});
