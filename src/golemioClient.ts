@@ -10,7 +10,9 @@ const queue:Job[]=[];
 let running=false;
 let nextRequestAt=0;
 let cooldownUntil=0;
-const SPACING_MS=900;
+// Public PID API default limit: 20 requests per 8 seconds. 500 ms
+// spacing stays under this rate while improving interactive responsiveness.
+const SPACING_MS=500;
 const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 export class GolemioLimitError extends Error{
  constructor(public readonly waitSeconds:number){
