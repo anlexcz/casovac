@@ -72,7 +72,7 @@ export function resolveOwnPlatform(
  });
  const ids=[...new Set(matches.map(dep=>dep.stop!.id!))];
  if(ids.length!==1)return {
-  id:'',matches:matches.length,
+  id:'',platformCode:'',matches:matches.length,
   reason:ids.length>1?'Nesouhlasí nástupní hrana na více záznamech':
    'Odjezdník neobsahuje vlastní trip ve správném čase'
  };
