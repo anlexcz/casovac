@@ -103,7 +103,8 @@ export function useStopNeighbours(args:{
    setFastSnapshot(EMPTY);return;
   }
   let alive=true;
-  const nearIds=new Set(args.stops.slice(Math.max(0,index-2),index+1).map(stop=>stop.id));
+  const targetIndex=index!;
+  const nearIds=new Set(args.stops.slice(Math.max(0,targetIndex-2),targetIndex+1).map(stop=>stop.id));
   const selectedCar=vehicleId(ownFeature);
   const peers=knownFeatures.filter(f=>{
    const id=selectedTripId(f);
