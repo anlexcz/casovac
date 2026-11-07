@@ -307,3 +307,25 @@ test('foreign line cannot be admitted just because an unrelated linked block exi
   peerStops:map,now,allowedRoutes:new Set(['9','10']),links});
  assert.equal(r.matched,0);
 });
+
+test('headways use GTFS scheduled next-stop time when live ETA timestamp is absent',()=>{
+ const meWithoutEta=f('9_23',9383,'C',now+10000);
+ const beforeWithoutEta=f('9_22',9380,'E',now+10000);
+ delete meWithoutEta.properties.last_position.next_stop.arrival_time;
+ delete beforeWithoutEta.properties.last_position.next_stop.arrival_time;
+ const r=calculateLineHeadways({selected:meWithoutEta,features:[meWithoutEta,beforeWithoutEta],
+  stops,peerStops:schedules,now});
+ assert.equal(r.ahead?.tripId,'9_22');
+ assert.equal(r.aheadSeconds,240);
+});
+test('headways accept an alternate fresh vehicle timestamp field',()=>{
+ const meAlt=f('9_23',9383,'C',now+10000);
+ const neighbourAlt=f('9_22',9380,'E',now+10000);
+ for(const feature of [meAlt,neighbourAlt]){
+  feature.properties.last_position.timestamp=feature.properties.last_position.origin_timestamp;
+  delete feature.properties.last_position.origin_timestamp;
+ }
+ const r=calculateLineHeadways({selected:meAlt,features:[meAlt,neighbourAlt],
+  stops,peerStops:schedules,now});
+ assert.equal(r.aheadSeconds,240);
+});
