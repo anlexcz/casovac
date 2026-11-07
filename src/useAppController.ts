@@ -14,7 +14,7 @@ import {distanceMeters} from './position';
 import {useOnboardMode} from './onboard';
 import {readLastSeen,extractRecordedVehicle} from './lastSeen';
 import type {LastSeen} from './lastSeen';
-import {path,text,selectedTripId,vehicleId} from './featureUtils';
+import {path,text,selectedTripId,vehicleId,routeOf} from './featureUtils';
 import {useChainHandoff} from './useChainHandoff';
 import type {Feature} from './featureUtils';
 import {useVehicleTracking} from './useVehicleTracking';
@@ -77,7 +77,7 @@ export function useAppController(){
 
  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
  useEffect(()=>{save(ROUTE_KEY,query.trim());},[query]);
- const {lookup,lookupLine,lookupOrder,results,lookupReady,stopNames}=useOrderLookup(query,editing,token,now);
+ const {lookup,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,stopNames}=useOrderLookup(query,editing,token,now);
  useEffect(()=>{if(active&&token.trim()){
   // Refresh only when a route is actively selected; do not keep extending on refresh.
   const raw=stored(ACTIVE_KEY);let storedRoute:null|{line:string;order:string;expires:number}=null;
@@ -265,8 +265,9 @@ export function useAppController(){
   setNeighbourIndex(null);setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);setLastHandoff(null);handoffFallbackRef.current=null;
   // Reuse the already retrieved line snapshot immediately on selection.
   // The running timer shares its Golemio URL and its 20-second cache.
-  if(lookup.line===parsed[0]&&lookup.items.length){
-   setFeatures(lookup.items);setLastFetch(Date.now());
+  const immediate=lookup.items.filter(item=>routeOf(item)===parsed[0]);
+  if(immediate.length){
+   setFeatures(immediate);setLastFetch(Date.now());
   }else{
    setFeatures([]);setLastFetch(null);
   }
@@ -279,5 +280,5 @@ export function useAppController(){
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setNeighbourIndex(null);setSelectedTrip(id);setManual(null);}
- return {neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ return {neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }
