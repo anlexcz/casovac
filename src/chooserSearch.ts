@@ -45,7 +45,8 @@ export const queryMatches=(feature:Feature,query:ChooserQuery):boolean=>{
  if(query.kind==='invalid')return false;
  if(query.kind==='route')return normalize(line)===query.line;
  if(query.kind==='vehicle')return normalize(vehicleId(feature))===query.vehicle;
- return order===query.order&&
+ // Prefix input is intentional: 2/7 covers 2/7 and 2/70–2/79.
+ return order.startsWith(query.order)&&
   (normalize(line)===query.line||originRouteOf(feature)===query.line);
 };
 const ranking=(f:Feature,now:number):number=>{
