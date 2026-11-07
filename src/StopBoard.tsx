@@ -48,16 +48,18 @@ function NeighbourTable({data,loading,error}:{
 }
 export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate,continuation,predecessor,activeLine,visualBoundary,neighbours,neighbourLoading,neighbourError,neighbourSettings,neighbourIndex,setNeighbourIndex}:Props){
  const [closedAuto,setClosedAuto]=useState('');
+ const [forcedCurrent,setForcedCurrent]=useState('');
  const activeKey=tripId+'|'+index;
+ const canAutoOpen=neighbourSettings.mode!=='off'&&
+  (neighbourSettings.mode==='all'?!!neighbours?.rows.length:!!neighbours?.significant);
  const currentOpen=neighbourSettings.enabled&&neighbourIndex===null&&
-  neighbourSettings.mode!=='off'&&(neighbourSettings.mode==='all'?
-   !!neighbours?.rows.length:!!neighbours?.significant)&&closedAuto!==activeKey;
+  (forcedCurrent===activeKey||canAutoOpen)&&closedAuto!==activeKey;
  const selectedOpen=neighbourSettings.enabled&&neighbourIndex!==null;
  const toggleNeighbour=(i:number)=>{
   if(i===index){
    if(selectedOpen)setNeighbourIndex(null);
-   else if(currentOpen)setClosedAuto(activeKey);
-   else {setClosedAuto('');setNeighbourIndex(null);}
+   else if(currentOpen){setClosedAuto(activeKey);setForcedCurrent('');}
+   else {setClosedAuto('');setForcedCurrent(activeKey);setNeighbourIndex(null);}
   }else setNeighbourIndex(neighbourIndex===i?null:i);
  };
  const table=(i:number)=>neighbourSettings.enabled&&(i===index?currentOpen||selectedOpen&&neighbourIndex===index:neighbourIndex===i)&&
