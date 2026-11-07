@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {calculateLineHeadways,formatHeadway,sharedReference,headwayEligiblePeers} from '../src/lineHeadways.ts';
 import {joinHeadwayBlock,possibleBlockPartners} from '../src/headwayChains.ts';
+import {findVerifiedBlockPair} from '../src/blockPair.ts';
 import {assessCorridor} from '../src/headwayCorridor.ts';
 
 const now=Date.parse('2026-11-06T14:54:00+01:00');
@@ -242,4 +243,26 @@ test('diagnostics report why a diversion is excluded and which alternative was c
  assert.equal(result.ahead?.tripId,'9_next');
  assert.equal(result.decisions.find(d=>d.tripId==='9_left')?.reason,'Koridor: peer-past-corridor');
  assert.equal(result.decisions.find(d=>d.tripId==='9_next')?.reason,'Vhodný spoj');
+});
+
+test('block verification is not restricted to enumerated line pairs (6 to 34)',()=>{
+ const first=details('6_A','6','BLOCK_634',['K','L','M'],0);
+ const second=details('34_A','34','BLOCK_634',['M','N','O'],4);
+ const trip={tripId:'34_A',line:'34',order:'',vehicle:'',state:'before_track',
+  start:null,lastStop:null,nextStop:null,rawTrip:null,source:'GTFS'};
+ const verified=findVerifiedBlockPair(
+  {tripId:'6_A',line:'6',start:null,detail:first},[{trip,detail:second}]
+ );
+ assert.equal(verified?.partner.line,'34');
+ assert.equal(verified?.role,'first');
+ assert.equal(joinHeadwayBlock(first,second)?.stops.length,5);
+});
+test('unrelated line cannot become chained merely by sharing stop or block identifier',()=>{
+ const first=details('6_A','6','BLOCK_634',['K','L','M'],0);
+ const other=details('34_B','34','OTHER_BLOCK',['M','N','O'],4);
+ const trip={tripId:'34_B',line:'34',order:'',vehicle:'',state:'before_track',
+  start:null,lastStop:null,nextStop:null,rawTrip:null,source:'GTFS'};
+ assert.equal(findVerifiedBlockPair(
+  {tripId:'6_A',line:'6',start:null,detail:first},[{trip,detail:other}]
+ ),null);
 });
