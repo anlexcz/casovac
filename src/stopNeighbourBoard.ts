@@ -3,6 +3,7 @@ import type {NeighbourResult,NeighbourSettings} from './stopNeighbours.ts';
 import type {Feature} from './featureUtils.ts';
 import {selectedTripId,vehicleId,orderOf} from './featureUtils.ts';
 import {relevantWindows} from './stopNeighbours.ts';
+import {joiningCorridor} from './neighbourRouteJoining.ts';
 
 type BoardDeparture={
  trip?:{id?:string;is_canceled?:boolean};
@@ -52,7 +53,7 @@ export function parseNeighbourBoard(args:{
  const live=new Map(features.map(f=>[selectedTripId(f),f]));
  const window=relevantWindows(settings,distance);
  const seen=new Set<string>();
- const ownPrev=ownStops[ownIndex-1]?.id??'';
+
  for(const departure of board.departures??[]){
   const id=departure.trip?.id??'';
   if(!id||id===ownTripId||seen.has(id)||departure.trip?.is_canceled)continue;
@@ -77,9 +78,10 @@ export function parseNeighbourBoard(args:{
   const position=matches.length===1?matches[0]:-1;
   const prev=position>=0?stops![position-1]?.id??'':'';
   const next=position>=0?stops![position+1]?.id??'':'';
-  // Significance requires verified incoming branch, not merely "last stop"
-  // from an older vehicle position.
-  if(position>=0&&prev!==ownPrev)result.significant=true;
+  // Auto-open only where a DIFFERENT incoming branch joins our corridor
+  // and continues on our next segment. A divergence does not qualify.
+  if(stops?.length&&joiningCorridor(ownStops,ownIndex,stops,planned,stop.id).joining)
+   result.significant=true;
   result.rows.push({
    tripId:id,line:shortName,order:feature?String(orderOf(feature)??'?'):'?',
    vehicle:car==='—'?'':car,scheduled:new Date(plannedISO!).toLocaleTimeString('cs-CZ',
