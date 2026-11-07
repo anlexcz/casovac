@@ -1,7 +1,7 @@
 import type {Stop} from './tripData.ts';
 import type {NeighbourRow,NeighbourResult,NeighbourSettings} from './stopNeighbours.ts';
 import type {Feature} from './featureUtils.ts';
-import {selectedTripId,vehicleId,orderOf,path} from './featureUtils.ts';
+import {selectedTripId,vehicleId,orderOf} from './featureUtils.ts';
 import {relevantWindows} from './stopNeighbours.ts';
 
 type BoardDeparture={
