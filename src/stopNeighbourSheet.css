@@ -1,8 +1,6 @@
 /* Bottom sheet: never taller than half of the visible viewport. */
 .sn-sheet-layer{position:fixed;inset:0;z-index:8;pointer-events:none;visibility:hidden;transition:visibility 0s linear 240ms}
-.sn-sheet-layer.sn-sheet-open{visibility:visible;pointer-events:auto;transition-delay:0s}
-.sn-sheet-backdrop{position:absolute;inset:0;background:#070a0e00;transition:background 220ms ease}
-.sn-sheet-open .sn-sheet-backdrop{background:#070a0e45}
+.sn-sheet-layer.sn-sheet-open{visibility:visible;pointer-events:none;transition-delay:0s}
 .sn-sheet{position:absolute;bottom:0;left:0;right:0;width:min(100%,680px);margin-inline:auto;display:flex;flex-direction:column;
  max-height:50vh;max-height:50dvh;min-height:0;
  background:#1b2027;border:1px solid #44515d;border-bottom:0;
@@ -11,6 +9,7 @@
  transform:translateY(105%);transition:transform 240ms cubic-bezier(.22,1,.36,1);
  will-change:transform}
 .sn-sheet-open .sn-sheet{transform:translateY(0)}
+.sn-sheet-countdown{font-size:12px;color:#94a6b6;white-space:nowrap;font-variant-numeric:tabular-nums}
 .sn-sheet-header{flex:0 0 auto;display:flex;align-items:center;gap:9px;position:relative;
  min-height:63px;margin:0;padding:18px 15px 9px;border-bottom:1px solid #343e48;touch-action:pan-y}
 .sn-sheet-grip{position:absolute;top:7px;left:50%;width:35px;height:3px;border-radius:10px;
@@ -27,16 +26,19 @@
 .sn-sheet-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
  padding:4px 11px 12px}
 .sn-sheet .sn-panel{background:transparent;border:0;padding:0}
-.sn-sheet .sn-row{min-height:43px;grid-template-columns:19px minmax(49px,auto) minmax(35px,1fr) 66px 49px;
- gap:8px;font-size:13px;padding:5px 4px}
-.sn-sheet .sn-badge{font-size:13px}
-.sn-sheet .sn-vehicle,.sn-sheet .sn-delay,.sn-sheet .sn-time{font-size:13px}
+.sn-sheet .sn-row{min-height:48px;grid-template-columns:21px minmax(52px,auto) minmax(35px,1fr) 73px 53px;
+ gap:8px;font-size:14px;padding:5px 4px}
+.sn-sheet .sn-badge{font-size:14px}
+.sn-sheet .sn-vehicle,.sn-sheet .sn-time{font-size:14px}
+.sn-sheet .sn-delay{font-size:15px}
 .sn-sheet .sn-own{background:#ffffff09}
 .boardStack .sb-current-interactive{cursor:pointer}
 .boardStack .sb-current-interactive:focus-visible{outline:2px solid #dce5eb;outline-offset:2px}
 @media(max-width:370px){
- .sn-sheet .sn-row{grid-template-columns:17px minmax(45px,auto) minmax(30px,1fr) 59px 44px;gap:4px}
- .sn-sheet .sn-badge{padding:2px 4px}
+ .sn-sheet .sn-row{grid-template-columns:19px minmax(46px,auto) minmax(27px,1fr) 64px 45px;gap:4px}
+ .sn-sheet .sn-badge{padding:2px 4px;font-size:13px}
+ .sn-sheet .sn-vehicle,.sn-sheet .sn-time{font-size:13px}
+ .sn-sheet .sn-delay{font-size:14px}
  .sn-sheet-body{padding-left:7px;padding-right:7px}
 }
-@media(prefers-reduced-motion:reduce){.sn-sheet,.sn-sheet-layer,.sn-sheet-backdrop{transition:none}}
+@media(prefers-reduced-motion:reduce){.sn-sheet,.sn-sheet-layer{transition:none}}
