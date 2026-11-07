@@ -7,10 +7,10 @@ type Props={
  open:boolean;stopKey:string;name:string;platformCode:string;data:NeighbourResult|null;updatedAt:number;
  colourOrder:NeighbourSettings['colourOrder'];tolerance:number;hysteresis:number;
  loading:boolean;error:string;ownLine:string;ownOrder:string;ownVehicle:string;
- remainingSeconds:number|null;onInteraction:()=>void;onClose:()=>void;
+ remainingSeconds:number|null;countdownTotalSeconds:number;onInteraction:()=>void;onClose:()=>void;
 };
 export default function StopNeighbourSheet({
- open,stopKey,name,platformCode,data,updatedAt,loading,error,colourOrder,tolerance,hysteresis,ownLine,ownOrder,ownVehicle,remainingSeconds,onInteraction,onClose
+ open,stopKey,name,platformCode,data,updatedAt,loading,error,colourOrder,tolerance,hysteresis,ownLine,ownOrder,ownVehicle,remainingSeconds,countdownTotalSeconds,onInteraction,onClose
 }:Props){
  const touchStart=useRef<number|null>(null);
  const [ageNow,setAgeNow]=useState(Date.now());
@@ -21,6 +21,8 @@ export default function StopNeighbourSheet({
   return()=>window.clearInterval(id);
  },[open]);
  const age=updatedAt>0?Math.max(0,Math.floor((ageNow-updatedAt)/1000)):null;
+ const countdownRatio=remainingSeconds!==null&&countdownTotalSeconds>0?
+  Math.max(0,Math.min(1,remainingSeconds/countdownTotalSeconds)):null;
  useEffect(()=>{
   if(!open)return;
   const key=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose();};
@@ -39,6 +41,13 @@ export default function StopNeighbourSheet({
      if(touchStart.current!==null&&(e.changedTouches[0]?.clientY??0)-touchStart.current>70)onClose();
      touchStart.current=null;
     }}>
+    {countdownRatio!==null&&<div className="sn-sheet-timer"
+     role="progressbar" aria-label="Čas zbývající do automatického zavření"
+     aria-valuemin={0} aria-valuemax={countdownTotalSeconds}
+     aria-valuenow={Math.max(0,Math.ceil(remainingSeconds!))}
+     title={'Automatické zavření za '+Math.ceil(remainingSeconds!)+' s'}>
+     <div className="sn-sheet-timer-fill" style={{transform:'scaleX('+countdownRatio+')'}}/>
+    </div>}
     <span className="sn-sheet-grip" aria-hidden="true"/>
     <div className="sn-sheet-heading">
      <h2>{name||'Okolní spoje'}</h2>
@@ -52,13 +61,6 @@ export default function StopNeighbourSheet({
      </svg>
      <span>{loading?'…':error?'!':age===null?'—':age+' s'}</span>
     </span>
-    {remainingSeconds!==null&&<span className="sn-sheet-countdown" aria-label={'Zavře se za '+Math.ceil(remainingSeconds)+' sekund'}>
-     <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8"/>
-      <path d="M12 7v5l3 2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-     </svg>
-     <span>{Math.ceil(remainingSeconds)} s</span>
-    </span>}
     <button className="sn-sheet-close" type="button" onPointerDown={e=>e.stopPropagation()}
      onClick={e=>{e.stopPropagation();onClose();}} aria-label="Zavřít okolní spoje">×</button>
    </header>
