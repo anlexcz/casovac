@@ -7,7 +7,7 @@ import {relevantWindows} from './stopNeighbours.ts';
 type BoardDeparture={
  trip?:{id?:string;is_canceled?:boolean};
  route?:{short_name?:string;type?:number};
- stop?:{id?:string};
+ stop?:{id?:string;platform_code?:string};
  arrival_timestamp?:{scheduled?:string|null};
  departure_timestamp?:{scheduled?:string|null};
  delay?:{is_available?:boolean;seconds?:number|null};
