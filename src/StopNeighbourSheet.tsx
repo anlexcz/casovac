@@ -47,11 +47,16 @@ export default function StopNeighbourSheet({
     <span className={'sn-sheet-refresh'+(error?' sn-refresh-error':'')}
      role="status" aria-label={error?'Aktualizace selhala':loading?'Probíhá aktualizace':'Stáří posledních živých dat'}
      title={error|| (age===null?'Čekám na první data':'Poslední dokončené či částečné načtení před '+age+' s')}>
-     <span className="sn-sheet-refresh-label">Data</span>
-     <span>{loading?'↻':error?'!':age===null?'…':age+' s'}</span>
+     <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <path d="M20 7v5h-5M4 17v-5h5M5.8 9A7 7 0 0 1 18 6.7L20 12M4 12l2 5.3A7 7 0 0 0 18.2 15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+     </svg>
+     <span>{loading?'…':error?'!':age===null?'—':age+' s'}</span>
     </span>
     {remainingSeconds!==null&&<span className="sn-sheet-countdown" aria-label={'Zavře se za '+Math.ceil(remainingSeconds)+' sekund'}>
-     <span className="sn-sheet-countdown-label">Zavření</span>
+     <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8"/>
+      <path d="M12 7v5l3 2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+     </svg>
      <span>{Math.ceil(remainingSeconds)} s</span>
     </span>}
     <button className="sn-sheet-close" type="button" onPointerDown={e=>e.stopPropagation()}
