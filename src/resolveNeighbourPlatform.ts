@@ -22,11 +22,35 @@ function secondsFromISO(value:string):number|null{
 function sameTime(a:number,b:number){
  return [-86400,0,86400,172800].some(offset=>Math.abs(a-(b+offset))<=90);
 }
-export function departureBoardNameUrl(name:string):string{
+/**
+ * Time-window anchors are *local service-day clock time*, as expected by
+ * Golemio's timeFrom query. GTFS allows 24:xx, 25:xx ...; calculating via UTC
+ * calendar arithmetic intentionally avoids the browser's own timezone.
+ */
+export function serviceBoardTimeFrom(serviceDate:string,scheduled:string,leadMinutes=10):string|null{
+ if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(serviceDate))return null;
+ const planned=seconds(scheduled);
+ if(planned===null)return null;
+ const start=new Date(serviceDate+'T00:00:00Z');
+ if(!Number.isFinite(start.getTime()))return null;
+ start.setTime(start.getTime()+planned*1000-leadMinutes*60000);
+ return start.toISOString().slice(0,19);
+}
+export function departureBoardNameUrl(name:string,scheduled?:string,serviceDate?:string):string{
  const url=new URL(departureBoardUrl([]));
  url.searchParams.set('names',name);
- url.searchParams.set('minutesBefore','30');
- url.searchParams.set('minutesAfter','120');
+ const from=scheduled&&serviceDate?serviceBoardTimeFrom(serviceDate,scheduled):null;
+ if(from){
+  // Target a small interval around the vehicle's OWN scheduled arrival.
+  // Previously a broad station name search hit the API's first-100 result
+  // cap before our own trip appeared.
+  url.searchParams.set('timeFrom',from);
+  url.searchParams.set('minutesBefore','0');
+  url.searchParams.set('minutesAfter','40');
+ }else{
+  url.searchParams.set('minutesBefore','30');
+  url.searchParams.set('minutesAfter','120');
+ }
  return url.toString();
 }
 export type PlatformResolution={

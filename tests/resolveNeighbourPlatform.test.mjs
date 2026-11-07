@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {departureBoardNameUrl,resolveOwnPlatform} from '../src/resolveNeighbourPlatform.ts';
+import {departureBoardNameUrl,resolveOwnPlatform,serviceBoardTimeFrom} from '../src/resolveNeighbourPlatform.ts';
 
 function depart(id,stopId,scheduled){
  return {trip:{id},route:{short_name:'7',type:0},
@@ -36,4 +36,21 @@ test('other trips, conflicting edges and mismatched times never resolve',()=>{
 test('stop resolution accepts GTFS service hour 24 with clock time after midnight',()=>{
  const data={departures:[depart('own','U1','2026-11-08T00:12:00+01:00')]};
  assert.equal(resolveOwnPlatform(data,'own','24:12:00').id,'U1');
+});
+
+test('discovery searches the own scheduled service time, not the first hundred unrelated station departures',()=>{
+ const url=new URL(departureBoardNameUrl('Želivského','12:45:00','2026-11-07'));
+ assert.equal(url.searchParams.get('names'),'Želivského');
+ assert.equal(url.searchParams.get('timeFrom'),'2026-11-07T12:35:00');
+ assert.equal(url.searchParams.get('minutesBefore'),'0');
+ assert.equal(url.searchParams.get('minutesAfter'),'40');
+ assert.equal(url.searchParams.get('limit'),'200');
+});
+test('service dates roll across midnight for GTFS 24+ hour schedules',()=>{
+ assert.equal(serviceBoardTimeFrom('2026-11-07','24:05:00'),
+  '2026-11-07T23:55:00');
+ assert.equal(serviceBoardTimeFrom('2026-11-07','25:10:00'),
+  '2026-11-08T01:00:00');
+ assert.equal(serviceBoardTimeFrom('2026-11-07','00:05:00'),
+  '2026-11-06T23:55:00');
 });
