@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {orderColour,scheduledSeconds} from '../src/neighbourOrderColour.ts';
+import {orderColour,scheduledSeconds,predictedArrivalClock} from '../src/neighbourOrderColour.ts';
 
 test('scheduled predecessor: expected earlier is green, expected later red',()=>{
  assert.equal(orderColour('before',-100),'good');
@@ -26,4 +26,16 @@ test('GTFS service time including seconds is parsed for ETA comparisons',()=>{
  assert.equal(scheduledSeconds('10:29:30'),37770);
  assert.equal(scheduledSeconds('25:01:00'),90060);
  assert.equal(scheduledSeconds('bad'),null);
+});
+
+test('predicted arrival is deliberately understated HH:mm and rounded to nearest minute',()=>{
+ assert.equal(predictedArrivalClock(13*3600+43*60,4*60+59),'13:48');
+ assert.equal(predictedArrivalClock(13*3600+49*60,48),'13:50');
+ assert.equal(predictedArrivalClock(13*3600+49*60,0),'13:49');
+});
+test('predicted arrival handles negative deviation, GTFS 24+ times, and unknown delay',()=>{
+ assert.equal(predictedArrivalClock(10,-120),'23:58');
+ assert.equal(predictedArrivalClock(25*3600+60,0),'01:01');
+ assert.equal(predictedArrivalClock(13*3600,null),null);
+ assert.equal(predictedArrivalClock(NaN,60),null);
 });

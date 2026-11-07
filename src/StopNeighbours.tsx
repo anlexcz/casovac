@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import type {NeighbourResult,NeighbourSettings} from './stopNeighbours.ts';
 import {formatNeighbourDelay} from './stopNeighbours.ts';
 import {emptyStableNeighbours,reconcileNeighbours} from './stableNeighbours.ts';
-import {orderColour,scheduledSeconds} from './neighbourOrderColour.ts';
+import {orderColour,scheduledSeconds,predictedArrivalClock} from './neighbourOrderColour.ts';
 import type {OrderColour} from './neighbourOrderColour.ts';
 import './stopNeighbours.css';
 
@@ -39,6 +39,7 @@ export default function StopNeighbours({
   const tone=stale?'neutral':colourOrder?
    orderColour(row.relative,difference,tolerance,previous,hysteresis):'neutral';
   if(!stale)colours.current.set(row.tripId,tone);
+  const estimated=stale?null:predictedArrivalClock(row.scheduledSeconds,row.delay);
   return <div className="sn-row" key={row.tripId}>
    <span className={'sn-arrow sn-arrow-'+row.relative} aria-label={
     row.relative==='before'?'Patří před tebe':row.relative==='after'?'Patří za tebe':'Stejný čas dle JŘ'
@@ -50,7 +51,8 @@ export default function StopNeighbours({
      tone==='good'?'Odhadované pořadí odpovídá JŘ':
      tone==='risk'?'Odhadované pořadí se může obrátit':
      tone==='uncertain'?'Příjezdy jsou časově blízko':'Aktuální odchylka'}>
-    {formatNeighbourDelay(row.delay)}
+    <span>{formatNeighbourDelay(row.delay)}</span>
+    {estimated!==null&&<span className="sn-estimated" title={'Předpokládaný příjezd '+estimated}>({estimated})</span>}
    </span>
    <time className="sn-time" title="Čas podle jízdního řádu">{row.scheduled.slice(0,5)}</time>
   </div>;

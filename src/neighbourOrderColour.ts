@@ -28,3 +28,14 @@ export function scheduledSeconds(value:string):number|null{
  if(!m)return null;
  return Number(m[1])*3600+Number(m[2])*60+Number(m[3]??0);
 }
+
+/** Short HH:mm estimate for a scheduled GTFS service time and live offset.
+ * GTFS clock values can exceed 24h and negative deviations can cross midnight.
+ * Nearest-minute rounding avoids displaying 13:47 for 13:47:59.
+ */
+export function predictedArrivalClock(scheduled:number,delay:number|null):string|null{
+ if(!Number.isFinite(scheduled)||delay===null||!Number.isFinite(delay))return null;
+ const minutes=((Math.round((scheduled+delay)/60)%1440)+1440)%1440;
+ return String(Math.floor(minutes/60)).padStart(2,'0')+':'+
+  String(minutes%60).padStart(2,'0');
+}
