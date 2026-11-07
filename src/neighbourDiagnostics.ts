@@ -101,7 +101,6 @@ export function summarizeNeighbourBoardCounts(raw:unknown,selectedStopId:string)
  * Useful when the public GTFS trip detail has names/times but no stop_id.
  */
 export function summarizeTripStopSchema(raw:unknown):NonNullable<NeighbourDiagnosticEvent['shape']>{
- const root=obj(raw);
  // Mirror parseStops traversal, so diagnostics inspect the SAME array the
  // timer parsed. The previous diagnostic inspected only a top-level array,
  // falsely reporting zero although the timer displayed 37 stops.
