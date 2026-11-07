@@ -11,8 +11,13 @@ export function neighbourStopIdentity(tripId:string,index:number|null,stop:Stop|
  return [tripId,index,stop.id,stop.arrival||stop.departure].join('|');
 }
 /** Never hand a panel results from a different stop while an async request changes target. */
+const clock=(value:string):number|null=>{
+ const match=/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+ return match?Number(match[1])*3600+Number(match[2])*60+Number(match[3]??0):null;
+};
 export function neighbourResultMatchesStop(data:NeighbourResult|null,stop:Stop|null):boolean{
  if(!data||!stop||!data.stopId||!stop.id)return false;
  const expected=stop.arrival||stop.departure;
- return data.stopId===stop.id&&data.ownSchedule===expected;
+ const reported=clock(data.ownSchedule),planned=clock(expected);
+ return data.stopId===stop.id&&reported!==null&&planned!==null&&reported===planned;
 }
