@@ -1,5 +1,6 @@
 import {normalize,orderOf,routeOf,stateOfFeature,vehicleId,originRouteOf} from './featureUtils.ts';
 import type {Feature} from './featureUtils.ts';
+export {originRouteOf} from './featureUtils.ts';
 import {selectTrip,tripStart} from './tripSelection.ts';
 
 export type ChooserQuery=
