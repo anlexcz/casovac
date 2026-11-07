@@ -26,7 +26,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
   neighbourIndex===null&&sheetIndex!==null&&sheetStop!==null&&
   dismissedStop!==sheetKey&&hasNearby&&
   (autoNeighbourIndex===displayedIndex||autoNeighbourReady)&&
-  (neighbourSettings.mode==='all'||!!verifiedNeighbourData?.significant);
+  (neighbourSettings.mode==='all'?!!verifiedNeighbourData?.sharedOutgoing:!!verifiedNeighbourData?.significant);
  const autoOpen=neighbourIndex===null&&dismissedStop!==sheetKey&&
   (pinnedActive||eligibleAuto);
  const sheetOpen=neighbourSettings.enabled&&!diagnostics&&!settings&&
@@ -192,7 +192,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
      onChange={e=>updateNeighbourSettings({mode:e.target.value as typeof neighbourSettings.mode})}>
      <option value="off">Vypnuto, pouze ručně</option>
      <option value="important">Jen významné zastávky</option>
-     <option value="all">Všechny zastávky s blízkými spoji</option>
+     <option value="all">Všechny zastávky s pokračujícím společným úsekem</option>
     </select>
     <label htmlFor="neighbourWindow">Časové okno</label>
     <select id="neighbourWindow" value={neighbourSettings.window}
