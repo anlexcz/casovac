@@ -156,3 +156,53 @@ function stopsOf(detail){
   arrival:s.arrival_time,departure:s.departure_time,lat:null,lon:null
  }));
 }
+
+test('diverted predecessor is replaced by the next eligible planned service',()=>{
+ const mine=f('9_current',9300,'C',now+10000,{order:23});
+ const diverted=f('9_divert',9301,'X',now+10000,{order:22});
+ const replacement=f('9_replace',9302,'D',now+10000,{order:21});
+ const peerDivert=shifted(stops.slice(0,4),-4).concat([
+  {...stops[4],id:'X',arrival:'14:58:00',departure:'14:58:00'},
+  {...stops[5],id:'Y',arrival:'15:00:00',departure:'15:00:00'}
+ ]);
+ const map=new Map([['9_current',stops],['9_divert',peerDivert],['9_replace',shifted(stops,-8)]]);
+ const r=calculateLineHeadways({selected:mine,features:[mine,diverted,replacement],
+  stops,peerStops:map,now});
+ assert.equal(r.ahead.tripId,'9_replace');
+});
+test('short turning peer stays eligible until its last shared stop',()=>{
+ const mine=f('9_current',9300,'C',now+10000,{order:23});
+ const short=f('9_short',9301,'D',now+10000,{order:22});
+ const shortStops=shifted(stops.slice(0,4),-4);
+ const r=calculateLineHeadways({selected:mine,features:[mine,short],
+  stops,peerStops:new Map([['9_current',stops],['9_short',shortStops]]),now});
+ assert.equal(r.ahead.tripId,'9_short');
+});
+test('vehicle approaching common section through verified chained schedule remains eligible',()=>{
+ const mine=f('10_now',9200,'U',now+10000,{line:'10',order:11});
+ const approaching=f('9_approach',9201,'Q',now+10000,{line:'9',order:12});
+ const ownStops=[
+  {id:'T',name:'T',sequence:1,arrival:'14:54:00',departure:'14:54:00'},
+  {id:'U',name:'U',sequence:2,arrival:'14:56:00',departure:'14:56:00'},
+  {id:'V',name:'V',sequence:3,arrival:'14:58:00',departure:'14:58:00'}
+ ];
+ const linked=[
+  {id:'P',arrival:'14:50:00',departure:'14:50:00'},
+  {id:'Q',arrival:'14:52:00',departure:'14:52:00'},
+  ...ownStops
+ ].map((v,i)=>({name:v.id,sequence:i+1,...v}));
+ const r=calculateLineHeadways({selected:mine,features:[mine,approaching],
+  stops:ownStops,peerStops:new Map([['10_now',ownStops],['9_approach',linked]]),
+  now,allowedRoutes:new Set(['9','10'])});
+ assert.equal(r.behind?.tripId,'9_approach');
+});
+test('unrelated later intersection does not keep diverted vehicle eligible',()=>{
+ const mine=f('9_current',9300,'C',now+10000,{order:23});
+ const diverted=f('9_divert',9301,'X',now+10000,{order:22});
+ const detour=['A','B','C','D','X','Y','F'].map((id,i)=>({
+  ...stops[Math.min(i,stops.length-1)],id,sequence:i+1
+ }));
+ const r=calculateLineHeadways({selected:mine,features:[mine,diverted],
+  stops,peerStops:new Map([['9_current',stops],['9_divert',detour]]),now});
+ assert.equal(r.ahead,null);
+});
