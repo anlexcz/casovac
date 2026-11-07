@@ -131,7 +131,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
       </div>}
   </section>}
   {active&&<StopNeighbourSheet open={sheetOpen}
-   stopKey={sheetKey} name={sheetStop?.name??''} platformCode={sheetStop?.platformCode??''}
+   stopKey={sheetKey} name={sheetStop?.name??''} platformCode={stopNeighbours.gate.selectedPlatformCode||sheetStop?.platformCode||''}
    data={verifiedNeighbourData} updatedAt={verifiedNeighbourData?stopNeighbours.updatedAt:0}
    colourOrder={neighbourSettings.colourOrder} tolerance={neighbourSettings.orderToleranceSeconds}
    hysteresis={neighbourSettings.orderHysteresisSeconds}
@@ -155,7 +155,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
    <Diagnostics active={active} features={features} chosen={chosen??null} trip={trip} gps={gps} gpsError={gpsError} gpsWanted={gpsWanted} gpsAge={gpsAge} age={age} lastFetch={lastFetch} error={error} matchingCount={matches.length} position={position} positionState={pos.status} vehicleDistance={pos.vehicleDistance} manual={manual} setManual={setManual} selectedTrip={selectedTrip} setSelectedTrip={chooseTrip} startGps={()=>setGpsWanted(true)} stopGps={()=>setGpsWanted(false)} nextStopId={nextStopId} departure={departureDetection} remote={remote} onboard={compatible} onboardDecision={onboard} terminalWaiting={terminalWaiting} terminalName={terminalName} queryMode={queryMode} terminalCandidates={terminalCandidates} remoteProgress={remoteProgress} lastSeen={lastSeen} relatedVehicle={relatedVehicle} chainDiagnostic={chainDiagnostic} lastHandoff={lastHandoff} plannedHandoff={plannedHandoff?.next??null} handoffContinuity={continuity.reason} handoffDeparture={departureEvidence.reason} recorder={recorder} neighbourGate={stopNeighbours.gate} probeNeighbourBoard={stopNeighbours.probeDepartureBoard}/>
   </div>
 
-  <button className="debugFab" onClick={()=>setDiagnostics(v=>!v)} aria-label={diagnostics?'Zavřít diagnostiku':'Otevřít diagnostiku'} title="Diagnostika">{diagnostics?'×':'⌘'}</button>
+  <button className="debugFab" hidden={sheetOpen&&!diagnostics} onClick={()=>setDiagnostics(v=>!v)} aria-label={diagnostics?'Zavřít diagnostiku':'Otevřít diagnostiku'} title="Diagnostika">{diagnostics?'×':'⌘'}</button>
 
   {settings&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSettings(false);}}>
    <div className="modal" role="dialog" aria-modal="true" aria-label="Nastavení">
