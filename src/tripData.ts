@@ -42,7 +42,6 @@ export function parseStops(data:unknown):Stop[]{
  */
 export function mergeVerifiedStopIds(primary:Stop[],alternate:Stop[]):Stop[]{
  if(!primary.length||!alternate.length)return primary;
- const unique=new Set<string>();
  return primary.map(original=>{
   if(original.id)return original;
   const options=alternate.filter(candidate=>
@@ -50,8 +49,7 @@ export function mergeVerifiedStopIds(primary:Stop[],alternate:Stop[]):Stop[]{
    candidate.name===original.name&&
    (!original.arrival||!candidate.arrival||original.arrival===candidate.arrival)&&
    (!original.departure||!candidate.departure||original.departure===candidate.departure));
-  if(options.length!==1||unique.has(options[0].id))return original;
-  unique.add(options[0].id);
+  if(options.length!==1)return original;
   return {...original,id:options[0].id,platformCode:original.platformCode||options[0].platformCode};
  });
 }
