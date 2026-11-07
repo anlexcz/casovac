@@ -6,10 +6,10 @@ import './stopNeighbourSheet.css';
 type Props={
  open:boolean;name:string;platformCode:string;data:NeighbourResult|null;
  loading:boolean;error:string;ownLine:string;ownOrder:string;ownVehicle:string;
- onClose:()=>void;
+ remainingSeconds:number|null;onInteraction:()=>void;onClose:()=>void;
 };
 export default function StopNeighbourSheet({
- open,name,platformCode,data,loading,error,ownLine,ownOrder,ownVehicle,onClose
+ open,name,platformCode,data,loading,error,ownLine,ownOrder,ownVehicle,remainingSeconds,onInteraction,onClose
 }:Props){
  const touchStart=useRef<number|null>(null);
  useEffect(()=>{
@@ -20,8 +20,9 @@ export default function StopNeighbourSheet({
  },[open,onClose]);
  return <div className={'sn-sheet-layer'+(open?' sn-sheet-open':'')}
   aria-hidden={!open}>
-  <div className="sn-sheet-backdrop" onClick={onClose}/>
-  <section className="sn-sheet" role="dialog" aria-modal="true"
+
+  <section className="sn-sheet" role="dialog" aria-modal="false"
+   onPointerDown={onInteraction} onWheel={onInteraction} onTouchMove={onInteraction}
    aria-label={'Okolní spoje: '+name}>
    <header className="sn-sheet-header"
     onTouchStart={e=>{touchStart.current=e.touches[0]?.clientY??null;}}
@@ -34,6 +35,7 @@ export default function StopNeighbourSheet({
      <h2>{name||'Okolní spoje'}</h2>
      {platformCode&&<span className="sn-platform-badge">{platformCode}</span>}
     </div>
+    {remainingSeconds!==null&&<span className="sn-sheet-countdown" aria-label={'Zavře se za '+Math.ceil(remainingSeconds)+' sekund'}>{Math.ceil(remainingSeconds)} s</span>}
     <button className="sn-sheet-close" type="button" onClick={onClose} aria-label="Zavřít okolní spoje">×</button>
    </header>
    <div className="sn-sheet-body">
