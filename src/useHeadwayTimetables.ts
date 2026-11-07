@@ -99,11 +99,11 @@ export function useHeadwayTimetables(args:{
   if(!enabled||!selected||!token)return [];
   const id=selectedTripId(selected);
   if(!id||id==='—')return [];
-  const peers=headwayEligiblePeers(selected,allFeatures,currentStops,now,24,allowedRoutes);
+  const peers=headwayEligiblePeers(selected,allFeatures,currentStops,now,64,allowedRoutes);
   // Always retain a few nearby trips of each operating line, and make the
   // candidate key independent of geometry-driven ordering changes.
-  const same=peers.filter(f=>routeOf(f)===primaryLine).slice(0,7);
-  const cross=peers.filter(f=>routeOf(f)===foreignLine).slice(0,7);
+  const same=peers.filter(f=>routeOf(f)===primaryLine).slice(0,24);
+  const cross=peers.filter(f=>routeOf(f)===foreignLine).slice(0,24);
   return [...new Set([id,...(companionTripId?[companionTripId]:[]),
    ...[...same,...cross].map(selectedTripId).sort()])];
   // Vehicle snapshots refresh the candidate set. Do not restart per second.
@@ -118,10 +118,13 @@ export function useHeadwayTimetables(args:{
    // Rendering only uses the latest active set; abandoned requests do not
    // overwrite any current-trip identity.
    const details=new Map<string,HeadwayTripDetail>();
-   for(const id of ids){
-    const detail=await getDetail(id,date,token);
+   // Bounded concurrency avoids serial delays with many diversions/short
+   // turns, while respecting the existing shared request cache.
+   for(let start=0;start<ids.length;start+=6){
+    const batch=ids.slice(start,start+6);
+    const values=await Promise.all(batch.map(id=>getDetail(id,date,token)));
     if(!alive)return;
-    if(detail)details.set(id,detail);
+    batch.forEach((id,i)=>{if(values[i])details.set(id,values[i]!);});
    }
    const selectedId=selectedTripId(selected);
    const selectedDetail=details.get(selectedId);
