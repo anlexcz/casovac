@@ -194,10 +194,24 @@ export function useAppController(){
  const visualLine=atChainBoundary?plannedHandoff.next.line:active?.[0]??'';
  const visualOrder=atChainBoundary?(plannedHandoff.next.order||active?.[1]||''):active?.[1]??'';
  const visualDestination=atChainBoundary?nextTrip.headsign||destination:destination;
+ // Prepare the next shared platform before reaching its junction.
+ // The detection uses the current live deviation but never changes the
+ // timetable-based ordering of other vehicles.
+ const nextNeighbourIndex=displayedIndex===null?null:
+  displayedIndex+1<trip.stops.length?displayedIndex+1:null;
+ const nextNeighbourStop=nextNeighbourIndex===null?null:trip.stops[nextNeighbourIndex];
+ const nextNeighbourSchedule=nextNeighbourStop?.arrival||nextNeighbourStop?.departure||'';
+ const liveDelayRaw=path(chosen,'properties.last_position.delay.actual');
+ const liveDelaySeconds=typeof liveDelayRaw==='number'&&Number.isFinite(liveDelayRaw)&&Math.abs(liveDelayRaw)<3600?liveDelayRaw:0;
+ const nextNeighbourCountdown=nextNeighbourSchedule?countdownSeconds(nextNeighbourSchedule,now):null;
+ const autoNeighbourIndex=nextNeighbourIndex!==null&&nextNeighbourCountdown!==null&&
+  nextNeighbourCountdown+liveDelaySeconds>=-30&&
+  nextNeighbourCountdown+liveDelaySeconds<=neighbourSettings.autoOpenSeconds?
+   nextNeighbourIndex:displayedIndex;
  const stopNeighbours=useStopNeighbours({
   enabled:neighbourSettings.enabled&&!!active,token:token.trim(),now,
   ownFeature:chosen,ownTripId:tripId,stops:trip.stops,currentIndex:displayedIndex,
-  requestedIndex:neighbourIndex,settings:neighbourSettings
+  requestedIndex:neighbourIndex??autoNeighbourIndex,settings:neighbourSettings
  });
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
  const highlightedTime=highlightedStop?.departure||highlightedStop?.arrival||'';
@@ -257,5 +271,5 @@ export function useAppController(){
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setNeighbourIndex(null);setSelectedTrip(id);setManual(null);}
- return {neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ return {neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }
