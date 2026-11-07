@@ -44,7 +44,7 @@ export function useStopNeighbours(args:{
  const [snapshot,setSnapshot]=useState<Snapshot>({key:'',features:[],schedules:new Map(),ownStops:[],loading:false,error:''});
  const poll=Math.floor(now/30000);
  useEffect(()=>{
-  if(!enabled||!token||!ownFeature||selectedIndex===null||!ownTripId){setSnapshot({key:'',features:[],schedules:new Map(),loading:false,error:''});return;}
+  if(!enabled||!token||!ownFeature||selectedIndex===null||!ownTripId){setSnapshot({key:'',features:[],schedules:new Map(),ownStops:[],loading:false,error:''});return;}
   let live=true;
   setSnapshot(old=>old.key===key?{...old,loading:true}:{key,features:[],schedules:new Map(),ownStops:[],loading:true,error:''});
   const run=async()=>{
@@ -115,7 +115,7 @@ export function useStopNeighbours(args:{
     }
     if(live)setSnapshot({key,features:plausible,schedules,ownStops,loading:false,error:''});
    }catch(e){
-    if(live)setSnapshot({key,features:[],schedules:new Map(),loading:false,error:e instanceof Error?e.message:String(e)});
+    if(live)setSnapshot({key,features:[],schedules:new Map(),ownStops:[],loading:false,error:e instanceof Error?e.message:String(e)});
    }
   };
   void run();
