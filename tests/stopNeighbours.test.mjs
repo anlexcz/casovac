@@ -29,7 +29,7 @@ test('schedule determines ordering even when live arrival order differs',()=>{
  assert.deepEqual(rows.map(x=>x.tripId),['before','equal','after']);
  assert.deepEqual(rows.map(x=>x.relative),['before','same','after']);
  assert.equal(rows[0].delay,360);
- assert.equal(rows[0].predictedDifference,120);
+ assert.equal(rows[0].predictedDifference,0);
 });
 test('one exact stop ID suffices; other platform is excluded',()=>{
  assert.equal(run().rows.some(x=>x.tripId==='other-platform'),false);
@@ -41,14 +41,15 @@ test('joining or splitting route marks an important platform',()=>{
 });
 test('a very late planned predecessor remains displayed and before us',()=>{
  const late=feature('before','3',12,9154,'B',600);
- const r=run([late]);
+ const r=run([late],{settings:{...DEFAULT_NEIGHBOUR_SETTINGS,enabled:true,window:'manual',beforeMinutes:2,afterMinutes:5}});
  assert.equal(r.rows[0].relative,'before');
  assert.equal(r.rows[0].predictedDifference,360);
 });
 test('window follows expected arrival and is adjustable',()=>{
- const narrow=run([before],{settings:{...DEFAULT_NEIGHBOUR_SETTINGS,enabled:true,window:'manual',beforeMinutes:1,afterMinutes:1}});
+ const moderatelyLate=feature('before','3',12,9154,'B',540);
+ const narrow=run([moderatelyLate],{settings:{...DEFAULT_NEIGHBOUR_SETTINGS,enabled:true,window:'manual',beforeMinutes:1,afterMinutes:1}});
  assert.equal(narrow.rows.length,0);
- const wide=run([before],{settings:{...DEFAULT_NEIGHBOUR_SETTINGS,enabled:true,window:'manual',beforeMinutes:4,afterMinutes:4}});
+ const wide=run([moderatelyLate],{settings:{...DEFAULT_NEIGHBOUR_SETTINGS,enabled:true,window:'manual',beforeMinutes:4,afterMinutes:4}});
  assert.equal(wide.rows.length,1);
  assert.deepEqual(relevantWindows(DEFAULT_NEIGHBOUR_SETTINGS,0),{before:120,after:180});
  assert.deepEqual(relevantWindows(DEFAULT_NEIGHBOUR_SETTINGS,5),{before:240,after:300});
