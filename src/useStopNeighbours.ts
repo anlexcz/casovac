@@ -119,9 +119,23 @@ export function useStopNeighbours(args:{
        departureBoardNameUrl(candidate.name,candidate.arrival||candidate.departure,date),
        token,60000,'low');
       const resolved=resolveOwnPlatform(body,ownTripId,candidate.arrival||candidate.departure);
-      if(resolved.id)platformCache.set(futureKey,{
-       id:resolved.id,platformCode:resolved.platformCode,at:Date.now()
-      });
+      if(resolved.id){
+       const at=Date.now();
+       platformCache.set(futureKey,{
+        id:resolved.id,platformCode:resolved.platformCode,at
+       });
+       // Name-based discovery is anchored to our OWN scheduled visit, so it
+       // already contains a consistent set of nearby trips. Preserve that
+       // exact boarding-edge subset for immediate first paint upon arrival.
+       // The normal high-priority board poll will still update live delays.
+       const departures=(body.departures??[]).filter(d=>d.stop?.id===resolved.id);
+       if(departures.length){
+        const cacheKey=boardId(date,resolved.id);
+        const previous=boardCache.get(cacheKey);
+        if(!previous||previous.at<at)
+         boardCache.set(cacheKey,{board:{departures},at});
+       }
+      }
      }catch{/* Optional warmup must not block the selected stop. */}
     }
    })();
