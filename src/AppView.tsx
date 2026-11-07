@@ -130,6 +130,8 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
   {active&&<StopNeighbourSheet open={sheetOpen}
    stopKey={sheetKey} name={sheetStop?.name??''} platformCode={sheetStop?.platformCode??''}
    data={stopNeighbours.result} updatedAt={stopNeighbours.updatedAt}
+   colourOrder={neighbourSettings.colourOrder} tolerance={neighbourSettings.orderToleranceSeconds}
+   hysteresis={neighbourSettings.orderHysteresisSeconds}
    loading={stopNeighbours.loading} error={stopNeighbours.error}
    ownLine={visualLine} ownOrder={visualOrder}
    ownVehicle={chosen?vehicleId(chosen):lastSeen?.vehicle??''}
@@ -205,6 +207,20 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
        onChange={e=>updateNeighbourSettings({afterMinutes:Math.max(0,Math.min(20,Number(e.target.value)||0))})}/>
      </label>
     </div>}
+    <div className="settingsSectionHeading">Vyhodnocení pořadí dle aktuální odchylky</div>
+    <label className="rememberOption"><input type="checkbox" checked={neighbourSettings.colourOrder}
+     onChange={e=>updateNeighbourSettings({colourOrder:e.target.checked})}/>
+     <span>Barevně hodnotit pravděpodobné pořadí</span></label>
+    <label htmlFor="neighbourTolerance">Tolerance blízkých příjezdů (sekundy)</label>
+    <input id="neighbourTolerance" type="number" min="0" max="120" step="5"
+     value={neighbourSettings.orderToleranceSeconds}
+     onChange={e=>updateNeighbourSettings({orderToleranceSeconds:
+      Math.max(0,Math.min(120,Number(e.target.value)||0))})}/>
+    <label htmlFor="neighbourHysteresis">Hysterze změny barvy (sekundy)</label>
+    <input id="neighbourHysteresis" type="number" min="0" max="30" step="5"
+     value={neighbourSettings.orderHysteresisSeconds}
+     onChange={e=>updateNeighbourSettings({orderHysteresisSeconds:
+      Math.max(0,Math.min(30,Number(e.target.value)||0))})}/>
     <label htmlFor="neighbourLookahead">Ruční zobrazení: kolik zastávek dopředu</label>
     <input id="neighbourLookahead" type="number" min="1" max="10" step="1"
      value={neighbourSettings.lookahead} onChange={e=>updateNeighbourSettings({
