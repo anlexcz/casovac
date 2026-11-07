@@ -118,7 +118,10 @@ export function useStopNeighbours(args:{
   if(liveBusyRef.current===key)return;
   liveBusyRef.current=key;
   const valid=()=>liveKeyRef.current===key;
-  setSnapshot(old=>({...old,key,loading:true,error:''}));
+  setSnapshot(old=>old.key===key?{...old,loading:true,error:''}:{
+   key,features:[],schedules:new Map(),ownStops:activePlatform.ownStops,
+   loading:true,error:'',updatedAt:0
+  });
   const run=async()=>{
    const routes=[...new Set([routeOf(ownFeature),...activePlatform.routes])].filter(Boolean).slice(0,9);
    const received:Feature[]=[];
