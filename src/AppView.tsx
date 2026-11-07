@@ -10,7 +10,7 @@ import {useAppController,parseOrder,vehicleId} from './useAppController';
 import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopIdentity';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
  // Mobile keyboards change the visual viewport without necessarily changing
  // 100dvh. Keep the chooser anchored to the actual visible viewport.
@@ -85,7 +85,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
    onMouseDown={e=>{if(e.target===e.currentTarget)setEditing(false);}}>
    <section className="modal chooserModal" role="dialog" aria-modal="true" aria-label="Vybrat sledovaný spoj">
     <div className="row chooserHeading"><div><h2>Vybrat spoj</h2></div><button className="iconButton" onClick={()=>setEditing(false)} aria-label="Zavřít">✕</button></div>
-    <input id="orderInput" autoFocus aria-label="Linka, pořadí nebo evidenční číslo" placeholder="Např. 7, 91/71 nebo #8266" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&parseOrder(query))start();}}/>
+    <input id="orderInput" autoFocus aria-label="Linka, pořadí nebo evidenční číslo" placeholder="Např. 7, 91/71 nebo #8266" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&lookupReady&&!searchingAcrossRoutes&&results.length===1&&!results[0].ambiguous)start(results[0].line+'/'+results[0].order);}}/>
     <p className="chooserCaption" role="status" aria-live="polite">
      {!token.trim()?'API KLÍČ NENÍ ZADANÝ':
       queryKind==='invalid'?'ZADEJ LINKU, POŘADÍ NEBO # VOZU':
@@ -97,14 +97,18 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
     <div className="chooserResults">
      {!token.trim()?<p className="hint">Pro vyhledávání je potřeba API klíč Golemio v nastavení.</p>:
       queryKind==='invalid'?<p className="hint">Zadej linku, aktuální či kmenové pořadí nebo #evidenční číslo.</p>:<>
+       {searchingAcrossRoutes&&<p className="hint" role="status">Dohledávám také kmenová pořadí na ostatních linkách…</p>}
        {lookup.error&&<p className="hint" role="status">{lookup.error}</p>}
        {lookupReady&&results.map(item=><button type="button" className="chooserRow" key={item.line+'/'+item.order} disabled={item.ambiguous} title={item.ambiguous?'Nejednoznačné přiřazení vozu; vyber až po ověření':undefined} onClick={()=>start(item.line+'/'+item.order)}>
         <span className="chooserId"><span>{item.line}/</span><strong>{item.order}</strong>
          {item.originRoute&&item.originRoute!==item.line&&<span className="chooserOrigin">({item.originRoute}/{item.order})</span>}
         </span><span className="chooserVehicle">{item.ambiguous?'Nejednoznačné':item.car!=='—'?'#'+item.car:'—'}</span><span className="chooserStop"><svg className="chooserStopIcon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="5" y="3" width="14" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M5 10h14M8 7h2m4 0h2M8 19l-2 3m10-3 2 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg><span>{chooserStop(item.target,stopNames)}</span></span>
        </button>)}
-       {lookupReady&&!lookup.error&&lookupOrder&&results.length===0&&<div className="chooserMissing"><strong>Pořadí {lookupOrder[0]}/{lookupOrder[1]} není momentálně dostupné.</strong><p className="hint">Můžeš opravit zadání. Ruční sledování bez nalezeného záznamu používá aktuální linku, nikoliv kmenovou identitu.</p><button className="primary full" onClick={()=>start()}>Sledovat {lookupOrder[0]}/{lookupOrder[1]} a čekat na data</button></div>}
-       {lookupReady&&!lookup.error&&queryKind==='vehicle'&&results.length===0&&<p className="hint">Vozidlo #{queryVehicle} není v dostupných datech Golemia.</p>}
+       {lookupReady&&!lookup.error&&!searchingAcrossRoutes&&lookupOrder&&results.length===0&&
+        <div className="chooserMissing"><strong>Pro zadání {lookupOrder[0]}/{lookupOrder[1]} nebylo nalezeno pořadí.</strong>
+         <p className="hint">Hledají se i delší pořadí začínající zadanými číslicemi a kmenová pořadí napříč linkami. Bez ověření nenabízíme sledování jiné linky.</p>
+        </div>}
+       {lookupReady&&!lookup.error&&queryKind==='vehicle'&&!searchingAcrossRoutes&&results.length===0&&<p className="hint">Vozidlo #{queryVehicle} není v dostupných datech Golemia.</p>}
        {lookupReady&&!lookup.error&&queryKind==='route'&&results.length===0&&<p className="hint">Aktuálně nejsou dostupná žádná pořadí. Konkrétní pořadí můžeš zadat ručně.</p>}
       </>}
     </div>
