@@ -4,12 +4,12 @@ import type {NeighbourResult} from './stopNeighbours';
 import './stopNeighbourSheet.css';
 
 type Props={
- open:boolean;name:string;platformCode:string;data:NeighbourResult|null;
+ open:boolean;stopKey:string;name:string;platformCode:string;data:NeighbourResult|null;updatedAt:number;
  loading:boolean;error:string;ownLine:string;ownOrder:string;ownVehicle:string;
  remainingSeconds:number|null;onInteraction:()=>void;onClose:()=>void;
 };
 export default function StopNeighbourSheet({
- open,name,platformCode,data,loading,error,ownLine,ownOrder,ownVehicle,remainingSeconds,onInteraction,onClose
+ open,stopKey,name,platformCode,data,updatedAt,loading,error,ownLine,ownOrder,ownVehicle,remainingSeconds,onInteraction,onClose
 }:Props){
  const touchStart=useRef<number|null>(null);
  useEffect(()=>{
@@ -39,7 +39,7 @@ export default function StopNeighbourSheet({
     <button className="sn-sheet-close" type="button" onClick={onClose} aria-label="Zavřít okolní spoje">×</button>
    </header>
    <div className="sn-sheet-body">
-    <StopNeighbours data={data} loading={loading} error={error}
+    <StopNeighbours key={stopKey} data={data} updatedAt={updatedAt} loading={loading} error={error}
      ownLine={ownLine} ownOrder={ownOrder} ownVehicle={ownVehicle}/>
    </div>
   </section>
