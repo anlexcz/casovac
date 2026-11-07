@@ -13,12 +13,6 @@
 .sn-own .sn-time{color:#e6edf4}
 .sn-status{margin:0;padding:10px 6px;font-size:12px;color:#9babb9}
 .sn-updating{font-size:11px;color:#8699a9;padding-left:6px}
-.boardStack>.activeDeparture{position:relative;padding-bottom:20px}
-.boardStack>.activeDeparture>.sn-current-toggle{position:absolute;bottom:2px;left:11px;display:inline-flex;align-items:center;gap:5px;padding:3px 5px;border:0;background:transparent;color:#ffffffad;min-height:20px;font-size:12px;line-height:1.2}
-.boardStack>.activeDeparture>.sn-current-toggle[aria-expanded="true"]{color:#fff}
-.boardStack .neighbourExpandFuture{border:0;background:transparent;padding:0;min-height:38px;min-width:29px;font-size:16px;color:#7d92a4}
-.boardStack .upcomingStop:has(.neighbourExpandFuture){display:grid;grid-template-columns:minmax(0,1fr) 29px;gap:0;padding-right:5px}
-.boardStack .upcomingStop:has(.neighbourExpandFuture)>.upcomingButton{min-width:0;width:100%}
 .neighbourSettingsGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .neighbourSettingsGrid label{min-width:0;font-size:12px}
 .neighbourSettingsGrid input{width:100%;box-sizing:border-box}
