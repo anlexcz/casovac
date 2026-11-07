@@ -19,8 +19,10 @@ test('departure board query requests an exact platform, all lines and scheduled 
  assert.equal(url.searchParams.get('mode'),'mixed');
 });
 test('a single board yields same-platform trams across unrelated lines without individual GTFS lookups',()=>{
+ const bus=departure('bus','125','2026-11-07T09:29:00Z');
+ bus.route.type=3;
  const rows=[
-  departure('bus','125','2026-11-07T09:29:00Z'),
+  bus,
   departure('before','23','2026-11-07T09:29:00Z'),
   departure('after','22','2026-11-07T09:32:00Z'),
   departure('wrong-platform','17','2026-11-07T09:31:00Z','B'),
