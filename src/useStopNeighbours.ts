@@ -7,7 +7,7 @@ import {golemioJson} from './golemioClient.ts';
 import {calculateStopNeighbours} from './stopNeighbours.ts';
 import type {NeighbourSettings} from './stopNeighbours.ts';
 
-type Snapshot={key:string;features:Feature[];schedules:Map<string,Stop[]>;loading:boolean;error:string};
+type Snapshot={key:string;features:Feature[];schedules:Map<string,Stop[]>;ownStops:Stop[];loading:boolean;error:string};
 const cachedDetails=new Map<string,{stops:Stop[];at:number}>();
 const clock=(v:string)=>{const m=/^(\d{1,2}):(\d{2})/.exec(v);return m?Number(m[1])*60+Number(m[2]):null;};
 const dateLocal=(now:number)=>new Intl.DateTimeFormat('sv-SE',{
@@ -39,18 +39,23 @@ export function useStopNeighbours(args:{
 }){
  const {enabled,token,now,ownFeature,ownTripId,stops,currentIndex,requestedIndex,settings}=args;
  const selectedIndex=requestedIndex??currentIndex;
- const selectedStop=selectedIndex!==null?stops[selectedIndex]:null;
- const stopId=selectedStop?.id??'';
  const date=dateLocal(now);
- const key=date+'|'+ownTripId+'|'+stopId;
- const [snapshot,setSnapshot]=useState<Snapshot>({key:'',features:[],schedules:new Map(),loading:false,error:''});
+ const key=date+'|'+ownTripId+'|'+String(selectedIndex??'');
+ const [snapshot,setSnapshot]=useState<Snapshot>({key:'',features:[],schedules:new Map(),ownStops:[],loading:false,error:''});
  const poll=Math.floor(now/30000);
  useEffect(()=>{
-  if(!enabled||!token||!ownFeature||!stopId||!ownTripId){setSnapshot({key:'',features:[],schedules:new Map(),loading:false,error:''});return;}
+  if(!enabled||!token||!ownFeature||selectedIndex===null||!ownTripId){setSnapshot({key:'',features:[],schedules:new Map(),loading:false,error:''});return;}
   let live=true;
-  setSnapshot(old=>old.key===key?{...old,loading:true}:{key,features:[],schedules:new Map(),loading:true,error:''});
+  setSnapshot(old=>old.key===key?{...old,loading:true}:{key,features:[],schedules:new Map(),ownStops:[],loading:true,error:''});
   const run=async()=>{
    try{
+    // The public trip lookup can omit stop IDs. Resolve the selected trip\'s
+    // full dated static stop list before querying the exact platform ID.
+    const ownStops=await getStops(ownTripId,date,token);
+    if(!live)return;
+    const targetStop=ownStops[selectedIndex!];
+    const stopId=targetStop?.id??'';
+    if(!stopId)throw new Error('Chybí přesné GTFS ID nástupní hrany.');
     // Stop-scoped GTFS discovery; never download the whole network.
     const lookup=new URL('https://api.golemio.cz/v2/gtfs/trips');
     lookup.searchParams.set('date',date);
@@ -89,7 +94,7 @@ export function useStopNeighbours(args:{
      seen.add(id);
      return true;
     });
-    const ownMinutes=clock(selectedStop?.arrival||selectedStop?.departure||'');
+    const ownMinutes=clock(targetStop.arrival||targetStop.departure||'');
     const plausible=unique.filter(f=>{
      const item=candidates.find(x=>String(path(x,'trip_id')??'')===selectedTripId(f));
      if(!item)return false;
@@ -108,7 +113,7 @@ export function useStopNeighbours(args:{
      if(!live)return;
      batch.forEach((f,i)=>{if(results[i].length)schedules.set(selectedTripId(f),results[i]);});
     }
-    if(live)setSnapshot({key,features:plausible,schedules,loading:false,error:''});
+    if(live)setSnapshot({key,features:plausible,schedules,ownStops,loading:false,error:''});
    }catch(e){
     if(live)setSnapshot({key,features:[],schedules:new Map(),loading:false,error:e instanceof Error?e.message:String(e)});
    }
@@ -120,7 +125,7 @@ export function useStopNeighbours(args:{
  const result=useMemo(()=>{
   if(!enabled||snapshot.key!==key||selectedIndex===null)return null;
   return calculateStopNeighbours({
-   ownTripId,ownStops:stops,ownIndex:selectedIndex,ownFeature,
+   ownTripId,ownStops:snapshot.ownStops,ownIndex:selectedIndex,ownFeature,
    candidates:snapshot.features,candidateStops:snapshot.schedules,now,settings,
    distance:currentIndex===null?0:Math.max(0,selectedIndex-currentIndex)
   });
