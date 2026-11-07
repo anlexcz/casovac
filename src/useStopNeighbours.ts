@@ -7,6 +7,7 @@ import {golemioJson} from './golemioClient.ts';
 import type {NeighbourSettings} from './stopNeighbours.ts';
 import {departureBoardUrl,parseNeighbourBoard} from './stopNeighbourBoard.ts';
 import type {DepartureBoard} from './stopNeighbourBoard.ts';
+import {departureBoardNameUrl,resolveOwnPlatform} from './resolveNeighbourPlatform.ts';
 import {recordNeighbourDiagnostic,summarizeNeighbourBoardResponse,summarizeNeighbourBoardCounts,summarizeTripStopSchema} from './neighbourDiagnostics.ts';
 
 type BoardState={key:string;board:DepartureBoard|null;at:number;error:string;loading:boolean};
@@ -47,13 +48,45 @@ export function useStopNeighbours(args:{
  const index=requestedIndex??currentIndex;
  const stop=index===null?null:stops[index]??null;
  const date=dateLocal(now);
- const key=date+'|'+ownTripId+'|'+String(index??-1)+'|'+(stop?.id??'')+'|'+(stop?.arrival||stop?.departure||'');
- const selectedStopId=stop?.id??'';
+ const unresolvedKey=date+'|'+ownTripId+'|'+String(index??-1)+'|'+(stop?.name??'')+'|'+(stop?.arrival||stop?.departure||'');
+ const [resolved,setResolved]=useState<{key:string;id:string;error:string}>({key:'',id:'',error:''});
+ const selectedStopId=stop?.id||(resolved.key===unresolvedKey?resolved.id:'');
+ const effectiveStop=useMemo(()=>stop&&selectedStopId?{...stop,id:selectedStopId}:stop,[stop,selectedStopId]);
+ const key=date+'|'+ownTripId+'|'+String(index??-1)+'|'+selectedStopId+'|'+(stop?.arrival||stop?.departure||'');
  const gate={
   enabled,hasToken:!!token,hasVehicle:!!ownFeature,hasTrip:!!ownTripId&&ownTripId!=='—',
   hasPlatform:!!selectedStopId,selectedStopId,stopName:stop?.name??'',
   ownTripId,index,stopsCount:stops.length
  };
+ // The public trip detail currently supplies 37 stop-time features with
+ // geometry, name, sequence and times but no stop_id. Recover it via the
+ // operator's departure board, accepting ONLY the exact own trip and time.
+ useEffect(()=>{
+  if(!enabled||!token||!stop?.name||!!stop.id||!ownTripId||ownTripId==='—')return;
+  let active=true;
+  const started=Date.now();
+  const context={stopId:'',stopName:stop.name,tripId:ownTripId,
+   endpoint:'/v2/pid/departureboards · names (platform discovery)'};
+  recordNeighbourDiagnostic({...context,at:started,kind:'request',
+   note:'Ověřuji nástupní hranu z názvu pouze podle přesného trip ID a času JŘ'});
+  void golemioJson<DepartureBoard>(departureBoardNameUrl(stop.name),token,12000,'high')
+   .then(board=>{
+    const at=Date.now();
+    const resolution=resolveOwnPlatform(board,ownTripId,stop.arrival||stop.departure);
+    recordNeighbourDiagnostic({...context,at,kind:'response',
+     elapsedMs:at-started,shape:summarizeNeighbourBoardResponse(board),
+     counts:{...summarizeNeighbourBoardCounts(board,''),ownTripMatches:resolution.matches,
+      resolvedPlatform:resolution.id?1:0},
+     note:resolution.reason+(resolution.id?' · '+resolution.id:'')});
+    if(active)setResolved({key:unresolvedKey,id:resolution.id,error:resolution.reason});
+   }).catch(e=>{
+    const message=e instanceof Error?e.message:String(e);
+    recordNeighbourDiagnostic({...context,at:Date.now(),kind:'error',
+     elapsedMs:Date.now()-started,note:'Vyhledání stop_id: '+message.slice(0,280)});
+    if(active)setResolved({key:unresolvedKey,id:'',error:message});
+   });
+  return()=>{active=false;};
+ },[enabled,token,unresolvedKey,stop?.name,stop?.id,stop?.arrival,stop?.departure,ownTripId]);
  const poll=Math.floor(now/20000);
  const [boardState,setBoardState]=useState<BoardState>(EMPTY);
  const [live,setLive]=useState<FeatureState>({key:'',features:[]});
@@ -69,7 +102,7 @@ export function useStopNeighbours(args:{
    const reasons=[
     !enabled?'Okolní spoje jsou vypnuté v nastavení':'',
     !token?'Není zadaný API klíč':'',
-    !selectedStopId?'Vybraná zastávka nemá GTFS stop_id':'',
+    !selectedStopId?(resolved.key===unresolvedKey&&resolved.error?'Identifikace nástupní hrany: '+resolved.error:'Čekám na ověření GTFS stop_id z odjezdníku'):'',
     !ownFeature?'Není identifikovaný živý trip sledované tramvaje':''
    ].filter(Boolean);
    recordNeighbourDiagnostic({
@@ -126,7 +159,7 @@ export function useStopNeighbours(args:{
    if(valid)setBoardState(prev=>({...prev,key,loading:false,error:message}));
   });
   return()=>{valid=false;};
- },[enabled,token,key,selectedStopId,date,poll,!!ownFeature]);
+ },[enabled,token,key,selectedStopId,date,poll,!!ownFeature,resolved.key,resolved.error]);
 
  // One low-priority batched request warms *all* six upcoming platforms.
  // The selected platform is handled above at high priority; this warmup
@@ -204,9 +237,9 @@ export function useStopNeighbours(args:{
  // "new incoming line" trigger. It is deliberately NOT a prerequisite
  // for showing all routes in the manually opened timetable.
  useEffect(()=>{
-  if(!enabled||!token||!readyBoard||!stop)return;
+  if(!enabled||!token||!readyBoard||!effectiveStop)return;
   let active=true;
-  const initial=parseNeighbourBoard({board:readyBoard,stop,ownTripId,
+  const initial=parseNeighbourBoard({board:readyBoard,stop:effectiveStop,ownTripId,
    ownStops:stops,ownIndex:index!,ownDelay:null,settings,distance:0,features:[]});
   const ids=initial.rows.slice(0,10).map(row=>row.tripId);
   const found=new Map<string,Stop[]>();
@@ -228,14 +261,14 @@ export function useStopNeighbours(args:{
  const ownDelay=typeof ownDelayRaw==='number'&&Number.isFinite(ownDelayRaw)?
   ownDelayRaw:null;
  const result=useMemo(()=>{
-  if(!enabled||!stop||index===null||!readyBoard)return null;
+  if(!enabled||!effectiveStop||!selectedStopId||index===null||!readyBoard)return null;
   return parseNeighbourBoard({
-   board:readyBoard,stop,ownTripId,ownStops:stops,ownIndex:index,ownDelay,
+   board:readyBoard,stop:effectiveStop,ownTripId,ownStops:stops,ownIndex:index,ownDelay,
    settings,distance:currentIndex===null?0:Math.max(0,index-currentIndex),
    features:live.key===key?[...knownFeatures,...live.features]:knownFeatures,
    candidateStops:detail.key===key?detail.stops:undefined
   });
- },[enabled,stop,index,readyBoard,ownTripId,stops,ownDelay,settings,currentIndex,
+ },[enabled,effectiveStop,index,selectedStopId,readyBoard,ownTripId,stops,ownDelay,settings,currentIndex,
   live,knownFeatures,detail,key]);
  useEffect(()=>{
   if(!result||!readyBoard||!selectedStopId)return;
