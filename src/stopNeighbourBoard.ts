@@ -48,7 +48,7 @@ export function parseNeighbourBoard(args:{
 }):NeighbourResult{
  const {board,stop,ownTripId,ownStops,ownIndex,ownDelay,settings,distance,features,candidateStops}=args;
  const ownSchedule=stop.arrival||stop.departure,ownTime=seconds(ownSchedule);
- const result:NeighbourResult={rows:[],significant:false,stopId:stop.id,ownSchedule,ownDelay};
+ const result:NeighbourResult={rows:[],significant:false,sharedOutgoing:false,stopId:stop.id,ownSchedule,ownDelay};
  if(ownTime===null||!stop.id)return result;
  const live=new Map(features.map(f=>[selectedTripId(f),f]));
  const window=relevantWindows(settings,distance);
@@ -80,8 +80,11 @@ export function parseNeighbourBoard(args:{
   const next=position>=0?stops![position+1]?.id??'':'';
   // Auto-open only where a DIFFERENT incoming branch joins our corridor
   // and continues on our next segment. A divergence does not qualify.
-  if(stops?.length&&joiningCorridor(ownStops,ownIndex,stops,planned,stop.id).joining)
-   result.significant=true;
+  if(stops?.length){
+   const direction=joiningCorridor(ownStops,ownIndex,stops,planned,stop.id);
+   if(direction.joining)result.significant=true;
+   if(direction.joining||direction.reason==='same-incoming')result.sharedOutgoing=true;
+  }
   result.rows.push({
    tripId:id,line:shortName,order:feature?String(orderOf(feature)??'?'):'?',
    vehicle:car==='—'?'':car,scheduled:new Date(plannedISO!).toLocaleTimeString('cs-CZ',
