@@ -151,9 +151,10 @@ export function useAppController(){
  });
  const headways=useMemo(()=>showHeadways?
   calculateLineHeadways({selected:chosen,features:headwaySource.features,stops:trip.stops,
-   peerStops:headwaySource.schedules,allowedRoutes:headwaySource.allowedRoutes,now}):null,
+   peerStops:headwaySource.schedules,allowedRoutes:headwaySource.allowedRoutes,
+   links:headwaySource.links,now}):null,
   [showHeadways,chosen,headwaySource.features,trip.stops,headwaySource.schedules,
-   headwaySource.allowedRoutes,Math.floor(now/30000)]);
+   headwaySource.allowedRoutes,headwaySource.links,Math.floor(now/30000)]);
  const age=lastFetch===null?null:Math.max(0,Math.floor((now-lastFetch)/1000));
  const gpsAge=gps?Math.max(0,Math.floor((now-gps.timestamp)/1000)):null;
  const coords=chosen?.geometry?.coordinates;

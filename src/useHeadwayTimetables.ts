@@ -6,11 +6,25 @@ import {routeOf,selectedTripId,vehicleId} from './featureUtils';
 import type {Feature,Obj} from './featureUtils';
 import {headwayEligiblePeers} from './lineHeadways';
 import {joinHeadwayBlock,possibleBlockPartners} from './headwayChains';
-import type {HeadwayTripDetail} from './headwayChains';
+import type {HeadwayTripDetail,LinkedSchedule} from './headwayChains';
+import type {HeadwayLink} from './headwayLinkEligibility';
 
 const TTL=6*3600000;
 const detailCache=new Map<string,{detail:HeadwayTripDetail;at:number}>();
 const serviceCache=new Map<string,{stops:Stop[];at:number}>();
+const linkCache=new Map<string,{link:HeadwayLink;at:number}>();
+/** Store transition boundaries with the GTFS trip whose live vehicle is
+ * compared. Only verified joinHeadwayBlock results may create this link. */
+function linkFromPair(joined:LinkedSchedule,a:HeadwayTripDetail,b:HeadwayTripDetail):HeadwayLink|null{
+ const first=joined.firstId===a.trip_id?a:b;
+ const second=joined.secondId===a.trip_id?a:b;
+ const firstLine=first.route?.route_short_name,secondLine=second.route?.route_short_name;
+ const count=parseStops(first).length;
+ return firstLine&&secondLine&&count>1?{
+  firstId:joined.firstId,secondId:joined.secondId,firstLine,secondLine,
+  boundaryIndex:count-1
+ }:null;
+}
 const dateLocal=(now:number)=>new Intl.DateTimeFormat('sv-SE',{
  timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'
 }).format(new Date(now));
@@ -57,7 +71,8 @@ const stopIdsOk=(stops:Stop[])=>stops.length>1&&stops.every(s=>!!s.id);
 export function useHeadwayTimetables(args:{
  enabled:boolean;selected:Feature|null;features:Feature[];currentStops:Stop[];
  token:string;now:number;companionLine:string;companionTripId:string;
-}):{schedules:ReadonlyMap<string,Stop[]>;features:Feature[];allowedRoutes:ReadonlySet<string>}{
+}):{schedules:ReadonlyMap<string,Stop[]>;features:Feature[];allowedRoutes:ReadonlySet<string>;
+ links:ReadonlyMap<string,HeadwayLink>}{
  const {enabled,selected,features,currentStops,token,now,companionLine,companionTripId}=args;
  const date=dateLocal(now);
  const primaryLine=selected?routeOf(selected):'';
@@ -197,7 +212,11 @@ export function useHeadwayTimetables(args:{
     const rawStops=parseStops(detail);
     if(!stopIdsOk(rawStops))continue;
     let combined:Stop[]=rawStops;
-    if(id===selectedId&&activePair)combined=activePair.stops;
+    let verifiedLink:HeadwayLink|null=null;
+    if(id===selectedId&&activePair&&selectedDetail&&selectedCompanion){
+     combined=activePair.stops;
+     verifiedLink=linkFromPair(activePair,selectedDetail,selectedCompanion);
+    }
     else if(foreignLines.includes(detail.route?.route_short_name??'')&&id!==selectedId&&detail.block_id){
      let partner:HeadwayTripDetail|null=null;
      // The first trip of a PID block is commonly addressable as block_id.
@@ -217,10 +236,15 @@ export function useHeadwayTimetables(args:{
      }
      if(partner&&partner.route?.route_short_name!==detail.route?.route_short_name){
       const verified=joinHeadwayBlock(detail,partner);
-      if(verified)combined=verified.stops;
+      if(verified){
+       combined=verified.stops;
+       verifiedLink=linkFromPair(verified,detail,partner);
+      }
      }
     }
     serviceCache.set(date+'|'+id,{stops:combined,at:Date.now()});
+    if(verifiedLink)linkCache.set(date+'|'+id,{link:verifiedLink,at:Date.now()});
+    else linkCache.delete(date+'|'+id);
     if(serviceCache.size>240)serviceCache.delete(serviceCache.keys().next().value!);
     if(alive)setRevision(v=>v+1);
    }
@@ -238,5 +262,13 @@ export function useHeadwayTimetables(args:{
   }
   return result;
  },[enabled,date,activeKey,revision,ids]);
- return {schedules,features:allFeatures,allowedRoutes};
+ const links=useMemo(()=>{
+  const result=new Map<string,HeadwayLink>();
+  for(const id of ids){
+   const entry=linkCache.get(date+'|'+id);
+   if(entry&&Date.now()-entry.at<TTL)result.set(id,entry.link);
+  }
+  return result;
+ },[date,activeKey,revision,ids]);
+ return {schedules,features:allFeatures,allowedRoutes,links};
 }
