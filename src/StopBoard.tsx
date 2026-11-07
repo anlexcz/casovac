@@ -78,7 +78,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
  };
  const table=(i:number)=>neighbourSettings.enabled&&(i===index?currentOpen||selectedOpen&&neighbourIndex===index:neighbourIndex===i)&&
   <NeighbourTable data={neighbours} loading={neighbourLoading} error={neighbourError}
-   ownLine={activeLine} ownOrder={ownOrder} ownVehicle={ownVehicle} ownDelay={remaining===null?null:-remaining}/>;
+   ownLine={activeLine} ownOrder={ownOrder} ownVehicle={ownVehicle} ownDelay={null}/>;
 
  const stack=useRef<HTMLDivElement|null>(null);
  const activeCard=useRef<HTMLDivElement|null>(null);
