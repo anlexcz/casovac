@@ -54,7 +54,7 @@ export function observeService(current:TrackedService|null,feature:Feature,
  const incoming=serviceFromFeature(feature,serviceDate);
  if(!incoming||incoming.currentRoute!==normalize(expectedLine)||
   incoming.sequenceId!==normalize(expectedOrder))return current;
- if(!current||!matchesCurrent(current,expectedLine,expectedOrder))return incoming;
+ if(!current)return incoming;
  if(current.serviceDate!==serviceDate)return current;
  if(current.verified&&serviceKey(current)!==serviceKey(incoming))return current;
  return incoming;
