@@ -7,7 +7,7 @@ import {useSyncExternalStore} from 'react';
  */
 export type NeighbourDiagnosticEvent={
  at:number;
- kind:'request'|'response'|'error'|'discarded'|'filter'|'vehicle'|'warmup';
+ kind:'request'|'response'|'error'|'discarded'|'filter'|'vehicle'|'warmup'|'blocked';
  stopId:string;
  stopName:string;
  tripId:string;
