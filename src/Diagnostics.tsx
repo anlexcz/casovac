@@ -6,6 +6,7 @@ import type {RemoteState} from './remoteTracking';
 import type {useRecorder} from './recorder';
 import type {DepartureTelemetry} from './departure';
 import {useMemo,useState} from 'react';
+import {useNeighbourDiagnostics,downloadNeighbourDiagnostics} from './neighbourDiagnostics';
 import {auditStopIds,stopAuditReport} from './stopAudit';
 import type {Stop,TripData} from './tripData';
 import {formatStopTime} from './tripData';
@@ -31,6 +32,11 @@ const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
 export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,chainDiagnostic,lastHandoff,plannedHandoff,handoffContinuity,handoffDeparture,recorder}:Props){
  const stops:Stop[]=trip.stops;
+ const neighbourTrace=useNeighbourDiagnostics();
+ const neighbourLast=neighbourTrace.events.at(-1)??null;
+ const neighbourResponse=[...neighbourTrace.events].reverse().find(x=>x.kind==='response')??null;
+ const neighbourError=[...neighbourTrace.events].reverse().find(x=>x.kind==='error')??null;
+ const neighbourFilter=[...neighbourTrace.events].reverse().find(x=>x.kind==='filter')??null;
  const [copyState,setCopyState]=useState('');
  const [includePhone,setIncludePhone]=useState(false);
  const [scenario,setScenario]=useState<'gps-off'|'gps-remote'|'gps-onboard'>('gps-off');
@@ -42,6 +48,36 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
  async function copyAudit(){try{await navigator.clipboard.writeText(report());setCopyState('Zkopírováno – bez tokenu a GPS telefonu.');}catch{setCopyState('Prohlížeč nepovolil kopírování. Otevři textový výpis níže.');}}
 
  return <section className="diagnosticStack" aria-label="Provozní diagnostika">
+ <section className="panel" aria-label="Diagnostika okolních spojů">
+  <div className="row">
+   <h2>Okolní spoje · diagnostika Golemia</h2>
+   <span className={'status '+(neighbourResponse&&!neighbourError?'good':'')}>
+    {neighbourLast?.kind==='error'?'Chyba':neighbourTrace.events.length?'Zaznamenávám':'Bez požadavků'}
+   </span>
+  </div>
+  <p className="hint">Pro ověření dat nejprve otevři přehled okolních spojů na problematické zastávce a potom tuto diagnostiku. Záznam je v paměti prohlížeče až do obnovení stránky.</p>
+  <div className="details">
+   <div><small>ZACHYCENÝCH UDÁLOSTÍ</small><strong>{neighbourTrace.events.length}</strong></div>
+   <div><small>POSLEDNÍ ZASTÁVKA</small><strong>{neighbourLast?.stopName||'—'} · {neighbourLast?.stopId||'—'}</strong></div>
+   <div><small>POSLEDNÍ STAV</small><strong>{neighbourLast?.kind??'—'}</strong></div>
+   <div><small>ODEZVA POŽADAVKU</small><strong>{neighbourResponse?.elapsedMs===undefined?'—':neighbourResponse.elapsedMs+' ms'}</strong></div>
+   <div><small>FORMÁT ODPOVĚDI</small><strong>{neighbourResponse?.shape?.departuresType??'—'}</strong></div>
+   <div><small>VRÁCENO / ZOBRAZENO</small><strong>{neighbourFilter?.counts?.returned??'—'} / {neighbourFilter?.counts?.displayed??'—'}</strong></div>
+   <div><small>SHODNÁ HRANA / TRAMVAJE</small><strong>{neighbourFilter?.counts?.matchingPlatform??'—'} / {neighbourFilter?.counts?.matchingTram??'—'}</strong></div>
+   <div><small>POSLEDNÍ CHYBA</small><strong>{neighbourError?.note??'—'}</strong></div>
+  </div>
+  <div className="recorderActions">
+   <button className="quiet" type="button" disabled={!neighbourTrace.events.length}
+    onClick={downloadNeighbourDiagnostics}>↓ Stáhnout diagnostiku okolních spojů (JSON)</button>
+  </div>
+  <p className="hint">Export obsahuje časy požadavků, jejich parametry, chyby, počty a omezené ukázky struktury odpovědi. Neobsahuje API klíč, hlavičky požadavků, GPS telefonu ani kompletní surová data vozidel. Soubor můžeš přiložit přímo do chatu.</p>
+  <details><summary>Poslední odpověď · struktura polí Golemia</summary>
+   <pre>{JSON.stringify(neighbourResponse?.shape??null,null,2)}</pre>
+  </details>
+  <details><summary>Historie požadavků a vyřazených spojů ({neighbourTrace.events.length})</summary>
+   <pre>{JSON.stringify([...neighbourTrace.events].reverse(),null,2)}</pre>
+  </details>
+ </section>
  <section className="panel recorderPanel" aria-label="Záznam diagnostiky">
   <div className="row"><h2>Záznam testovací jízdy</h2><span className={'status '+(recorder.session?.state==='recording'?'good':'')}>{recorder.session?.state==='recording'?'Zaznamenávám':recorder.session?'Ukončeno':'Připraveno'}</span></div>
   <p className="hint">Ukládá každou odpověď Golemia pro sledované pořadí, včetně opakovaných identických hlášení, času požadavku a případných chyb. Interval 20 s. Zůstává pouze v tomto prohlížeči.</p>

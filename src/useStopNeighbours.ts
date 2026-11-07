@@ -7,6 +7,7 @@ import {golemioJson} from './golemioClient.ts';
 import type {NeighbourSettings} from './stopNeighbours.ts';
 import {departureBoardUrl,parseNeighbourBoard} from './stopNeighbourBoard.ts';
 import type {DepartureBoard} from './stopNeighbourBoard.ts';
+import {recordNeighbourDiagnostic,summarizeNeighbourBoardResponse,summarizeNeighbourBoardCounts} from './neighbourDiagnostics.ts';
 
 type BoardState={key:string;board:DepartureBoard|null;at:number;error:string;loading:boolean};
 type FeatureState={key:string;features:Feature[]};
@@ -64,6 +65,14 @@ export function useStopNeighbours(args:{
   }
   let valid=true;
   const old=boardCache.get(boardId(date,selectedStopId));
+  const started=Date.now();
+  const context={stopId:selectedStopId,stopName:stop?.name??'',tripId:ownTripId,
+   endpoint:'/v2/pid/departureboards'};
+  recordNeighbourDiagnostic({
+   ...context,at:started,kind:'request',
+   note:'ids[]='+selectedStopId+'; minutesBefore=20; minutesAfter=60; order=timetable; mode=mixed; filter=none; limit=200'+
+    (old?' · cached board '+Math.round((started-old.at)/1000)+' s old':' · no local cache')
+  });
   setBoardState(previous=>({
    key,board:previous.key===key?previous.board:old?.board??null,
    at:previous.key===key?previous.at:old?.at??0,
@@ -71,15 +80,32 @@ export function useStopNeighbours(args:{
   }));
   void golemioJson<DepartureBoard>(departureBoardUrl([selectedStopId]),
    token,12000,'high').then(body=>{
-   if(!valid)return;
-   if(!Array.isArray(body?.departures))throw Error('Golemio nevrátilo očekávané pole departures.');
    const at=Date.now();
+   recordNeighbourDiagnostic({
+    ...context,at,kind:'response',elapsedMs:at-started,
+    note:valid?'Decoded response':'Response arrived after effect cleanup; ignored by UI',
+    shape:summarizeNeighbourBoardResponse(body),
+    counts:summarizeNeighbourBoardCounts(body,selectedStopId)
+   });
+   if(!valid){
+    recordNeighbourDiagnostic({...context,at,kind:'discarded',
+     note:'A pending request completed after the 20-second poll invalidated this effect.'});
+    return;
+   }
+   if(!Array.isArray(body?.departures))throw Error('Golemio nevrátilo očekávané pole departures.');
    boardCache.set(boardId(date,selectedStopId),{board:body,at});
    if(boardCache.size>70)boardCache.delete(boardCache.keys().next().value!);
    setBoardState({key,board:body,at,error:'',loading:false});
   }).catch(e=>{
-   if(valid)setBoardState(prev=>({...prev,key,loading:false,
-    error:e instanceof Error?e.message:String(e)}));
+   const at=Date.now();
+   const message=e instanceof Error?e.message:String(e);
+   const status=/HTTP\\s+(\\d{3})/i.exec(message);
+   recordNeighbourDiagnostic({
+    ...context,at,kind:'error',elapsedMs:at-started,
+    httpStatus:status?Number(status[1]):null,
+    note:message.slice(0,350)+(valid?'':' (effect no longer active)')
+   });
+   if(valid)setBoardState(prev=>({...prev,key,loading:false,error:message}));
   });
   return()=>{valid=false;};
  },[enabled,token,key,selectedStopId,date,poll,!!ownFeature]);
@@ -128,18 +154,29 @@ export function useStopNeighbours(args:{
   setLive({key,features:[...stored.values()]});
   const missing=routes.filter(line=>line!==(ownFeature?routeOf(ownFeature):''));
   void Promise.all(missing.map(async line=>{
+   const started=Date.now();
+   const context={stopId:selectedStopId,stopName:stop?.name??'',tripId:ownTripId,
+    endpoint:'/v2/vehiclepositions · routeShortName='+line};
    const url=new URL('https://api.golemio.cz/v2/vehiclepositions');
    url.searchParams.set('routeShortName',line);
    url.searchParams.set('limit','1000');
    try{
     const response=await golemioJson<unknown>(url.toString(),token,20000,'low');
+    const fetched=collectFeatures(response);
+    recordNeighbourDiagnostic({...context,kind:'vehicle',at:Date.now(),
+     elapsedMs:Date.now()-started,counts:{positions:fetched.length},
+     note:active?'Vehicle positions decoded':'Result discarded after target change'});
     if(!active)return;
-    for(const feature of collectFeatures(response)){
+    for(const feature of fetched){
      const id=selectedTripId(feature);
      if(id&&id!=='—')stored.set(id,feature);
     }
     setLive({key,features:[...stored.values()]});
-   }catch{/* Lack of live data never hides a scheduled peer. */}
+   }catch(e){
+    recordNeighbourDiagnostic({...context,kind:'error',at:Date.now(),
+     elapsedMs:Date.now()-started,note:'Vehicle enrichment: '+
+      (e instanceof Error?e.message:String(e)).slice(0,300)});
+   }
   }));
   return()=>{active=false;};
  // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -182,6 +219,21 @@ export function useStopNeighbours(args:{
   });
  },[enabled,stop,index,readyBoard,ownTripId,stops,ownDelay,settings,currentIndex,
   live,knownFeatures,detail,key]);
+ useEffect(()=>{
+  if(!result||!readyBoard||!selectedStopId)return;
+  recordNeighbourDiagnostic({
+   at:Date.now(),kind:'filter',stopId:selectedStopId,
+   stopName:stop?.name??'',tripId:ownTripId,
+   endpoint:'parseNeighbourBoard',
+   counts:{...summarizeNeighbourBoardCounts(readyBoard,selectedStopId),
+    displayed:result.rows.length,
+    withVehicle:result.rows.filter(row=>!!row.vehicle).length,
+    withOrder:result.rows.filter(row=>row.order!=='?').length},
+   note:'Panel result after exact-platform, tram, service-time and ETA filtering'
+  });
+ // Logs only when board or enrichment changes, not every display countdown tick.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[key,readyBoard,live,detail,result]);
  const activeState=boardState.key===key?boardState:null;
  return {result,loading:!!activeState?.loading&&!readyBoard,
   error:activeState?.error??'',updatedAt:activeState?.at??cached?.at??0};
