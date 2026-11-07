@@ -56,3 +56,39 @@ test('cancelled or non-tram trips are excluded',()=>{
  const result=parseNeighbourBoard({...args,board:{departures:[bus,cancelled]}});
  assert.equal(result.rows.length,0);
 });
+
+test('departure at divergence remains visible manually, but never triggers either automatic mode',()=>{
+ const own=[
+  {...stop('P','10:27:00',1),name:'Výtoň'},
+  {...stop('A','10:30:00',2),name:'Palackého náměstí'},
+  {...stop('N','10:32:00',3),name:'Zborovská'}
+ ];
+ const diverging=[
+  {...stop('','10:27:00',1),name:'Výtoň'},
+  {...stop('','10:31:00',2),name:'Palackého náměstí'},
+  {...stop('','10:33:00',3),name:'Jiráskovo náměstí'}
+ ];
+ const result=parseNeighbourBoard({...args,ownStops:own,stop:own[1],
+  board:{departures:[departure('peer','3','2026-11-07T09:31:00Z')]},
+  candidateStops:new Map([['peer',diverging]])});
+ assert.equal(result.rows.length,1);
+ assert.equal(result.significant,false);
+ assert.equal(result.sharedOutgoing,false);
+});
+test('continuation can open all-mode, but important-mode requires an incoming join',()=>{
+ const own=[
+  {...stop('P','10:27:00',1),name:'Výtoň'},
+  {...stop('A','10:30:00',2),name:'Palackého náměstí'},
+  {...stop('N','10:32:00',3),name:'Zborovská'}
+ ];
+ const same=[
+  {...stop('','10:27:00',1),name:'Výtoň'},
+  {...stop('','10:31:00',2),name:'Palackého náměstí'},
+  {...stop('','10:33:00',3),name:'Zborovská'}
+ ];
+ const result=parseNeighbourBoard({...args,ownStops:own,stop:own[1],
+  board:{departures:[departure('peer','3','2026-11-07T09:31:00Z')]},
+  candidateStops:new Map([['peer',same]])});
+ assert.equal(result.significant,false);
+ assert.equal(result.sharedOutgoing,true);
+});
