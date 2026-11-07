@@ -56,7 +56,7 @@ export function useVehicleTracking({active,trackedService,token,recorder,gps,set
      // Keep the prepared successor visible while Golemio still reports the old line.
      // Never treat this cached object as a fresh observation.
      const fallback=handoffFallbackRef.current;
-     if(fallback&&fallback.target===active!.join('/')&&Date.now()<fallback.until){
+     if(!trackedService?.verified&&fallback&&fallback.target===active!.join('/')&&Date.now()<fallback.until){
       const liveSameOrder=standard.some(f=>normalize(orderOf(f))===normalize(active![1])&&
        String(path(f,'properties.trip.gtfs.route_short_name')??'')===active![0]&&
        (stateOf(f)==='at_stop'||stateOf(f)==='on_track'));
