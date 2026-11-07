@@ -79,13 +79,13 @@ test('stale or nontracking vehicles are not selected',()=>{
  const prepared=f('9_24',9384,'A',now+10000,{state:'before_track'});
  assert.equal(run([stale,prepared]).matched,0);
 });
-test('different route is considered only when verified chain allows it',()=>{
+test('9/5 ignores nearby 10 on the SAME tracks even when its route is a verified chain member',()=>{
  const connected=f('10_22',9380,'E',now+10000,{line:'10',order:22});
  const s=new Map(schedules);s.set('10_22',shifted(stops,-4));
  assert.equal(run([connected],{peerStops:s}).matched,0);
  const r=run([connected],{peerStops:s,allowedRoutes:new Set(['9','10'])});
- assert.equal(r.ahead.tripId,'10_22');
- assert.equal(r.ahead.line,'10');
+ assert.equal(r.ahead,null);
+ assert.equal(r.decisions[0].reason,'Jiná linka: mimo ověřenou přechodovou konečnou');
 });
 test('reverse order of common stops is never accepted',()=>{
  const reverse=[...stops].reverse().map((s,i)=>({...s,sequence:i+1}));
@@ -146,7 +146,9 @@ test('after transition, a preceding-line vehicle remains the planned follower',(
  ]);
  const result=calculateLineHeadways({
   selected:my,features:[my,next],stops:stopsOf(myStops),
-  peerStops:mapped,now,allowedRoutes:new Set(['9','10'])
+  peerStops:mapped,now,allowedRoutes:new Set(['9','10']),
+  links:new Map([['9_follow',{firstId:'9_follow',secondId:'10_follow',
+   firstLine:'9',secondLine:'10',boundaryIndex:2}]])
  });
  assert.equal(result.behind.tripId,'9_follow');
  assert.equal(result.behind.line,'9');
@@ -195,7 +197,9 @@ test('vehicle approaching common section through verified chained schedule remai
  ].map((v,i)=>({name:v.id,sequence:i+1,...v}));
  const r=calculateLineHeadways({selected:mine,features:[mine,approaching],
   stops:ownStops,peerStops:new Map([['10_now',ownStops],['9_approach',linked]]),
-  now,allowedRoutes:new Set(['9','10'])});
+  now,allowedRoutes:new Set(['9','10']),
+  links:new Map([['9_approach',{firstId:'9_approach',secondId:'10_approach',
+   firstLine:'9',secondLine:'10',boundaryIndex:2}]])});
  assert.equal(r.behind?.tripId,'9_approach');
 });
 test('unrelated later intersection does not keep diverted vehicle eligible',()=>{
@@ -265,4 +269,41 @@ test('unrelated line cannot become chained merely by sharing stop or block ident
  assert.equal(findVerifiedBlockPair(
   {tripId:'6_A',line:'6',start:null,detail:first},[{trip,detail:other}]
  ),null);
+});
+
+test('same operating line always beats physically closer foreign line unless at verified boundary',()=>{
+ const same=f('9_22',9380,'E',now+10000);
+ const foreign=f('10_21',9379,'C',now+10000,{line:'10',order:21});
+ const mapped=new Map(schedules);
+ mapped.set('10_21',shifted(stops,-2));
+ const result=run([same,foreign],{peerStops:mapped,allowedRoutes:new Set(['9','10'])});
+ assert.equal(result.ahead?.tripId,'9_22');
+ assert.equal(result.decisions.find(x=>x.tripId==='10_21')?.reason,
+  'Jiná linka: mimo ověřenou přechodovou konečnou');
+});
+test('first leg at its actual shared terminal may compare the next chained line',()=>{
+ const own=f('9_current',9383,'T',now+10000,{line:'9',order:5});
+ const other=f('10_next',9125,'U',now+10000,{line:'10',order:6});
+ const ownStops=['P','Q','T','U','V'].map((id,i)=>({
+  id,name:id,sequence:i+1,
+  arrival:'14:'+String(50+2*i).padStart(2,'0')+':00',
+  departure:'14:'+String(50+2*i).padStart(2,'0')+':00'
+ }));
+ const peerStops=shifted(ownStops.slice(2),-2);
+ const map=new Map([['9_current',ownStops],['10_next',peerStops]]);
+ const links=new Map([['9_current',{firstId:'9_current',secondId:'10_current',
+  firstLine:'9',secondLine:'10',boundaryIndex:2}]]);
+ const r=calculateLineHeadways({selected:own,features:[own,other],stops:ownStops,
+  peerStops:map,now,allowedRoutes:new Set(['9','10']),links});
+ assert.equal(r.ahead?.tripId,'10_next');
+});
+test('foreign line cannot be admitted just because an unrelated linked block exists',()=>{
+ const my=f('9_A',9383,'C',now+10000,{line:'9',order:5});
+ const other=f('10_A',9125,'E',now+10000,{line:'10',order:6});
+ const map=new Map([['9_A',stops],['10_A',shifted(stops,-2)]]);
+ const links=new Map([['unrelated_9',{firstId:'unrelated_9',secondId:'unrelated_10',
+  firstLine:'9',secondLine:'10',boundaryIndex:2}]]);
+ const r=calculateLineHeadways({selected:my,features:[my,other],stops,
+  peerStops:map,now,allowedRoutes:new Set(['9','10']),links});
+ assert.equal(r.matched,0);
 });
