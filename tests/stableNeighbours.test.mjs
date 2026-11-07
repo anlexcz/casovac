@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {emptyStableNeighbours,reconcileNeighbours} from '../src/stableNeighbours.ts';
+
+const row=(tripId,scheduledSeconds,delay=0)=>({
+ tripId,line:'9',order:'22',vehicle:'9362',scheduled:'09:35:00',
+ scheduledSeconds,delay,relative:scheduledSeconds<34500?'before':'after',
+ predictedDifference:delay,previousId:'A',nextId:'B'
+});
+test('telemetry refresh changes values without removing or reordering a known trip',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440,60),row('b',34740,0)],1000,true,1000);
+ state=reconcileNeighbours(state,[row('b',34740,80),row('a',34440,120)],2000,true,2000);
+ assert.deepEqual(state.entries.map(e=>e.row.tripId),['a','b']);
+ assert.deepEqual(state.entries.map(e=>e.row.delay),[120,80]);
+ assert.equal(state.entries.some(e=>e.exiting),false);
+});
+test('partial Golemio batches never remove old rows',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440),row('b',34740)],1000,true,1000);
+ state=reconcileNeighbours(state,[],2000,false,60000);
+ assert.deepEqual(state.entries.map(e=>[e.row.tripId,e.missingCycles]),[['a',0],['b',0]]);
+ assert.equal(state.entries.some(e=>e.exiting),false);
+});
+test('absence in one completed poll is tolerated, then an exit animation begins',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440)],1000,true,1000);
+ state=reconcileNeighbours(state,[],4000,true,24000);
+ assert.equal(state.entries[0].exiting,false);
+ state=reconcileNeighbours(state,[],4000,true,25000);
+ assert.equal(state.entries[0].missingCycles,1);
+ state=reconcileNeighbours(state,[],35000,true,36000);
+ assert.equal(state.entries[0].exiting,true);
+});
+test('a briefly missing tram can return without remounting the existing row',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440,50)],1000,true,1000);
+ state=reconcileNeighbours(state,[],30000,true,30000);
+ state=reconcileNeighbours(state,[row('a',34440,80)],40000,true,40000);
+ assert.equal(state.entries[0].exiting,false);
+ assert.equal(state.entries[0].missingCycles,0);
+ assert.equal(state.entries[0].row.delay,80);
+});
+test('new trips insert by fixed scheduled time, not delay',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440,500)],1000,true,1000);
+ state=reconcileNeighbours(state,[row('b',34200,-100),row('a',34440,500)],2000,false,2000);
+ assert.deepEqual(state.entries.map(e=>e.row.tripId),['b','a']);
+});
