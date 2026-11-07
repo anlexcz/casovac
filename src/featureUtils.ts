@@ -12,3 +12,12 @@ export const normalize=(v:unknown)=>String(v??'').replace(/^0+/,'')||'0';
 export const routeOf=(f:Feature):string=>String(path(f,'properties.trip.gtfs.route_short_name')??path(f,'properties.trip.route_short_name')??'');
 export const stateOfFeature=(f:Feature):string=>String(path(f,'properties.last_position.state_position')??'');
 export const rawTripOf=(f:Feature):unknown=>path(f,'properties.trip')??null;
+
+/** Golemio's origin_route_name is the stable operating route within a duty.
+ * An absent value stays absent; it must not be inferred from current route.
+ */
+export const originRouteOf=(f:Feature):string=>{
+ const value=path(f,'properties.trip.origin_route_name');
+ const raw=String(value??'').trim();
+ return /^[0-9]{1,3}$/.test(raw)?normalize(raw):'';
+};
