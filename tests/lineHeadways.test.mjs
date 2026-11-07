@@ -189,7 +189,7 @@ test('vehicle approaching common section through verified chained schedule remai
  const linked=[
   {id:'P',arrival:'14:50:00',departure:'14:50:00'},
   {id:'Q',arrival:'14:52:00',departure:'14:52:00'},
-  ...ownStops
+  ...shifted(ownStops,4)
  ].map((v,i)=>({name:v.id,sequence:i+1,...v}));
  const r=calculateLineHeadways({selected:mine,features:[mine,approaching],
   stops:ownStops,peerStops:new Map([['10_now',ownStops],['9_approach',linked]]),
