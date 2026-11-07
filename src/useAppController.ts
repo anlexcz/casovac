@@ -12,9 +12,11 @@ import {useRemoteProgress} from './remoteProgress';
 import type {RemoteHistory} from './remoteTracking';
 import {distanceMeters} from './position';
 import {useOnboardMode} from './onboard';
-import {readLastSeen,extractRecordedVehicle} from './lastSeen';
+import {readLastSeen,extractRecordedVehicle,saveLastSeenForService} from './lastSeen';
 import type {LastSeen} from './lastSeen';
 import {path,text,selectedTripId,vehicleId,routeOf} from './featureUtils';
+import {serviceFromFeature,unverifiedService,observeService,operatingDate,matchesCurrent} from './trackedService';
+import type {TrackedService} from './trackedService';
 import {useChainHandoff} from './useChainHandoff';
 import type {Feature} from './featureUtils';
 import {useVehicleTracking} from './useVehicleTracking';
@@ -27,7 +29,7 @@ import type {NeighbourSettings} from './stopNeighbours';
 export {vehicleId} from './featureUtils';
 
 
-import {TOKEN_KEY,ROUTE_KEY,ACTIVE_KEY,ACTIVE_TTL,recentTracking,stored,save} from './trackingStorage';
+import {TOKEN_KEY,ROUTE_KEY,ACTIVE_KEY,ACTIVE_TTL,recentTracking,stored,save,restoreTrackedService,storeTrackedService} from './trackingStorage';
 export const parseOrder=(q:string):[string,string]|null=>{
  const match=/^(\d{1,3})\s*\/\s*(\d{1,4})$/.exec(q.trim());
  return match?[match[1],match[2]]:null;
@@ -39,6 +41,7 @@ export function useAppController(){
  const [settings,setSettings]=useState(false);
  const [query,setQuery]=useState(()=>stored(ROUTE_KEY));
  const [active,setActive]=useState<[string,string]|null>(()=>stored(TOKEN_KEY)?recentTracking():null);
+ const [trackedService,setTrackedService]=useState<TrackedService|null>(()=>stored(TOKEN_KEY)?restoreTrackedService():null);
  const [diagnostics,setDiagnostics]=useState(false);
  const [showHeadways,setShowHeadways]=useState(()=>stored('casovac:show-headways:v1')==='true');
  const [neighbourSettings,setNeighbourSettings]=useState<NeighbourSettings>(()=>{
@@ -103,6 +106,35 @@ export function useAppController(){
  const candidateFeature=selectedTrip?features.find(f=>selectedTripId(f)===selectedTrip)??null:resolved?.feature??null;
  const chosen=candidateFeature;
  const tripId=chosen?selectedTripId(chosen):'';
+ // Step C: keep the stable duty next to (not instead of) the legacy live
+ // line/order tracker. Never overwrite a verified origin with a different one.
+ useEffect(()=>{
+  if(!active||!chosen||selectedTrip)return;
+  setTrackedService(previous=>{
+   const sameCurrent=!!previous&&matchesCurrent(previous,active[0],active[1]);
+   const confirmedHandoff=lastHandoff?.to===active.join('/')&&
+    previous?.sequenceId===active[1];
+   if(previous&&!sameCurrent&&!confirmedHandoff)return previous;
+   const updated=observeService(previous,chosen,previous?.serviceDate??operatingDate(Date.now()),
+    active[0],active[1]);
+   return updated&&JSON.stringify(updated)!==JSON.stringify(previous)?updated:previous;
+  });
+ },[active?.[0],active?.[1],tripId,chosen,lastHandoff?.to,selectedTrip]);
+ useEffect(()=>{
+  if(!active||!trackedService||!matchesCurrent(trackedService,active[0],active[1]))return;
+  // Do not extend the expiration on each API poll.
+  const raw=stored(ACTIVE_KEY);
+  let expires=Date.now()+ACTIVE_TTL;
+  try{const v=JSON.parse(raw) as {expires?:number};if(v.expires&&v.expires>Date.now())expires=v.expires;}catch{/* fine */}
+  storeTrackedService(trackedService,expires);
+ },[trackedService,active?.[0],active?.[1]]);
+ useEffect(()=>{
+  if(!chosen||!trackedService?.verified||!active||
+   !matchesCurrent(trackedService,active[0],active[1]))return;
+  const last=readLastSeen(active[0],active[1]);
+  if(last)saveLastSeenForService(trackedService,last);
+ },[tripId,trackedService?.originRoute,trackedService?.sequenceId,active?.[0],active?.[1],lastSeen?.vehicle]);
+
  const trip=useTripData(tripId,token.trim());
  const {chainDiagnostic,plannedHandoff,nextTrip,previousTrip,previousPartner,continuity}=useChainTracking({
   active,chosen,lastSeen,features,token,tripId,trip,selectedTrip,recordChain:recorder.chain
@@ -262,6 +294,15 @@ export function useAppController(){
   const parsed=parseOrder(value);if(!parsed){setError('Zadej linku a pořadí, například 25/5.');return;}
   if(!token.trim()){setSettings(true);setError('Nejdřív vlož API klíč v Nastavení.');return;}
   setQuery(parsed[0]+'/'+parsed[1]);
+  const selected=results.find(item=>item.line===parsed[0]&&item.order===parsed[1]&&!item.ambiguous);
+  const observed=selected?lookup.items.find(item=>selectedTripId(item)===selected.target.tripId&&
+   routeOf(item)===parsed[0]):null;
+  const date=operatingDate(Date.now());
+  const initial=observed?serviceFromFeature(observed,date):null;
+  const nextService=initial??unverifiedService(parsed[0],parsed[1],date);
+  setTrackedService(nextService);
+  storeTrackedService(nextService);
+
   setNeighbourIndex(null);setSelectedTrip('');setManual(null);setExpanded(false);setEditing(false);setLastHandoff(null);handoffFallbackRef.current=null;
   // Reuse the already retrieved line snapshot immediately on selection.
   // The running timer shares its Golemio URL and its 20-second cache.
@@ -276,9 +317,10 @@ export function useAppController(){
   setActive(parsed);
  }
  function forget(){
+  setTrackedService(null);storeTrackedService(null);
   setNeighbourIndex(null);
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setNeighbourIndex(null);setSelectedTrip(id);setManual(null);}
- return {neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ return {trackedService,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }

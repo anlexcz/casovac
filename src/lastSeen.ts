@@ -1,3 +1,5 @@
+import {serviceKey} from './trackedService.ts';
+import type {TrackedService} from './trackedService.ts';
 export type LastSeen={
  line:string;order:string;vehicle:string;tripId:string;lastSeenAt:number;
  lastPositionAt:number|null;lon:number|null;lat:number|null;
@@ -41,4 +43,25 @@ export function extractRecordedVehicle(session:unknown,line:string,order:string)
    state:String(position?.state_position??''),route:String(gtfs?.route_short_name??line)};
  }
  return null;
+}
+
+/** Supplemental identity-indexed observation. Legacy per-current-route
+ * snapshots are retained for the live tracker and older sessions.
+ */
+const serviceStorageKey=(service:TrackedService)=>{const key=serviceKey(service);return key?'casovac:last-core-vehicle:v1:'+key:null;};
+export function readLastSeenForService(service:TrackedService):LastSeen|null{
+ const key=serviceStorageKey(service);
+ if(!key)return null;
+ try{
+  const raw=localStorage.getItem(key);
+  if(!raw)return null;
+  const value=JSON.parse(raw) as LastSeen;
+  return value&&typeof value.lastSeenAt==='number'&&
+   Date.now()-value.lastSeenAt<6*3600000?value:null;
+ }catch{return null;}
+}
+export function saveLastSeenForService(service:TrackedService,value:LastSeen){
+ const key=serviceStorageKey(service);
+ if(!key||!service.verified)return;
+ try{localStorage.setItem(key,JSON.stringify(value));}catch{/* optional cache */}
 }
