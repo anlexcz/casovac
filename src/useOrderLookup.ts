@@ -17,7 +17,7 @@ async function loadVehicles(token:string,line?:string):Promise<Feature[]>{
  url.searchParams.set('limit',line?'1000':'3000');
  // The shared coordinator caches the same URL and coalesces concurrent
  // requests. Cross-route searches refresh at most once every 45 seconds.
- const body:unknown=await golemioJson<unknown>(url.toString(),token,30000,'high');
+ const body:unknown=await golemioJson<unknown>(url.toString(),token,line?30000:120000,line?'high':'low');
  if(!body||typeof body!=='object'||!Array.isArray((body as Obj).features))
   throw Error('Neplatná odpověď Golemia');
  return (body as {features:Feature[]}).features;
@@ -66,9 +66,10 @@ export function useOrderLookup(query:string,editing:boolean,token:string,now:num
      error:e instanceof Error?e.message:String(e),loading:false,ready:true}));
    }
   };
-  const first=window.setTimeout(()=>void refresh(),260);
-  const interval=window.setInterval(()=>void refresh(),45000);
-  return()=>{alive=false;window.clearTimeout(first);window.clearInterval(interval);};
+  // The global fleet snapshot is expensive. Start only once per chooser
+  // session, after the user stops typing. Do not re-fetch every 45 seconds.
+  const first=window.setTimeout(()=>void refresh(),850);
+  return()=>{alive=false;window.clearTimeout(first);};
  },[editing,crossRoute,secret]);
 
  const route=routeSnapshot.key===lookupLine&&!!lookupLine?routeSnapshot:EMPTY;
@@ -102,11 +103,15 @@ export function useOrderLookup(query:string,editing:boolean,token:string,now:num
  });
  const stopNames=useChooserStops(available.map(v=>v.target),secret,editing&&search.kind!=='invalid');
  const needRoute=!!lookupLine;
- const lookupReady=(!needRoute||route.ready)&&(!crossRoute||all.ready)&&
-  (!needRoute||!route.loading)&&(!crossRoute||!all.loading);
+ // Show already known line results even when the optional fleet-wide search
+ // is delayed or rate-limited. Never hold the entire list behind both calls.
+ const lookupReady=needRoute?
+  (route.ready&&!route.loading||crossRoute&&all.ready&&!all.loading):
+  !crossRoute||all.ready&&!all.loading;
  const error=[needRoute?route.error:'',crossRoute?all.error:''].filter(Boolean).join(' · ');
+ const searchingAcrossRoutes=crossRoute&&!all.ready&&!all.error;
  // Retain .line and .items for the timer's immediate route snapshot on selection.
  const lookup={line:lookupLine,items,error,loading:!lookupReady};
  return {lookup,lookupLine,lookupOrder,queryKind:search.kind,queryVehicle:search.kind==='vehicle'?search.vehicle:'',
-  results:available,lookupReady,stopNames};
+  results:available,lookupReady,searchingAcrossRoutes,stopNames};
 }
