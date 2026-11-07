@@ -48,11 +48,11 @@ export function useStopNeighbours(args:{
  const index=requestedIndex??currentIndex;
  const stop=index===null?null:stops[index]??null;
  const date=dateLocal(now);
- const key=date+'|'+ownTripId+'|'+String(index??-1)+'|'+selectedStopId+'|'+(stop?.arrival||stop?.departure||'');
  const unresolvedKey=date+'|'+ownTripId+'|'+String(index??-1)+'|'+(stop?.name??'')+'|'+(stop?.arrival||stop?.departure||'');
  const [resolved,setResolved]=useState<{key:string;id:string;error:string}>({key:'',id:'',error:''});
  const selectedStopId=stop?.id||(resolved.key===unresolvedKey?resolved.id:'');
- const effectiveStop=stop&&selectedStopId?{...stop,id:selectedStopId}:stop;
+ const effectiveStop=useMemo(()=>stop&&selectedStopId?{...stop,id:selectedStopId}:stop,[stop,selectedStopId]);
+ const key=date+'|'+ownTripId+'|'+String(index??-1)+'|'+selectedStopId+'|'+(stop?.arrival||stop?.departure||'');
  const gate={
   enabled,hasToken:!!token,hasVehicle:!!ownFeature,hasTrip:!!ownTripId&&ownTripId!=='—',
   hasPlatform:!!selectedStopId,selectedStopId,stopName:stop?.name??'',
