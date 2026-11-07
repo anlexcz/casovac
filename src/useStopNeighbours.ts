@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useState} from 'react';
-import type {Feature,Obj} from './featureUtils.ts';
-import {path,selectedTripId,vehicleId,routeOf} from './featureUtils.ts';
+import type {Feature} from './featureUtils.ts';
+import {path,selectedTripId,routeOf} from './featureUtils.ts';
 import type {Stop} from './tripData.ts';
 import {parseStops} from './tripData.ts';
 import {golemioJson} from './golemioClient.ts';
