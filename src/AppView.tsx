@@ -6,7 +6,7 @@ import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
 import {formatHeadway} from './lineHeadways';
 import {chooserStop} from './chooserStops';
-import {useAppController,parseOrder,vehicleId} from './useAppController';
+import {useAppController,vehicleId} from './useAppController';
 import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopIdentity';
 
 type Props=ReturnType<typeof useAppController>;
