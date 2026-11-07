@@ -27,7 +27,7 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
    .slice(0,16);
  },[snapshot?.target,snapshot?.vehicle,snapshot?.error,
    snapshot?.related.map(t=>t.tripId+':'+t.vehicle).join('|'),tripId,line]);
- const identity=enabled&&tripId&&token&&snapshot&&snapshot.target.split('/')[0]===line?
+ const identity=enabled&&tripId&&token&&line?
   tripId+'|'+date+'|'+candidates.map(t=>t.tripId).join('|'):'';
  const [state,setState]=useState<State>({key:'',pair:null,loading:false,reason:''});
  const saved=useRef<{tripId:string;date:string;line:string;order:string;vehicle:string;pair:BlockPair}|null>(null);
@@ -88,7 +88,7 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
     // If the companion is not yet present in vehiclepositions, ask the
     // online GTFS list for trips serving the common terminal on this date.
     // This is a single on-demand lookup, not a downloaded GTFS archive.
-    if(!matches.length){
+    if(!findVerifiedBlockPair({tripId,line,start:null,detail:current},matches)){
      const stops=parseStops(current);
      const terminalId=stops[stops.length-1]?.id;
      if(terminalId){
