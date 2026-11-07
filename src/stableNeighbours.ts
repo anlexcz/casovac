@@ -7,10 +7,11 @@ export type StableNeighbourState = {
  entries:StableNeighbour[]; lastCompleteRevision:number;
 };
 /**
- * Live polls can be incomplete while Golemio's routes arrive in batches.
- * Never remove a row on a partial refresh; require two separate completed
- * snapshots and at least 20 seconds since the last confirmed sighting.
- * Updates to an existing trip replace its fields without changing its identity.
+ * A neighbour that was once verified for this platform remains in the
+ * timetable until the platform session ends. Vehiclepositions reports
+ * only vehicles still approaching; they must not erase scheduled peers
+ * which have already passed the platform. New rows may appear and known
+ * rows receive current telemetry without changing their fixed position.
  */
 export function reconcileNeighbours(
  previous:StableNeighbourState,
@@ -20,27 +21,22 @@ export function reconcileNeighbours(
  now:number
 ):StableNeighbourState{
  const byTrip=new Map(incoming.map(row=>[row.tripId,row]));
- const seen=new Set<string>();
- const countMissing=complete&&revision>previous.lastCompleteRevision;
- const entries:StableNeighbour[]=[];
- for(const entry of previous.entries){
+ const entries=previous.entries.map(entry=>{
   const current=byTrip.get(entry.row.tripId);
-  if(current){
-   entries.push({row:current,missingCycles:0,lastSeen:now,exiting:false});
-   seen.add(current.tripId);
-  }else if(!entry.exiting){
-   const missingCycles=entry.missingCycles+(countMissing?1:0);
-   entries.push({...entry,missingCycles,
-    exiting:missingCycles>=2&&now-entry.lastSeen>=20000});
-  }else entries.push(entry);
- }
+  if(!current)return {...entry,missingCycles:entry.missingCycles+(complete&&revision>previous.lastCompleteRevision?1:0),exiting:false};
+  return {row:current,missingCycles:0,lastSeen:now,exiting:false};
+ });
+ const previousIds=new Set(previous.entries.map(entry=>entry.row.tripId));
  for(const row of incoming){
-  if(!seen.has(row.tripId)&&!entries.some(e=>e.row.tripId===row.tripId))
+  if(!previousIds.has(row.tripId)){
    entries.push({row,missingCycles:0,lastSeen:now,exiting:false});
+   previousIds.add(row.tripId);
+  }
  }
  entries.sort((a,b)=>a.row.scheduledSeconds-b.row.scheduledSeconds||
   a.row.line.localeCompare(b.row.line,'cs')||a.row.order.localeCompare(b.row.order,'cs'));
- return {entries,lastCompleteRevision:countMissing?revision:previous.lastCompleteRevision};
+ return {entries,lastCompleteRevision:complete&&revision>previous.lastCompleteRevision?
+  revision:previous.lastCompleteRevision};
 }
 export function emptyStableNeighbours():StableNeighbourState{
  return {entries:[],lastCompleteRevision:0};
