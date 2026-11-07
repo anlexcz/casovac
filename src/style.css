@@ -231,97 +231,65 @@
 }
 
 /* Centralized route/order picker */
-.chooserModal{max-height:min(82dvh,720px);display:flex;flex-direction:column;gap:12px}
-.chooserHeading{align-items:flex-start}
-.chooserHeading .hint{margin:5px 0 0}
+/* Fixed-size chooser: the keyboard and result count must never move the input. */
+.chooserOverlay{height:100dvh;align-items:center;overflow:hidden}
+.chooserModal{
+ display:flex;flex-direction:column;gap:10px;min-height:0;
+ height:min(75dvh,720px);max-height:calc(100% - 32px);
+ padding:18px;
+}
+.chooserHeading{flex:0 0 auto;align-items:center}
 .chooserModal #orderInput{flex:0 0 auto;font-size:17px}
-.chooserResults{min-height:0;overflow-y:auto;overscroll-behavior:contain}
-.chooserCaption{font-size:12px;font-weight:650;color:#aeb8c4;margin:5px 0 10px}
-.chooserRow{width:100%;display:flex;align-items:center;gap:10px;min-height:55px;padding:12px;background:#1a1f26;border:1px solid #353b44;border-radius:10px;margin-bottom:7px;text-align:left}
-.chooserRow:hover,.chooserRow:focus-visible{border-color:#ff3636;background:#292e38}
-.chooserId{display:inline-flex;align-items:baseline;gap:0;flex:0 0 auto;color:#b2beca;font-size:17px;font-variant-numeric:tabular-nums}
-.chooserId strong{font-weight:850;color:#fff;font-size:19px}
-.chooserVehicle{color:#aeb8c4;font-size:13px;white-space:nowrap}
-.chooserStop{color:#b7c1cc;font-size:12px;text-align:right;margin-left:auto;min-width:0;overflow-wrap:anywhere}
+.chooserCaption{
+ flex:0 0 auto;min-height:18px;margin:2px 0 0;
+ font-size:11px;font-weight:650;line-height:18px;letter-spacing:.5px;
+ text-transform:uppercase;color:#aeb8c4;
+}
+.chooserResults{
+ flex:1 1 0;min-height:0;overflow-y:auto;overflow-x:hidden;
+ overscroll-behavior:contain;scrollbar-gutter:stable;
+}
+.chooserRow{
+ width:100%;display:flex;align-items:center;gap:8px;min-height:46px;
+ padding:8px 4px;border:0;border-bottom:1px solid #343a42;
+ border-radius:0;background:transparent;text-align:left;margin:0;
+}
+.chooserRow:last-of-type{border-bottom:0}
+.chooserRow:hover,.chooserRow:focus-visible{
+ background:#272c34;border-color:#ff3636;border-radius:5px;
+}
+.chooserId{
+ display:inline-flex;align-items:baseline;gap:0;flex:0 0 auto;
+ white-space:nowrap;color:#b2beca;font-size:16px;
+ font-variant-numeric:tabular-nums;
+}
+.chooserId strong{font-weight:850;color:#fff;font-size:18px}
+/* Prepared for future optional (origin_route_name/sequence_id) in the SAME row. */
+.chooserOrigin{font-size:11px;font-weight:450;color:#8794a3;margin-left:5px}
+.chooserVehicle{color:#aeb8c4;font-size:12px;white-space:nowrap}
+.chooserStop{
+ display:flex;align-items:center;justify-content:flex-end;gap:5px;
+ font-size:12px;line-height:1.2;text-align:right;margin-left:auto;min-width:0;
+}
+.chooserStopIcon{flex:0 0 15px;color:#8b9aa9}
+.chooserStop>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chooserMissing{border:1px solid #49515d;background:#252a32;border-radius:11px;padding:15px}
 .chooserMissing strong{font-size:15px}
 .chooserMissing .hint{margin:10px 0}
 .chooserMissing .full{margin-top:10px;white-space:normal}
 .chooserModal .alert{margin:0}
-@media(max-width:420px){.chooserModal{padding:16px}.chooserRow{gap:7px;padding:10px}.chooserStop{font-size:11px}.chooserVehicle{font-size:12px}}
-
-/* 1.1: denser line/order chooser, one divider per row */
-.chooserModal{gap:10px;padding:18px}
-.chooserHeading .hint{display:none}
-.chooserCaption{font-size:11px;letter-spacing:.5px;text-transform:uppercase;margin:6px 0 8px}
-.chooserRow{border:0;border-bottom:1px solid #343a42;border-radius:0;background:transparent;margin:0;padding:8px 4px;min-height:46px;gap:8px}
-.chooserRow:last-of-type{border-bottom:0}
-.chooserRow:hover,.chooserRow:focus-visible{background:#272c34;border-color:#ff3636;border-radius:5px}
-.chooserId{font-size:16px}
-.chooserId strong{font-size:18px}
-.chooserVehicle{font-size:12px}
-.chooserStop{display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:12px;line-height:1.2}
-.chooserStopIcon{flex:0 0 15px;color:#8b9aa9}
-.chooserStop>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(max-width:420px){.chooserRow{min-height:46px;padding:8px 3px}.chooserStop{font-size:11px}}
-
-/* Direct access to the read-only online API diagnostics page. */
-.rawDebugLink{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:#b9c4cf;font:700 10px var(--font-ui,system-ui);letter-spacing:.3px}
-
-/* Compact, opt-in spacing indicators beneath the vehicle identity. */
-.compactHeadways{display:flex;align-items:center;gap:15px;margin-top:2px;min-height:17px}
-.headwayValue{display:inline-flex;align-items:center;gap:5px;color:#b7c5d2;font-size:12px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums;white-space:nowrap}
-.headwayValue>span:first-child{font-size:14px;color:#8fa0ae}
-.headwayValue>span:last-child{font-variant-numeric:tabular-nums;min-width:39px}
-.settingsSectionHeading{font-weight:700;font-size:14px;border-top:1px solid #353e46;padding-top:14px;margin-top:8px}
-.boardStack>.departingStop.departingStopFade{background:transparent;border:0;box-shadow:none;color:#c7d1da;transform-origin:50% 50%}
-.boardStack>.departingStop.departingStopFade .liveOffset{color:#c7d1da}
-@media (prefers-reduced-motion:reduce){
- .boardStack>.departingStopFade{display:none}
+@media(max-width:520px){
+ .chooserOverlay{
+  align-items:flex-start;justify-items:center;padding:12px 12px 0;
+ }
+ .chooserModal{
+  width:100%;height:75%;max-height:calc(100% - 12px);
+  padding:16px;gap:9px;
+ }
 }
-
-/* Fixed coloured stop card: only the overlaid old TEXT fades away.
-   The card itself is never translated, scaled or replaced. */
-.boardStack>.activeDeparture{
- position:relative;
- box-sizing:border-box;
- min-height:110px;
+@media(max-width:420px){
+ .chooserRow{gap:7px;min-height:46px;padding:8px 3px}
+ .chooserStop{font-size:11px}
+ .chooserVehicle{font-size:12px}
 }
-.boardStack>.activeDeparture>.departingTextGhost{
- position:absolute;
- inset:0;
- display:grid;
- grid-template-columns:minmax(0,1fr) auto;
- align-items:center;
- column-gap:10px;
- padding:16px 14px;
- background:transparent;
- border:0;
- border-radius:inherit;
- color:inherit;
- pointer-events:none;
- z-index:2;
- box-sizing:border-box;
- transform-origin:center center;
-}
-.boardStack>.activeDeparture>.departingTextGhost .activeStopName,
-.boardStack>.activeDeparture>.departingTextGhost .departureNumbers{
- color:inherit;
-}
-@media(max-width:490px){
- .boardStack>.activeDeparture{min-height:108px}
- .boardStack>.activeDeparture>.departingTextGhost{padding:14px 10px;column-gap:7px}
-}
-
-/* Tiny identity badge for the exact preceding/following operating order. */
-.compactHeadways{flex-wrap:wrap;column-gap:13px;row-gap:3px}
-.headwayValue .headwayBadge,
-.headwayValue>span:last-child.headwayBadge{
- display:inline-flex;align-items:center;min-width:0;
- padding:1px 4px;border:1px solid #46515e;border-radius:4px;
- font-size:10px;line-height:1.15;font-weight:650;color:#aebfce;
- font-variant-numeric:tabular-nums;white-space:nowrap;
-}
-
-/* Keep the floating diagnostics button from covering the departures sheet. */
 .debugFab[hidden]{display:none}
