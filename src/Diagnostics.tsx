@@ -5,6 +5,7 @@ import type {OnboardDecision} from './onboard';
 import type {RemoteState} from './remoteTracking';
 import type {useRecorder} from './recorder';
 import type {DepartureTelemetry} from './departure';
+import type {useStopNeighbours} from './useStopNeighbours';
 import {useMemo,useState} from 'react';
 import {useNeighbourDiagnostics,downloadNeighbourDiagnostics} from './neighbourDiagnostics';
 import {auditStopIds,stopAuditReport} from './stopAudit';
@@ -27,10 +28,12 @@ type Props={
  lastHandoff:{from:string;to:string;vehicle:string;tripId:string;reason:string;time:number}|null;
  plannedHandoff:ChainTrip|null;handoffContinuity:string;handoffDeparture:string;
  recorder:ReturnType<typeof useRecorder>;
+ neighbourGate:ReturnType<typeof useStopNeighbours>['gate'];
+ probeNeighbourBoard:()=>Promise<void>;
 };
 const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
-export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,chainDiagnostic,lastHandoff,plannedHandoff,handoffContinuity,handoffDeparture,recorder}:Props){
+export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,chainDiagnostic,lastHandoff,plannedHandoff,handoffContinuity,handoffDeparture,recorder,neighbourGate,probeNeighbourBoard}:Props){
  const stops:Stop[]=trip.stops;
  const neighbourTrace=useNeighbourDiagnostics();
  const neighbourLast=neighbourTrace.events.at(-1)??null;
@@ -55,7 +58,16 @@ export default function Diagnostics({active,features,chosen,trip,gps,gpsError,gp
     {neighbourLast?.kind==='error'?'Chyba':neighbourTrace.events.length?'Zaznamenávám':'Bez požadavků'}
    </span>
   </div>
-  <p className="hint">Pro ověření dat nejprve otevři přehled okolních spojů na problematické zastávce a potom tuto diagnostiku. Záznam je v paměti prohlížeče až do obnovení stránky.</p>
+  <p className="hint">Stav zapnutí a dostupnosti vstupních údajů se ukazuje i tehdy, když se žádný požadavek nespustil. Tlačítkem můžeš ověřit Golemio ručně. Záznam zůstává v paměti jen do obnovení stránky.</p>
+  <div className="details">
+   <div><small>OKOLNÍ SPOJE ZAPNUTÉ</small><strong>{neighbourGate.enabled?'Ano':'Ne'}</strong></div>
+   <div><small>API KLÍČ K DISPOZICI</small><strong>{neighbourGate.hasToken?'Ano (hodnota se nevypisuje)':'Ne'}</strong></div>
+   <div><small>ŽIVÝ TRIP SLEDOVÁN</small><strong>{neighbourGate.hasVehicle?'Ano':'Ne'}</strong></div>
+   <div><small>ID VYBRANÉ HRANY</small><strong>{neighbourGate.selectedStopId||'Chybí'} · {neighbourGate.stopName||'—'}</strong></div>
+   <div><small>INDEX ZASTÁVKY</small><strong>{neighbourGate.index===null?'Žádný':neighbourGate.index+1} / {neighbourGate.stopsCount}</strong></div>
+   <div><small>TRIP ID</small><strong>{neighbourGate.ownTripId||'Chybí'}</strong></div>
+  </div>
+  <div className="recorderActions"><button type="button" className="quiet" disabled={!neighbourGate.hasToken||!neighbourGate.hasPlatform} onClick={()=>void probeNeighbourBoard()}>Otestovat Golemio pro vybranou zastávku</button></div>
   <div className="details">
    <div><small>ZACHYCENÝCH UDÁLOSTÍ</small><strong>{neighbourTrace.events.length}</strong></div>
    <div><small>POSLEDNÍ ZASTÁVKA</small><strong>{neighbourLast?.stopName||'—'} · {neighbourLast?.stopId||'—'}</strong></div>

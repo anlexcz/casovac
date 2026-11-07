@@ -49,6 +49,11 @@ export function useStopNeighbours(args:{
  const date=dateLocal(now);
  const key=date+'|'+ownTripId+'|'+String(index??-1)+'|'+(stop?.id??'')+'|'+(stop?.arrival||stop?.departure||'');
  const selectedStopId=stop?.id??'';
+ const gate={
+  enabled,hasToken:!!token,hasVehicle:!!ownFeature,hasTrip:!!ownTripId&&ownTripId!=='—',
+  hasPlatform:!!selectedStopId,selectedStopId,stopName:stop?.name??'',
+  ownTripId,index,stopsCount:stops.length
+ };
  const poll=Math.floor(now/20000);
  const [boardState,setBoardState]=useState<BoardState>(EMPTY);
  const [live,setLive]=useState<FeatureState>({key:'',features:[]});
@@ -61,6 +66,17 @@ export function useStopNeighbours(args:{
  // discovery before the first visible row.
  useEffect(()=>{
   if(!enabled||!token||!selectedStopId||!ownFeature){
+   const reasons=[
+    !enabled?'Okolní spoje jsou vypnuté v nastavení':'',
+    !token?'Není zadaný API klíč':'',
+    !selectedStopId?'Vybraná zastávka nemá GTFS stop_id':'',
+    !ownFeature?'Není identifikovaný živý trip sledované tramvaje':''
+   ].filter(Boolean);
+   recordNeighbourDiagnostic({
+    at:Date.now(),kind:'blocked',stopId:selectedStopId,stopName:stop?.name??'',
+    tripId:ownTripId,endpoint:'/v2/pid/departureboards',
+    note:reasons.join('; ')
+   });
    setBoardState(EMPTY);return;
   }
   let valid=true;
@@ -234,7 +250,34 @@ export function useStopNeighbours(args:{
  // Logs only when board or enrichment changes, not every display countdown tick.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[key,readyBoard,live,detail,result]);
+ async function probeDepartureBoard(){
+  const context={stopId:selectedStopId,stopName:stop?.name??'',tripId:ownTripId,
+   endpoint:'/v2/pid/departureboards · MANUAL TEST'};
+  const nowAt=Date.now();
+  if(!token||!selectedStopId){
+   recordNeighbourDiagnostic({...context,at:nowAt,kind:'blocked',
+    note:!token?'Diagnostický test: chybí API klíč':'Diagnostický test: chybí GTFS stop_id'});
+   return;
+  }
+  recordNeighbourDiagnostic({...context,at:nowAt,kind:'request',
+   note:'Ruční test bez ohledu na automatické zapnutí. ids[]='+selectedStopId});
+  try{
+   const body=await golemioJson<DepartureBoard>(
+    departureBoardUrl([selectedStopId]),token,0,'high');
+   recordNeighbourDiagnostic({...context,at:Date.now(),kind:'response',
+    elapsedMs:Date.now()-nowAt,
+    shape:summarizeNeighbourBoardResponse(body),
+    counts:summarizeNeighbourBoardCounts(body,selectedStopId),
+    note:'Ruční diagnostický test dokončen'});
+  }catch(e){
+   const message=e instanceof Error?e.message:String(e);
+   const status=/HTTP\\s+(\\d{3})/i.exec(message);
+   recordNeighbourDiagnostic({...context,at:Date.now(),kind:'error',
+    elapsedMs:Date.now()-nowAt,httpStatus:status?Number(status[1]):null,
+    note:'Ruční diagnostický test: '+message.slice(0,350)});
+  }
+ }
  const activeState=boardState.key===key?boardState:null;
- return {result,loading:!!activeState?.loading&&!readyBoard,
+ return {result,gate,probeDepartureBoard,loading:!!activeState?.loading&&!readyBoard,
   error:activeState?.error??'',updatedAt:activeState?.at??cached?.at??0};
 }
