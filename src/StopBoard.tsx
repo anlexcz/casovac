@@ -2,7 +2,7 @@ import {Fragment,useLayoutEffect,useRef,useState} from 'react';
 import type {Stop} from './tripData';
 import {formatStopTime} from './tripData';
 import {chainBoard} from './chainStops';
-import {formatNeighbourDelay} from './stopNeighbours';
+import StopNeighbours from './StopNeighbours';
 import type {NeighbourResult,NeighbourSettings} from './stopNeighbours';
 
 type Props={
@@ -25,41 +25,6 @@ type Snapshot={
  trip:string;index:number;rects:Map<number,DOMRect>;
  previousName:string;previousTime:string;previousOffset:string;
 };
-function NeighbourTable({data,loading,error,ownLine,ownOrder,ownVehicle,ownDelay}:{
- data:NeighbourResult|null;loading:boolean;error:string;
- ownLine:string;ownOrder:string;ownVehicle:string;ownDelay:number|null;
-}){
- const ownSecs=data?.ownSchedule.match(/^(\\d{1,2}):(\\d{2})(?::(\\d{2}))?/);
- const before=data?.rows.filter(x=>x.relative==='before')??[];
- const same=data?.rows.filter(x=>x.relative==='same')??[];
- const after=data?.rows.filter(x=>x.relative==='after')??[];
- const peer=(row:NonNullable<NeighbourResult['rows']>[number])=><div className="neighbourEntry" key={row.tripId}>
-  <span className="neighbourBadge">{row.line}/{row.order}</span>
-  <span className="neighbourVehicle">{row.vehicle?'#'+row.vehicle:'—'}</span>
-  <span className="neighbourDelay" title="Odchylka proti jízdnímu řádu">{formatNeighbourDelay(row.delay)}</span>
-  <time className="neighbourTime" title="Jízdní řád">{row.scheduled.slice(0,5)}</time>
- </div>;
- return <section className="stopNeighbourTable" aria-label="Spoje na stejné nástupní hraně">
-  <div className="neighbourTableHead"><span>SPOJ / VŮZ</span><span>ODCH.</span><span>JŘ</span></div>
-  {loading?<p className="neighbourNotice">Načítám spoje…</p>:
-   error?<p className="neighbourNotice" role="status">Data nedostupná: {error}</p>:
-   !data?.rows.length?<p className="neighbourNotice">Žádné další spoje v časovém okně.</p>:
-   <div className="neighbourRows">
-    {before.length>0&&<div className="neighbourSectionLabel">↑ PŘED TEBOU</div>}
-    {before.map(peer)}
-    <div className="neighbourEntry neighbourOwn" aria-label="Tvůj spoj">
-     <span className="neighbourBadge">{ownLine}/{ownOrder}</span>
-     <span className="neighbourVehicle">{ownVehicle?'#'+ownVehicle:'TY'}</span>
-     <span className="neighbourDelay">{ownDelay===null?'—':formatNeighbourDelay(ownDelay)}</span>
-     <time className="neighbourTime">{ownSecs?data?.ownSchedule.slice(0,5):'—'}</time>
-    </div>
-    {same.length>0&&<div className="neighbourSectionLabel">= SHODNÝ ČAS DLE JŘ</div>}
-    {same.map(peer)}
-    {after.length>0&&<div className="neighbourSectionLabel">↓ ZA TEBOU</div>}
-    {after.map(peer)}
-   </div>}
- </section>;
-}
 export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate,continuation,predecessor,activeLine,visualBoundary,neighbours,neighbourLoading,neighbourError,ownOrder,ownVehicle,neighbourSettings,neighbourIndex,setNeighbourIndex}:Props){
  const [closedAuto,setClosedAuto]=useState('');
  const [forcedCurrent,setForcedCurrent]=useState('');
@@ -77,8 +42,8 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
   }else setNeighbourIndex(neighbourIndex===i?null:i);
  };
  const table=(i:number)=>neighbourSettings.enabled&&(i===index?currentOpen||selectedOpen&&neighbourIndex===index:neighbourIndex===i)&&
-  <NeighbourTable data={neighbours} loading={neighbourLoading} error={neighbourError}
-   ownLine={activeLine} ownOrder={ownOrder} ownVehicle={ownVehicle} ownDelay={null}/>;
+  <StopNeighbours data={neighbours} loading={neighbourLoading} error={neighbourError}
+   ownLine={activeLine} ownOrder={ownOrder} ownVehicle={ownVehicle}/>;
 
  const stack=useRef<HTMLDivElement|null>(null);
  const activeCard=useRef<HTMLDivElement|null>(null);
@@ -165,11 +130,13 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
     <time className="scheduledTime" aria-label="Čas podle jízdního řádu">{formatStopTime(current.departure||current.arrival)}</time>
    </span>
   </div>
-  {neighbourSettings.enabled&&<button type="button" className="neighbourExpand neighbourExpandCurrent"
-   aria-expanded={currentOpen||selectedOpen&&neighbourIndex===index}
-   onClick={()=>toggleNeighbour(index!)}><span>↔ Okolní spoje</span>
-   <span className="neighbourToggleEnd">{neighbours?.rows.length?neighbours.rows.length+' spoje':'Detail'} <span aria-hidden="true">{currentOpen?'⌃':'⌄'}</span></span>
-  </button>}
+  {neighbourSettings.enabled&&(currentOpen||neighbours?.rows.length||neighbourLoading)&&
+   <button type="button" className="sn-current-toggle"
+    aria-label="Okolní spoje u aktuální zastávky"
+    aria-expanded={currentOpen||selectedOpen&&neighbourIndex===index}
+    onClick={()=>toggleNeighbour(index!)}><span aria-hidden="true">↔</span>
+     <span>{neighbours?.rows.length??0}</span><span aria-hidden="true">{currentOpen?'⌃':'⌄'}</span>
+   </button>}
   {table(index!)}
   {shown.map(entry=>{
    const {stop,index:n,continuation:isNext,changeTo,localIndex}=entry;
@@ -192,7 +159,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
       <button className="neighbourExpand neighbourExpandFuture" type="button"
        onClick={()=>toggleNeighbour(localIndex)}
        aria-label={'Okolní spoje: '+stop.name} aria-expanded={neighbourIndex===localIndex}>
-       <span aria-hidden="true">{neighbourIndex===localIndex?'⌃':'⌄'}</span>
+       <span aria-hidden="true">↔</span>
       </button>}
     </div>
     {neighbourIndex===localIndex&&!isNext&&table(localIndex)}
