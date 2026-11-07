@@ -45,7 +45,7 @@ export function useAppController(){
  const [active,setActive]=useState<[string,string]|null>(()=>stored(TOKEN_KEY)?recentTracking():null);
  const [trackedService,setTrackedService]=useState<TrackedService|null>(()=>stored(TOKEN_KEY)?restoreTrackedService():null);
  const [diagnostics,setDiagnostics]=useState(false);
- const [showHeadways,setShowHeadways]=useState(()=>stored('casovac:show-headways:v1')==='true');
+ const [showHeadways,setShowHeadways]=useState(()=>stored('casovac:show-headways:v1')!=='false');
  const [neighbourSettings,setNeighbourSettings]=useState<NeighbourSettings>(()=>{
   try{
    const json=JSON.parse(stored('casovac:neighbour-settings:v1')) as Partial<NeighbourSettings>;
