@@ -55,6 +55,7 @@ export function departureBoardNameUrl(name:string,scheduled?:string,serviceDate?
 }
 export type PlatformResolution={
  id:string;
+ platformCode:string;
  matches:number;
  reason:string;
 };
@@ -62,7 +63,7 @@ export function resolveOwnPlatform(
  board:DepartureBoard,tripId:string,scheduled:string
 ):PlatformResolution{
  const target=seconds(scheduled);
- if(target===null)return {id:'',matches:0,reason:'Neplatný GTFS čas vlastního spoje'};
+ if(target===null)return {id:'',platformCode:'',matches:0,reason:'Neplatný GTFS čas vlastního spoje'};
  const matches=(board.departures??[]).filter(dep=>{
   const iso=dep.arrival_timestamp?.scheduled??dep.departure_timestamp?.scheduled;
   const fromBoard=typeof iso==='string'?secondsFromISO(iso):null;
@@ -71,10 +72,11 @@ export function resolveOwnPlatform(
  });
  const ids=[...new Set(matches.map(dep=>dep.stop!.id!))];
  if(ids.length!==1)return {
-  id:'',matches:matches.length,
+  id:'',platformCode:'',matches:matches.length,
   reason:ids.length>1?'Nesouhlasí nástupní hrana na více záznamech':
    'Odjezdník neobsahuje vlastní trip ve správném čase'
  };
- return {id:ids[0],matches:matches.length,
+ const codes=[...new Set(matches.filter(dep=>dep.stop?.id===ids[0]).map(dep=>dep.stop?.platform_code).filter((x):x is string=>!!x))];
+ return {id:ids[0],platformCode:codes.length===1?codes[0]:'',matches:matches.length,
   reason:'Přesné ID ověřeno podle vlastního GTFS tripu a času JŘ'};
 }

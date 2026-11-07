@@ -3,11 +3,12 @@ import type {NeighbourResult,NeighbourSettings} from './stopNeighbours.ts';
 import type {Feature} from './featureUtils.ts';
 import {selectedTripId,vehicleId,orderOf} from './featureUtils.ts';
 import {relevantWindows} from './stopNeighbours.ts';
+import {joiningCorridor} from './neighbourRouteJoining.ts';
 
 type BoardDeparture={
  trip?:{id?:string;is_canceled?:boolean};
  route?:{short_name?:string;type?:number};
- stop?:{id?:string};
+ stop?:{id?:string;platform_code?:string};
  arrival_timestamp?:{scheduled?:string|null};
  departure_timestamp?:{scheduled?:string|null};
  delay?:{is_available?:boolean;seconds?:number|null};
@@ -47,12 +48,12 @@ export function parseNeighbourBoard(args:{
 }):NeighbourResult{
  const {board,stop,ownTripId,ownStops,ownIndex,ownDelay,settings,distance,features,candidateStops}=args;
  const ownSchedule=stop.arrival||stop.departure,ownTime=seconds(ownSchedule);
- const result:NeighbourResult={rows:[],significant:false,stopId:stop.id,ownSchedule,ownDelay};
+ const result:NeighbourResult={rows:[],significant:false,sharedOutgoing:false,stopId:stop.id,ownSchedule,ownDelay};
  if(ownTime===null||!stop.id)return result;
  const live=new Map(features.map(f=>[selectedTripId(f),f]));
  const window=relevantWindows(settings,distance);
  const seen=new Set<string>();
- const ownPrev=ownStops[ownIndex-1]?.id??'';
+
  for(const departure of board.departures??[]){
   const id=departure.trip?.id??'';
   if(!id||id===ownTripId||seen.has(id)||departure.trip?.is_canceled)continue;
@@ -77,9 +78,13 @@ export function parseNeighbourBoard(args:{
   const position=matches.length===1?matches[0]:-1;
   const prev=position>=0?stops![position-1]?.id??'':'';
   const next=position>=0?stops![position+1]?.id??'':'';
-  // Significance requires verified incoming branch, not merely "last stop"
-  // from an older vehicle position.
-  if(position>=0&&prev!==ownPrev)result.significant=true;
+  // Auto-open only where a DIFFERENT incoming branch joins our corridor
+  // and continues on our next segment. A divergence does not qualify.
+  if(stops?.length){
+   const direction=joiningCorridor(ownStops,ownIndex,stops,planned,stop.id);
+   if(direction.joining)result.significant=true;
+   if(direction.joining||direction.reason==='same-incoming')result.sharedOutgoing=true;
+  }
   result.rows.push({
    tripId:id,line:shortName,order:feature?String(orderOf(feature)??'?'):'?',
    vehicle:car==='—'?'':car,scheduled:new Date(plannedISO!).toLocaleTimeString('cs-CZ',

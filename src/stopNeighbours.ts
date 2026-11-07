@@ -18,7 +18,7 @@ export type NeighbourRow={
  relative:'before'|'same'|'after';predictedDifference:number;
  previousId:string;nextId:string;
 };
-export type NeighbourResult={rows:NeighbourRow[];significant:boolean;stopId:string;ownSchedule:string;ownDelay:number|null};
+export type NeighbourResult={rows:NeighbourRow[];significant:boolean;sharedOutgoing?:boolean;stopId:string;ownSchedule:string;ownDelay:number|null};
 const serviceSeconds=(text:string):number|null=>{
  const m=/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(text);
  if(!m||Number(m[2])>59||Number(m[3]??0)>59)return null;

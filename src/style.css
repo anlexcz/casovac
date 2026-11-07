@@ -322,3 +322,6 @@
  font-size:10px;line-height:1.15;font-weight:650;color:#aebfce;
  font-variant-numeric:tabular-nums;white-space:nowrap;
 }
+
+/* Keep the floating diagnostics button from covering the departures sheet. */
+.debugFab[hidden]{display:none}
