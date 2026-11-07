@@ -7,7 +7,6 @@ import {golemioJson} from './golemioClient.ts';
 import {calculateStopNeighbours} from './stopNeighbours.ts';
 import type {NeighbourSettings} from './stopNeighbours.ts';
 
-type Entry={id:string;stops:Stop[]};
 type Snapshot={key:string;features:Feature[];schedules:Map<string,Stop[]>;loading:boolean;error:string};
 const cachedDetails=new Map<string,{stops:Stop[];at:number}>();
 const clock=(v:string)=>{const m=/^(\d{1,2}):(\d{2})/.exec(v);return m?Number(m[1])*60+Number(m[2]):null;};
@@ -62,7 +61,9 @@ export function useStopNeighbours(args:{
     const candidates=Array.isArray(raw)?raw as Obj[]:[];
     const routes=new Set<string>();
     for(const item of candidates){
-     const route=String(path(item,'route.route_short_name')??path(item,'route_short_name')??'');
+     const known=path(item,'route.route_short_name')??path(item,'route_short_name');
+     const routeId=String(path(item,'route_id')??'');
+     const route=known?String(known):/^L\d+$/.test(routeId)?routeId.slice(1):'';
      if(route&&route!==routeOf(ownFeature))routes.add(route);
     }
     // Route discovery from summaries is bounded; missing route metadata
