@@ -48,6 +48,7 @@ export function useAppController(){
   }catch{return DEFAULT_NEIGHBOUR_SETTINGS;}
  });
  const [neighbourIndex,setNeighbourIndex]=useState<number|null>(null);
+ const [pinnedAutoNeighbour,setPinnedAutoNeighbour]=useState<{tripId:string;index:number}|null>(null);
  useEffect(()=>{save('casovac:neighbour-settings:v1',JSON.stringify(neighbourSettings));},[neighbourSettings]);
  const updateNeighbourSettings=(patch:Partial<NeighbourSettings>)=>
   setNeighbourSettings(old=>({...old,...patch}));
@@ -211,10 +212,14 @@ export function useAppController(){
  const autoNeighbourIndex=nextNeighbourIndex!==null&&nextNeighbourEta!==null&&
   nextNeighbourEta>=-30&&nextNeighbourEta<=Math.max(180,neighbourSettings.autoOpenSeconds+90)?
    nextNeighbourIndex:displayedIndex;
+ const effectivePinnedAutoIndex=pinnedAutoNeighbour?.tripId===tripId&&
+  displayedIndex!==null&&displayedIndex<=pinnedAutoNeighbour.index?
+  pinnedAutoNeighbour.index:null;
+ const effectiveAutoNeighbourIndex=effectivePinnedAutoIndex??autoNeighbourIndex;
  const stopNeighbours=useStopNeighbours({
   enabled:neighbourSettings.enabled&&!!active,token:token.trim(),now,
   ownFeature:chosen,ownTripId:tripId,stops:trip.stops,knownFeatures:features,currentIndex:displayedIndex,
-  requestedIndex:neighbourIndex??autoNeighbourIndex,settings:neighbourSettings
+  requestedIndex:neighbourIndex??effectiveAutoNeighbourIndex,settings:neighbourSettings
  });
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
  const highlightedTime=highlightedStop?.departure||highlightedStop?.arrival||'';
@@ -274,5 +279,5 @@ export function useAppController(){
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setNeighbourIndex(null);setSelectedTrip(id);setManual(null);}
- return {neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ return {neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }
