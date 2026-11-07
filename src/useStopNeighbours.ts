@@ -68,8 +68,8 @@ export function useStopNeighbours(args:{
   const context={stopId:'',stopName:stop.name,tripId:ownTripId,
    endpoint:'/v2/pid/departureboards · names (platform discovery)'};
   recordNeighbourDiagnostic({...context,at:started,kind:'request',
-   note:'Ověřuji nástupní hranu z názvu pouze podle přesného trip ID a času JŘ'});
-  void golemioJson<DepartureBoard>(departureBoardNameUrl(stop.name),token,12000,'high')
+   note:'Ověřuji nástupní hranu podle trip ID a času JŘ; timeFrom='+\n    (stop.arrival||stop.departure)+' (lokální služební den '+date+')'});
+  void golemioJson<DepartureBoard>(departureBoardNameUrl(stop.name,stop.arrival||stop.departure,date),token,12000,'high')
    .then(board=>{
     const at=Date.now();
     const resolution=resolveOwnPlatform(board,ownTripId,stop.arrival||stop.departure);
