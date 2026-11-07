@@ -91,7 +91,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
     {highlightedStop&&displayedIndex!==null?
      <StopBoard stops={trip.stops} index={displayedIndex} tripId={tripId} remaining={highlightedRemaining}
       terminalWaiting={terminalWaiting} expanded={expanded} onExpand={()=>setExpanded(v=>!v)}
-      onOpenStop={openStopSheet} animate={manual===null&&!diagnostics}
+      onOpenStop={openStopSheet} onChoose={index=>setManual(index)} animate={manual===null&&!diagnostics}
       activeLine={active[0]} visualBoundary={atChainBoundary}
 
       continuation={continuity.ok&&plannedHandoff&&nextTrip.tripId===plannedHandoff.next.tripId?
