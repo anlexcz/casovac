@@ -2,6 +2,8 @@ import {path,routeOf,selectedTripId,vehicleId,stateOfFeature,orderOf} from './fe
 import type {Feature} from './featureUtils.ts';
 import type {Stop} from './tripData.ts';
 import {relevantCorridor,assessCorridor} from './headwayCorridor.ts';
+import {foreignLineAtTransition} from './headwayLinkEligibility.ts';
+import type {HeadwayLink} from './headwayLinkEligibility.ts';
 
 export type HeadwayNeighbour={line:string;order:string;tripId:string;seconds:number;scheduledGap:number};
 export type HeadwayDecision={line:string;order:string;tripId:string;reason:string;direction:'ahead'|'behind'|null;plannedGap:number|null};
@@ -84,8 +86,9 @@ export function sharedReference(
 export function calculateLineHeadways(args:{
  selected:Feature|null;features:Feature[];stops:Stop[];
  peerStops:ReadonlyMap<string,Stop[]>;now:number;allowedRoutes?:ReadonlySet<string>;
+ links?:ReadonlyMap<string,HeadwayLink>;
 }):LineHeadways{
- const {selected,features,stops,peerStops,now,allowedRoutes}=args;
+ const {selected,features,stops,peerStops,now,allowedRoutes,links}=args;
  const ownStops=peerStops.get(selected?selectedTripId(selected):'')??stops;
  const result:LineHeadways={...EMPTY_HEADWAYS,checkedAt:now,decisions:[]};
  if(!selected||ownStops.length<3||!live(selected,now))return result;
@@ -101,6 +104,17 @@ export function calculateLineHeadways(args:{
   const assessed=assessCorridor(ownStops,schedulePeer,ownNextId,stopId(peer));
   const shared=assessed.reference;
   if(!shared){note('Koridor: '+assessed.reason);continue;}
+  // Different operating lines may share tracks. They count as actual
+  // neighbours only across an individually verified GTFS block boundary,
+  // never merely because the route was found elsewhere in a chained block.
+  if(routeOf(peer)!==routeOf(selected)&&!foreignLineAtTransition({
+   ownId:selectedTripId(selected),peerId:ownTripId,
+   ownLine:routeOf(selected),peerLine:routeOf(peer),
+   reference:shared,links:links??new Map()
+  })){
+   note('Jiná linka: mimo ověřenou přechodovou konečnou');
+   continue;
+  }
   const peerEta=nextEta(peer);
   if(peerEta===null)continue;
   const ownNext=schedule(ownStops[shared.ownIndex]);
@@ -129,7 +143,8 @@ export function calculateLineHeadways(args:{
   if(plannedGap<0&&(!result.behind||neighbour.scheduledGap<result.behind.scheduledGap)){
    result.behind=neighbour;
   }
-  note('Vhodný spoj',plannedGap>0?'ahead':'behind',plannedGap);
+  note(routeOf(peer)===routeOf(selected)?'Vhodný spoj stejné linky':
+   'Ověřený přeběh přes konečnou',plannedGap>0?'ahead':'behind',plannedGap);
   result.matched++;
  }
  result.aheadSeconds=result.ahead?.seconds??null;
