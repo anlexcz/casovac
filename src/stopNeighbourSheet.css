@@ -12,7 +12,7 @@
  will-change:transform}
 .sn-sheet-open .sn-sheet{transform:translateY(0)}
 .sn-sheet-header{flex:0 0 auto;display:flex;align-items:center;gap:9px;position:relative;
- min-height:63px;padding:18px 15px 9px;border-bottom:1px solid #343e48;touch-action:pan-y}
+ min-height:63px;margin:0;padding:18px 15px 9px;border-bottom:1px solid #343e48;touch-action:pan-y}
 .sn-sheet-grip{position:absolute;top:7px;left:50%;width:35px;height:3px;border-radius:10px;
  background:#56636e;transform:translateX(-50%)}
 .sn-sheet-heading{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
