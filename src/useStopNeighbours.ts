@@ -239,7 +239,7 @@ export function useStopNeighbours(args:{
  useEffect(()=>{
   if(!enabled||!token||!readyBoard||!effectiveStop)return;
   let active=true;
-  const initial=parseNeighbourBoard({board:readyBoard,stop,ownTripId,
+  const initial=parseNeighbourBoard({board:readyBoard,stop:effectiveStop,ownTripId,
    ownStops:stops,ownIndex:index!,ownDelay:null,settings,distance:0,features:[]});
   const ids=initial.rows.slice(0,10).map(row=>row.tripId);
   const found=new Map<string,Stop[]>();
