@@ -96,6 +96,33 @@ export function summarizeNeighbourBoardCounts(raw:unknown,selectedStopId:string)
   missingPlatform:list.filter(r=>!get(r,'stop').id).length
  };
 }
+/**
+ * Inspect the exact timetable-record schema, not its private fields.
+ * Useful when the public GTFS trip detail has names/times but no stop_id.
+ */
+export function summarizeTripStopSchema(raw:unknown):NonNullable<NeighbourDiagnosticEvent['shape']>{
+ const root=obj(raw);
+ const candidates:unknown[]=[root.stop_times,root.stopTimes,root.stoptimes,root.stops,
+  obj(root.data).stop_times,obj(root.data).stops,obj(root.trip).stop_times];
+ const list=candidates.find(Array.isArray);
+ const rows=Array.isArray(list)?list:[];
+ return {
+  topLevelKeys:keys(raw),
+  departuresType:'GTFS stop-times array ('+rows.length+')',
+  samples:rows.slice(0,3).map(item=>{
+   const rec=obj(item);
+   const result:Record<string,unknown>={keys:keys(item)};
+   for(const field of ['stop','properties','stop_info','stop_data']){
+    if(rec[field]!==undefined)result[field]={keys:keys(rec[field]),
+     propertiesKeys:keys(obj(rec[field]).properties)};
+   }
+   const idFields=['stop_id','stopId','id','stop_sequence','stop_name','arrival_time','departure_time'];
+   result.fields=Object.fromEntries(idFields.filter(k=>rec[k]!==undefined)
+    .map(k=>[k,typeof rec[k]==='string'||typeof rec[k]==='number'?rec[k]:typeof rec[k]]));
+   return result;
+  })
+ };
+}
 export function downloadNeighbourDiagnostics():void{
  const payload={
   schema:'casovac-neighbours-diagnostics-v1',
