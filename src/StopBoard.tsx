@@ -170,7 +170,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
        <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
       </button>
      )}
-     {neighbourSettings.enabled&&!isNext&&localIndex>=0&&localIndex-index<=neighbourSettings.lookahead&&
+     {neighbourSettings.enabled&&!isNext&&localIndex>=0&&localIndex-(index??0)<=neighbourSettings.lookahead&&
       <button className="neighbourExpand neighbourExpandFuture" type="button"
        onClick={()=>toggleNeighbour(localIndex)}
        aria-label={'Okolní spoje: '+stop.name} aria-expanded={neighbourIndex===localIndex}>
