@@ -29,16 +29,21 @@
 .sn-sheet .sn-row{min-height:48px;grid-template-columns:21px minmax(52px,auto) minmax(35px,1fr) 73px 53px;
  gap:8px;font-size:14px;padding:5px 4px}
 .sn-sheet .sn-badge{font-size:14px}
-.sn-sheet .sn-vehicle,.sn-sheet .sn-time{font-size:14px}
-.sn-sheet .sn-delay{font-size:15px}
+.sn-sheet .sn-vehicle{font-size:13px}
+.sn-sheet .sn-time{font-size:18px;font-weight:750;color:#f3f7fb}
+.sn-sheet .sn-delay{font-size:13px;font-weight:500}
 .sn-sheet .sn-own{background:#ffffff09}
 .boardStack .sb-current-interactive{cursor:pointer}
 .boardStack .sb-current-interactive:focus-visible{outline:2px solid #dce5eb;outline-offset:2px}
 @media(max-width:370px){
  .sn-sheet .sn-row{grid-template-columns:19px minmax(46px,auto) minmax(27px,1fr) 64px 45px;gap:4px}
  .sn-sheet .sn-badge{padding:2px 4px;font-size:13px}
- .sn-sheet .sn-vehicle,.sn-sheet .sn-time{font-size:13px}
- .sn-sheet .sn-delay{font-size:14px}
+ .sn-sheet .sn-vehicle{font-size:12px}
+ .sn-sheet .sn-time{font-size:16px}
+ .sn-sheet .sn-delay{font-size:12px}
  .sn-sheet-body{padding-left:7px;padding-right:7px}
 }
 @media(prefers-reduced-motion:reduce){.sn-sheet,.sn-sheet-layer{transition:none}}
+
+.sn-sheet-refresh{display:inline-flex;align-items:center;justify-content:center;min-width:30px;color:#91a3b3;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sn-sheet-refresh.sn-refresh-error{color:#ec8a85}
