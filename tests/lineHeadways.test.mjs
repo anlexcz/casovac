@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {calculateLineHeadways,formatHeadway,sharedReference,headwayEligiblePeers} from '../src/lineHeadways.ts';
 import {joinHeadwayBlock,possibleBlockPartners} from '../src/headwayChains.ts';
+import {assessCorridor} from '../src/headwayCorridor.ts';
 
 const now=Date.parse('2026-11-06T14:54:00+01:00');
 const stops=['A','B','C','D','E','F'].map((id,i)=>({
@@ -205,4 +206,40 @@ test('unrelated later intersection does not keep diverted vehicle eligible',()=>
  const r=calculateLineHeadways({selected:mine,features:[mine,diverted],
   stops,peerStops:new Map([['9_current',stops],['9_divert',detour]]),now});
  assert.equal(r.ahead,null);
+});
+
+test('corridor diagnostics identify a peer that already left on a depot branch',()=>{
+ const peer=['A','B','C','D','X','Y'].map((id,i)=>({...stops[i],id}));
+ const decision=assessCorridor(stops,peer,'C','X');
+ assert.equal(decision.reference,null);
+ assert.equal(decision.reason,'peer-past-corridor');
+});
+test('approaching peer of a verified chained route may be behind us',()=>{
+ const own=['T','U','V'].map((id,i)=>({...stops[i],id}));
+ const peer=['P','Q','T','U','V'].map((id,i)=>({...stops[i%stops.length],id}));
+ assert.ok(assessCorridor(own,peer,'U','Q').reference);
+});
+test('our route approaching a future common section is not compared prematurely',()=>{
+ const own=['A','B','C','D','E'].map((id,i)=>({...stops[i],id}));
+ const peer=['X','Y','C','D','E'].map((id,i)=>({...stops[i],id}));
+ assert.equal(assessCorridor(own,peer,'B','Y').reason,'own-before-corridor');
+});
+test('our route past the common section does not retain a previous peer',()=>{
+ const own=['A','B','C','D','E'].map((id,i)=>({...stops[i],id}));
+ const peer=['A','B','C','X','Y'].map((id,i)=>({...stops[i],id}));
+ assert.equal(assessCorridor(own,peer,'E','B').reason,'own-past-corridor');
+});
+test('diagnostics report why a diversion is excluded and which alternative was chosen',()=>{
+ const mine=f('9_diag',9300,'C',now+10000,{order:23});
+ const left=f('9_left',9301,'X',now+10000,{order:22});
+ const replacement=f('9_next',9302,'D',now+10000,{order:21});
+ const leftStops=['A','B','C','D','X','Y'].map((id,i)=>({...shifted(stops,-4)[i],id}));
+ const mapped=new Map([
+  ['9_diag',stops],['9_left',leftStops],['9_next',shifted(stops,-8)]
+ ]);
+ const result=calculateLineHeadways({selected:mine,features:[mine,left,replacement],
+  stops,peerStops:mapped,now});
+ assert.equal(result.ahead?.tripId,'9_next');
+ assert.equal(result.decisions.find(d=>d.tripId==='9_left')?.reason,'Koridor: peer-past-corridor');
+ assert.equal(result.decisions.find(d=>d.tripId==='9_next')?.reason,'Vhodný spoj');
 });
