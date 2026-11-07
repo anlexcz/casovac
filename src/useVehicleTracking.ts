@@ -1,6 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
 import type {Dispatch,MutableRefObject,SetStateAction} from 'react';
 import {golemioJson} from './golemioClient';
+import {filterCoreFeatures} from './coreDutySelection.ts';
+import type {TrackedService} from './trackedService.ts';
 import {selectTrip,stateOf} from './tripSelection';
 import {readLastSeen,saveLastSeen,extractRecordedVehicle} from './lastSeen';
 import type {LastSeen} from './lastSeen';
@@ -14,6 +16,7 @@ const API='https://api.golemio.cz/v2/vehiclepositions';
 export type HandoffFallback={target:string;vehicle:string;feature:Feature;until:number};
 type Props={
  active:[string,string]|null;
+ trackedService:TrackedService|null;
  token:string;
  recorder:ReturnType<typeof useRecorder>;
  gps:GpsFix|null;
@@ -21,7 +24,7 @@ type Props={
  setError:Dispatch<SetStateAction<string>>;
  handoffFallbackRef:MutableRefObject<HandoffFallback|null>;
 };
-export function useVehicleTracking({active,token,recorder,gps,setLastSeen,setError,handoffFallbackRef}:Props){
+export function useVehicleTracking({active,trackedService,token,recorder,gps,setLastSeen,setError,handoffFallbackRef}:Props){
  const [features,setFeatures]=useState<Feature[]>([]);
  const [lastFetch,setLastFetch]=useState<number|null>(null);
  const [queryMode,setQueryMode]=useState('active');
@@ -49,11 +52,11 @@ export function useVehicleTracking({active,token,recorder,gps,setLastSeen,setErr
     if(!data||typeof data!=='object'||!Array.isArray((data as Obj).features))throw Error('Neplatná odpověď živých poloh');
     if(alive&&generation===requestRef.current){
      const standard=(data as {features:Feature[]}).features;
-     let fetched=standard;
+     let fetched=filterCoreFeatures(standard,trackedService);
      // Keep the prepared successor visible while Golemio still reports the old line.
      // Never treat this cached object as a fresh observation.
      const fallback=handoffFallbackRef.current;
-     if(fallback&&fallback.target===active!.join('/')&&Date.now()<fallback.until){
+     if(!trackedService?.verified&&fallback&&fallback.target===active!.join('/')&&Date.now()<fallback.until){
       const liveSameOrder=standard.some(f=>normalize(orderOf(f))===normalize(active![1])&&
        String(path(f,'properties.trip.gtfs.route_short_name')??'')===active![0]&&
        (stateOf(f)==='at_stop'||stateOf(f)==='on_track'));
@@ -70,7 +73,7 @@ export function useVehicleTracking({active,token,recorder,gps,setLastSeen,setErr
      const known=readLastSeen(active![0],active![1])??
       extractRecordedVehicle(recorder.session,active![0],active![1]);
      let related:{vehicle:string;route:string;order:string;state:string;time:number}|null=null;
-     if(!matching.length&&known?.vehicle&&Date.now()-previousScanRef.current>=60000){
+     if(!trackedService?.verified&&!matching.length&&known?.vehicle&&Date.now()-previousScanRef.current>=60000){
       previousScanRef.current=Date.now();
       try{
        const globalUrl=new URL(API);
@@ -139,6 +142,6 @@ export function useVehicleTracking({active,token,recorder,gps,setLastSeen,setErr
   }
   void refresh();const timer=setInterval(()=>void refresh(),20000);
   return()=>{alive=false;clearInterval(timer);controller.abort();};
- },[active,token]);
+ },[active?.[0],active?.[1],token,trackedService?.verified,trackedService?.originRoute,trackedService?.sequenceId]);
  return {features,setFeatures,lastFetch,setLastFetch,queryMode,relatedVehicle,terminalCandidates,loading};
 }

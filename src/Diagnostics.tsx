@@ -1,3 +1,4 @@
+import type {useCoreDutyTracking} from './useCoreDutyTracking';
 import type {TrackedService} from './trackedService';
 import type {RemoteProgress} from './remoteProgress';
 import type {ChainSnapshot,ChainTrip} from './chainDiagnostics';
@@ -16,6 +17,7 @@ import type {GpsFix} from './position';
 type Feature={properties?:Record<string,unknown>;geometry?:{coordinates?:unknown}};
 type Props={
  trackedService:TrackedService|null;
+ coreTracking:ReturnType<typeof useCoreDutyTracking>;
  active:[string,string]|null;features:Feature[];chosen:Feature|null;trip:TripData;
  gps:GpsFix|null;gpsError:string;gpsWanted:boolean;gpsAge:number|null;
  age:number|null;lastFetch:number|null;error:string;matchingCount:number;
@@ -35,7 +37,7 @@ type Props={
 };
 const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
-export default function Diagnostics({trackedService,active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,chainDiagnostic,lastHandoff,plannedHandoff,handoffContinuity,handoffDeparture,recorder,neighbourGate,probeNeighbourBoard}:Props){
+export default function Diagnostics({trackedService,coreTracking,active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,chainDiagnostic,lastHandoff,plannedHandoff,handoffContinuity,handoffDeparture,recorder,neighbourGate,probeNeighbourBoard}:Props){
  const stops:Stop[]=trip.stops;
  const neighbourTrace=useNeighbourDiagnostics();
  const neighbourLast=neighbourTrace.events.at(-1)??null;
@@ -55,7 +57,7 @@ export default function Diagnostics({trackedService,active,features,chosen,trip,
  return <section className="diagnosticStack" aria-label="Provozní diagnostika">
  <section className="panel" aria-label="Identita sledovaného výkonu">
   <h2>Kmenová identita výkonu</h2>
-  <p className="hint">Kmenové pořadí se ukládá nezávisle na aktuální lince, tripu a evidenčním čísle. Automatické přeběhy podle této identity budou řešeny až v kroku D.</p>
+  <p className="hint">Kmenové pořadí se ukládá nezávisle na aktuální lince, tripu a evidenčním čísle. Změny aktuální linky se ověřují podle čerstvých dat celého kmenového výkonu; samotné číslo vozu není kritériem.</p>
   <div className="details">
    <div><small>KMENOVÉ POŘADÍ</small><strong>{trackedService?.verified?trackedService.originRoute+'/'+trackedService.sequenceId:'Neověřeno'}</strong></div>
    <div><small>AKTUÁLNÍ LINKA/POŘADÍ</small><strong>{active?active.join('/'):'—'}</strong></div>
@@ -63,6 +65,15 @@ export default function Diagnostics({trackedService,active,features,chosen,trip,
    <div><small>KMENOVÁ IDENTITA</small><strong>{trackedService?.verified?'Ověřena z Golemia':'Čekám na živý záznam'}</strong></div>
    <div><small>POSLEDNÍ GTFS TRIP</small><strong>{trackedService?.currentTripId??'—'}</strong></div>
    <div><small>POSLEDNÍ VOZIDLO</small><strong>{trackedService?.vehicleId?'#'+trackedService.vehicleId:'—'}</strong></div>
+   <div><small>KMENOVÉ SLEDOVÁNÍ</small><strong>{coreTracking.decision.reason==='active'?'Ověřená živá telemetrie':
+    coreTracking.decision.reason==='ambiguous'?'Nejednoznačné – čekám':
+    coreTracking.decision.reason==='stale'?'Zastaralá poloha – čekám':
+    coreTracking.decision.reason==='no-live'?'Pouze připravované/ukončené spoje':
+    coreTracking.decision.reason==='no-match'?'Výkon nenalezen v posledním přehledu':
+    'Čekám na ověřenou identitu'}</strong></div>
+   <div><small>POSLEDNÍ OVĚŘENÁ LINKA</small><strong>{coreTracking.decision.candidate?
+    coreTracking.decision.candidate.route+'/'+coreTracking.decision.candidate.order:'—'}</strong></div>
+   {coreTracking.error&&<div><small>POSLEDNÍ CHYBA KONTROLY</small><strong>{coreTracking.error}</strong></div>}
   </div>
  </section>
  <section className="panel" aria-label="Diagnostika okolních spojů">

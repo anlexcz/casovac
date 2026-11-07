@@ -13,6 +13,7 @@ import {ACTIVE_KEY,ACTIVE_TTL,save} from './trackingStorage';
 type Setter<T>=Dispatch<SetStateAction<T>>;
 type HandoffRecord={from:string;to:string;vehicle:string;tripId:string;reason:string;time:number};
 type Inputs={
+ enabled?:boolean;
  active:[string,string]|null;
  chosen:Feature|null;
  plannedHandoff:PlannedHandoff|null;
@@ -36,7 +37,7 @@ type Inputs={
  setActive:Setter<[string,string]|null>;
 };
 export function useChainHandoff({
- active,chosen,plannedHandoff,continuity,nextTrip,trip,tripId,manual,displayedIndex,currentTripState,
+ enabled=true,active,chosen,plannedHandoff,continuity,nextTrip,trip,tripId,manual,displayedIndex,currentTripState,
  handoffFallbackRef,recorder,setLastHandoff,setSelectedTrip,setManual,setExpanded,
  setFeatures,setLastSeen,setLastFetch,setQuery,setActive
 }:Inputs){
@@ -49,7 +50,7 @@ export function useChainHandoff({
  // planned successor preparation is allowed only after the previous trip ends.
  const transferConfirmed=(completedPrevious&&successorPrepared)||
   (atTransition&&successorActive);
- const handoffReady=!!active&&!!chosen&&!!plannedHandoff&&
+ const handoffReady=enabled&&!!active&&!!chosen&&!!plannedHandoff&&
   continuity.ok&&transferConfirmed&&
   nextTrip.tripId===plannedHandoff.next.tripId&&!nextTrip.loading&&
   trip.tripId===tripId&&trip.stops.length>1&&manual===null;

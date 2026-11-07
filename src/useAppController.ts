@@ -12,7 +12,7 @@ import {useRemoteProgress} from './remoteProgress';
 import type {RemoteHistory} from './remoteTracking';
 import {distanceMeters} from './position';
 import {useOnboardMode} from './onboard';
-import {readLastSeen,extractRecordedVehicle,saveLastSeenForService} from './lastSeen';
+import {readLastSeen,saveLastSeen,extractRecordedVehicle,saveLastSeenForService} from './lastSeen';
 import type {LastSeen} from './lastSeen';
 import {path,text,selectedTripId,vehicleId,routeOf} from './featureUtils';
 import {serviceFromFeature,unverifiedService,observeService,operatingDate,matchesCurrent} from './trackedService';
@@ -20,6 +20,8 @@ import type {TrackedService} from './trackedService';
 import {useChainHandoff} from './useChainHandoff';
 import type {Feature} from './featureUtils';
 import {useVehicleTracking} from './useVehicleTracking';
+import {useCoreDutyTracking} from './useCoreDutyTracking';
+import {serviceKey} from './trackedService';
 import {useGpsTracking} from './useGpsTracking';
 import {calculateLineHeadways} from './lineHeadways';
 import {useHeadwayTimetables} from './useHeadwayTimetables';
@@ -98,7 +100,7 @@ export function useAppController(){
  useEffect(()=>{if(rememberToken)save(TOKEN_KEY,token.trim());else save(TOKEN_KEY,'');},[rememberToken,token]);
 
 
- const {features,setFeatures,lastFetch,setLastFetch,queryMode,relatedVehicle,terminalCandidates,loading}=useVehicleTracking({active,token,recorder,gps,setLastSeen,setError,handoffFallbackRef});
+ const {features,setFeatures,lastFetch,setLastFetch,queryMode,relatedVehicle,terminalCandidates,loading}=useVehicleTracking({active,trackedService,token,recorder,gps,setLastSeen,setError,handoffFallbackRef});
 
 
  const resolved=active?selectTrip(features,active[0],active[1],now,lastSeen?.vehicle):null;
@@ -213,11 +215,65 @@ export function useAppController(){
   stopsCount:trip.stops.length,apiAge:age,now,sourceTripState:lifecycle
  });
  useChainHandoff({
-  active,chosen,plannedHandoff,continuity,nextTrip,trip,tripId,manual,
+  enabled:!trackedService?.verified,active,chosen,plannedHandoff,continuity,nextTrip,trip,tripId,manual,
   displayedIndex:remoteProgress.index,currentTripState:lifecycle,
   handoffFallbackRef,recorder,setLastHandoff,setSelectedTrip,setManual,setExpanded,
   setFeatures,setLastSeen,setLastFetch,setQuery,setActive
  });
+ const coreTracking=useCoreDutyTracking(trackedService,token);
+ const coreCandidate=coreTracking.decision.candidate;
+ const coreKey=trackedService?serviceKey(trackedService):null;
+ // The normal per-line 20s poll remains the main data source. The slower
+ // fleet-wide poll is only allowed to move us to a DIFFERENT route when the
+ // origin+sequence is proved by fresh, unique ACTIVE telemetry.
+ useEffect(()=>{
+  if(!active||!trackedService?.verified||!coreKey||coreTracking.key!==coreKey||
+   !coreCandidate||!token.trim())return;
+  if(coreCandidate.route===active[0]&&coreCandidate.order===active[1])return;
+  if(coreCandidate.order!==trackedService.sequenceId)return;
+  if(Date.now()-coreCandidate.observedAt>90000||coreCandidate.observedAt>Date.now()+10000)return;
+  if(selectedTrip||manual!==null)return; // don't interrupt a manual trip/stop
+  const nextService=observeService(trackedService,coreCandidate.feature,
+   trackedService.serviceDate,coreCandidate.route,coreCandidate.order);
+  if(!nextService||serviceKey(nextService)!==coreKey)return;
+  const target:[string,string]=[coreCandidate.route,coreCandidate.order];
+  const from=active.join('/'),to=target.join('/');
+  const reason='Ověřené kmenové pořadí '+trackedService.originRoute+'/'+trackedService.sequenceId+
+   ': živý výkon přešel z '+from+' na '+to+'.';
+  const coordinates=coreCandidate.feature.geometry?.coordinates;
+  const coords=Array.isArray(coordinates)&&coordinates.length>=2?coordinates:null;
+  const remembered:LastSeen={
+   line:target[0],order:target[1],vehicle:coreCandidate.vehicle,tripId:coreCandidate.tripId,
+   lastSeenAt:Date.now(),lastPositionAt:coreCandidate.observedAt,
+   lon:coords&&Number.isFinite(Number(coords[0]))?Number(coords[0]):null,
+   lat:coords&&Number.isFinite(Number(coords[1]))?Number(coords[1]):null,
+   lastStop:'',nextStop:'',state:coreCandidate.state,route:target[0]
+  };
+  // Persist both identities with the SAME preexisting expiry. Never extend a
+  // previous session merely because the current line changed.
+  let expires=Date.now()+ACTIVE_TTL;
+  try{
+   const saved=JSON.parse(stored(ACTIVE_KEY)) as {expires?:number};
+   if(saved.expires&&saved.expires>Date.now())expires=saved.expires;
+  }catch{/* existing v1 missing */}
+  storeTrackedService(nextService,expires);
+  save(ACTIVE_KEY,JSON.stringify({line:target[0],order:target[1],expires,
+   handoff:{from,to,vehicle:coreCandidate.vehicle,tripId:coreCandidate.tripId,
+    reason,time:Date.now()}}));
+  saveLastSeen(remembered);saveLastSeenForService(nextService,remembered);
+  setTrackedService(nextService);setLastSeen(remembered);
+  setLastHandoff({from,to,vehicle:coreCandidate.vehicle,tripId:coreCandidate.tripId,
+   reason,time:Date.now()});
+  recorder.follow(target[0],target[1],coreCandidate.tripId,reason);
+  setSelectedTrip('');setManual(null);setExpanded(false);
+  setNeighbourIndex(null);setPinnedAutoNeighbour(null);
+  handoffFallbackRef.current=null;
+  setFeatures([coreCandidate.feature]);setLastFetch(Date.now());
+  setQuery(to);setError('');setActive(target);
+ // Deliberately keyed by candidate identity, not every clock render.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[coreTracking.key,coreCandidate?.tripId,coreCandidate?.route,
+  coreCandidate?.observedAt,coreKey,active?.[0],active?.[1],selectedTrip,manual]);
  const terminalCountdown=terminalWaiting?firstDeparture:null;
  const displayedIndex=terminalWaiting?0:manual??(compatible?position:remoteProgress.index);
  // Visual identity can switch at the shared boundary without changing the
@@ -322,5 +378,5 @@ export function useAppController(){
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setNeighbourIndex(null);setSelectedTrip(id);setManual(null);}
- return {trackedService,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ return {trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }
