@@ -7,14 +7,16 @@ import StopBoard from './StopBoard';
 import {formatHeadway} from './lineHeadways';
 import {chooserStop} from './chooserStops';
 import {useAppController,parseOrder,vehicleId} from './useAppController';
+import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopIdentity';
 
 type Props=ReturnType<typeof useAppController>;
 export default function AppView({neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
  const sheetIndex=neighbourIndex??autoNeighbourIndex;
  const sheetStop=sheetIndex===null?null:trip.stops[sheetIndex]??null;
- const sheetKey=tripId+'|'+(sheetStop?.id??String(sheetIndex??''));
- const hasNearby=(stopNeighbours.result?.rows.length??0)>0;
+ const sheetKey=neighbourStopIdentity(tripId,sheetIndex,sheetStop);
+ const verifiedNeighbourData=neighbourResultMatchesStop(stopNeighbours.result,sheetStop)?stopNeighbours.result:null;
+ const hasNearby=(verifiedNeighbourData?.rows.length??0)>0;
  // The live-data criteria decide WHEN to open, not whether an already
  // opened automatic sheet should stay on screen. Delays and API refreshes
  // must not make it disappear during the same stop.
@@ -23,7 +25,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
   neighbourIndex===null&&sheetIndex!==null&&sheetStop!==null&&
   dismissedStop!==sheetKey&&hasNearby&&
   (autoNeighbourIndex===displayedIndex||autoNeighbourReady)&&
-  (neighbourSettings.mode==='all'||!!stopNeighbours.result?.significant);
+  (neighbourSettings.mode==='all'||!!verifiedNeighbourData?.significant);
  const autoOpen=neighbourIndex===null&&dismissedStop!==sheetKey&&
   (pinnedActive||eligibleAuto);
  const sheetOpen=neighbourSettings.enabled&&!diagnostics&&!settings&&
@@ -129,7 +131,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
   </section>}
   {active&&<StopNeighbourSheet open={sheetOpen}
    stopKey={sheetKey} name={sheetStop?.name??''} platformCode={sheetStop?.platformCode??''}
-   data={stopNeighbours.result} updatedAt={stopNeighbours.updatedAt}
+   data={verifiedNeighbourData} updatedAt={verifiedNeighbourData?stopNeighbours.updatedAt:0}
    colourOrder={neighbourSettings.colourOrder} tolerance={neighbourSettings.orderToleranceSeconds}
    hysteresis={neighbourSettings.orderHysteresisSeconds}
    loading={stopNeighbours.loading} error={stopNeighbours.error}
