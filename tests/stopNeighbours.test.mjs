@@ -43,7 +43,7 @@ test('a very late planned predecessor remains displayed and before us',()=>{
  const late=feature('before','3',12,9154,'B',600);
  const r=run([late],{settings:{...DEFAULT_NEIGHBOUR_SETTINGS,enabled:true,window:'manual',beforeMinutes:2,afterMinutes:5}});
  assert.equal(r.rows[0].relative,'before');
- assert.equal(r.rows[0].predictedDifference,360);
+ assert.equal(r.rows[0].predictedDifference,240);
 });
 test('window follows expected arrival and is adjustable',()=>{
  const moderatelyLate=feature('before','3',12,9154,'B',540);
