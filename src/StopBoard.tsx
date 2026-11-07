@@ -24,8 +24,8 @@ type Snapshot={
  trip:string;index:number;rects:Map<number,DOMRect>;
  previousName:string;previousTime:string;previousOffset:string;
 };
-function NeighbourTable({data,loading,error,ownLine}:{
- data:NeighbourResult|null;loading:boolean;error:string;ownLine:string
+function NeighbourTable({data,loading,error}:{
+ data:NeighbourResult|null;loading:boolean;error:string
 }){
  return <div className="stopNeighbourTable" aria-label="Okolní spoje na stejné nástupní hraně">
   <p className="neighbourCaption">Stejná nástupní hrana · seřazeno dle JŘ</p>
@@ -61,7 +61,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
   }else setNeighbourIndex(neighbourIndex===i?null:i);
  };
  const table=(i:number)=>neighbourSettings.enabled&&(i===index?currentOpen||selectedOpen&&neighbourIndex===index:neighbourIndex===i)&&
-  <NeighbourTable data={neighbours} loading={neighbourLoading} error={neighbourError} ownLine={activeLine}/>;
+  <NeighbourTable data={neighbours} loading={neighbourLoading} error={neighbourError}/>;
 
  const stack=useRef<HTMLDivElement|null>(null);
  const activeCard=useRef<HTMLDivElement|null>(null);
