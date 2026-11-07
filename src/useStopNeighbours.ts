@@ -49,13 +49,14 @@ export function useStopNeighbours(args:{
  const stop=index===null?null:stops[index]??null;
  const date=dateLocal(now);
  const unresolvedKey=date+'|'+ownTripId+'|'+String(index??-1)+'|'+(stop?.name??'')+'|'+(stop?.arrival||stop?.departure||'');
- const [resolved,setResolved]=useState<{key:string;id:string;error:string}>({key:'',id:'',error:''});
+ const [resolved,setResolved]=useState<{key:string;id:string;platformCode:string;error:string}>({key:'',id:'',platformCode:'',error:''});
  const selectedStopId=stop?.id||(resolved.key===unresolvedKey?resolved.id:'');
+ const selectedPlatformCode=stop?.platformCode||(resolved.key===unresolvedKey?resolved.platformCode:'');
  const effectiveStop=useMemo(()=>stop&&selectedStopId?{...stop,id:selectedStopId}:stop,[stop,selectedStopId]);
  const key=date+'|'+ownTripId+'|'+String(index??-1)+'|'+selectedStopId+'|'+(stop?.arrival||stop?.departure||'');
  const gate={
   enabled,hasToken:!!token,hasVehicle:!!ownFeature,hasTrip:!!ownTripId&&ownTripId!=='—',
-  hasPlatform:!!selectedStopId,selectedStopId,stopName:stop?.name??'',
+  hasPlatform:!!selectedStopId,selectedStopId,selectedPlatformCode,stopName:stop?.name??'',
   ownTripId,index,stopsCount:stops.length
  };
  // The public trip detail currently supplies 37 stop-time features with
@@ -79,12 +80,12 @@ export function useStopNeighbours(args:{
      counts:{...summarizeNeighbourBoardCounts(board,''),ownTripMatches:resolution.matches,
       resolvedPlatform:resolution.id?1:0},
      note:resolution.reason+(resolution.id?' · '+resolution.id:'')});
-    if(active)setResolved({key:unresolvedKey,id:resolution.id,error:resolution.reason});
+    if(active)setResolved({key:unresolvedKey,id:resolution.id,platformCode:resolution.platformCode,error:resolution.reason});
    }).catch(e=>{
     const message=e instanceof Error?e.message:String(e);
     recordNeighbourDiagnostic({...context,at:Date.now(),kind:'error',
      elapsedMs:Date.now()-started,note:'Vyhledání stop_id: '+message.slice(0,280)});
-    if(active)setResolved({key:unresolvedKey,id:'',error:message});
+    if(active)setResolved({key:unresolvedKey,id:'',platformCode:'',error:message});
    });
   return()=>{active=false;};
  },[enabled,token,unresolvedKey,stop?.name,stop?.id,stop?.arrival,stop?.departure,ownTripId]);
