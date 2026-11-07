@@ -64,3 +64,25 @@ test('non-tram and malformed trip numbers do not generate phantom orders',()=>{
  const invalid=feature('2','91','-',8266);
  assert.equal(resolveChooserMatches([invalid],parseChooserQuery('#8266'),now).length,0);
 });
+
+test('2/7 matches actual order 7 and all orders beginning with 7 including 71, 72 and 79',()=>{
+ const fleet=[
+  feature('2','91',7,8270,'on_track','7'),
+  feature('2','91',71,8266,'on_track','71'),
+  feature('2','91',72,8261,'on_track','72'),
+  feature('2','91',79,8269,'on_track','79'),
+  feature('2','91',8,8278,'on_track','8'),
+  feature('21','91',73,8290,'on_track','21_73')
+ ];
+ const matches=resolveChooserMatches(fleet,parseChooserQuery('2/7'),now);
+ assert.deepEqual(matches.map(item=>item.order),['7','71','72','79']);
+ assert.ok(matches.every(item=>item.originRoute==='91'));
+});
+test('91/7 also searches prefixes of core order across current routes',()=>{
+ const matches=resolveChooserMatches([
+  feature('2','91',71,8266,'on_track','a'),
+  feature('3','91',72,8261,'on_track','b'),
+  feature('9','91',85,9200,'on_track','c')
+ ],parseChooserQuery('91/7'),now);
+ assert.deepEqual(matches.map(x=>x.order),['71','72']);
+});
