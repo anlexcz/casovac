@@ -12,6 +12,22 @@ import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopI
 type Props=ReturnType<typeof useAppController>;
 export default function AppView({neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
+ // Mobile keyboards change the visual viewport without necessarily changing
+ // 100dvh. Keep the chooser anchored to the actual visible viewport.
+ const [chooserViewport,setChooserViewport]=useState<{height:number;top:number}|null>(null);
+ useEffect(()=>{
+  if(!editing)return;
+  const viewport=window.visualViewport;
+  if(!viewport)return;
+  const update=()=>setChooserViewport({height:viewport.height,top:viewport.offsetTop});
+  update();
+  viewport.addEventListener('resize',update);
+  viewport.addEventListener('scroll',update);
+  return()=>{
+   viewport.removeEventListener('resize',update);
+   viewport.removeEventListener('scroll',update);
+  };
+ },[editing]);
  const sheetIndex=neighbourIndex??autoNeighbourIndex;
  const sheetStop=sheetIndex===null?null:trip.stops[sheetIndex]??null;
  const sheetKey=neighbourStopIdentity(tripId,sheetIndex,sheetStop);
@@ -64,21 +80,30 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
   </header>
 
   {!active&&!editing&&<section className="panel searchPanel compactSearch"><button className="primary full" onClick={()=>setEditing(true)}>Vybrat sledovaný spoj</button></section>}
-  {editing&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setEditing(false);}}>
+  {editing&&<div className="overlay chooserOverlay"
+   style={chooserViewport?{height:chooserViewport.height,top:chooserViewport.top}:undefined}
+   onMouseDown={e=>{if(e.target===e.currentTarget)setEditing(false);}}>
    <section className="modal chooserModal" role="dialog" aria-modal="true" aria-label="Vybrat sledovaný spoj">
     <div className="row chooserHeading"><div><h2>Vybrat spoj</h2></div><button className="iconButton" onClick={()=>setEditing(false)} aria-label="Zavřít">✕</button></div>
     <input id="orderInput" autoFocus aria-label="Linka nebo linka/pořadí" placeholder="Např. 25 nebo 25/5" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&parseOrder(query))start();}}/>
-    {!token.trim()?<p className="hint">Pro vyhledávání je potřeba API klíč Golemio v nastavení.</p>:
-     !lookupLine?<p className="hint">Zadej číslo linky nebo konkrétní pořadí.</p>:
-     <div className="chooserResults">
-      <p className="chooserCaption">{!lookupReady&&!results.length?'Načítám dostupná pořadí…':lookupOrder?'Výsledek vyhledávání':'LINKA '+lookupLine+' · '+results.length+' POŘADÍ'}</p>
-      {lookup.line===lookupLine&&lookup.error&&<p className="hint" role="status">{lookup.error}</p>}
-      {lookupReady&&results.map(item=><button type="button" className="chooserRow" key={item.line+'/'+item.order} onClick={()=>start(item.line+'/'+item.order)}>
-       <span className="chooserId"><span>{item.line}/</span><strong>{item.order}</strong></span><span className="chooserVehicle">#{item.car}</span><span className="chooserStop"><svg className="chooserStopIcon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="5" y="3" width="14" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M5 10h14M8 7h2m4 0h2M8 19l-2 3m10-3 2 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg><span>{chooserStop(item.target,stopNames)}</span></span>
-      </button>)}
-      {lookupReady&&!lookup.error&&lookupOrder&&results.length===0&&<div className="chooserMissing"><strong>Pořadí {lookupOrder[0]}/{lookupOrder[1]} není momentálně dostupné.</strong><p className="hint">Můžeš opravit zadání nebo pořadí sledovat a počkat na data.</p><button className="primary full" onClick={()=>start()}>Sledovat {lookupOrder[0]}/{lookupOrder[1]} a čekat na data</button></div>}
-      {lookupReady&&!lookup.error&&!lookupOrder&&results.length===0&&<p className="hint">Aktuálně nejsou dostupná žádná pořadí. Konkrétní pořadí můžeš zadat ručně.</p>}
-     </div>}
+    <p className="chooserCaption" role="status" aria-live="polite">
+     {!token.trim()?'API KLÍČ NENÍ ZADANÝ':
+      !lookupLine?'ZADEJ LINKU NEBO LINKU/POŘADÍ':
+      !lookupReady&&!results.length?'NAČÍTÁM DOSTUPNÁ POŘADÍ…':
+      lookupOrder?'VÝSLEDEK VYHLEDÁVÁNÍ':
+      'LINKA '+lookupLine+' · '+results.length+' POŘADÍ'}
+    </p>
+    <div className="chooserResults">
+     {!token.trim()?<p className="hint">Pro vyhledávání je potřeba API klíč Golemio v nastavení.</p>:
+      !lookupLine?<p className="hint">Zadej číslo linky nebo konkrétní pořadí.</p>:<>
+       {lookup.line===lookupLine&&lookup.error&&<p className="hint" role="status">{lookup.error}</p>}
+       {lookupReady&&results.map(item=><button type="button" className="chooserRow" key={item.line+'/'+item.order} onClick={()=>start(item.line+'/'+item.order)}>
+        <span className="chooserId"><span>{item.line}/</span><strong>{item.order}</strong></span><span className="chooserVehicle">#{item.car}</span><span className="chooserStop"><svg className="chooserStopIcon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="5" y="3" width="14" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M5 10h14M8 7h2m4 0h2M8 19l-2 3m10-3 2 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg><span>{chooserStop(item.target,stopNames)}</span></span>
+       </button>)}
+       {lookupReady&&!lookup.error&&lookupOrder&&results.length===0&&<div className="chooserMissing"><strong>Pořadí {lookupOrder[0]}/{lookupOrder[1]} není momentálně dostupné.</strong><p className="hint">Můžeš opravit zadání nebo pořadí sledovat a počkat na data.</p><button className="primary full" onClick={()=>start()}>Sledovat {lookupOrder[0]}/{lookupOrder[1]} a čekat na data</button></div>}
+       {lookupReady&&!lookup.error&&!lookupOrder&&results.length===0&&<p className="hint">Aktuálně nejsou dostupná žádná pořadí. Konkrétní pořadí můžeš zadat ručně.</p>}
+      </>}
+    </div>
    </section>
   </div>}
   {error&&<div className="alert" role="status">{error}</div>}
@@ -139,6 +164,7 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
    ownLine={visualLine} ownOrder={visualOrder}
    ownVehicle={chosen?vehicleId(chosen):lastSeen?.vehicle??''}
    remainingSeconds={manualSheet?manualIdle.remaining:null}
+   countdownTotalSeconds={neighbourSettings.manualCloseSeconds}
    onInteraction={manualIdle.reset}
    onClose={closeNeighbourSheet}/>}
   {!active&&<section className="panel emptyWelcome"><h2>Připraveno ke sledování</h2><p>Vyplň linku a pořadí. Časovač potom načte živé vozidlo a jízdní řád bez stahování GTFS souborů.</p></section>}
