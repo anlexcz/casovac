@@ -5,11 +5,13 @@
  max-height:50vh;max-height:50dvh;min-height:0;
  background:#1b2027;border:1px solid #44515d;border-bottom:0;
  border-radius:17px 17px 0 0;box-shadow:0 -12px 42px #0008;
+ pointer-events:auto;
  padding-bottom:env(safe-area-inset-bottom,0px);
  transform:translateY(105%);transition:transform 240ms cubic-bezier(.22,1,.36,1);
  will-change:transform}
 .sn-sheet-open .sn-sheet{transform:translateY(0)}
-.sn-sheet-countdown{font-size:12px;color:#94a6b6;white-space:nowrap;font-variant-numeric:tabular-nums}
+.sn-sheet-countdown{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#aebfcd;white-space:nowrap;font-variant-numeric:tabular-nums}
+.sn-sheet-countdown-label{color:#8193a4;font-size:10px;letter-spacing:.2px;text-transform:uppercase}
 .sn-sheet-header{flex:0 0 auto;display:flex;align-items:center;gap:9px;position:relative;
  min-height:63px;margin:0;padding:18px 15px 9px;border-bottom:1px solid #343e48;touch-action:pan-y}
 .sn-sheet-grip{position:absolute;top:7px;left:50%;width:35px;height:3px;border-radius:10px;
@@ -21,7 +23,7 @@
  border:1px solid #566473;color:#d9e4ed;min-width:25px;min-height:23px;padding:2px 6px;
  font-size:12px;font-weight:700;white-space:nowrap}
 .sn-sheet-close{display:grid;place-items:center;width:38px;height:38px;flex:0 0 38px;
- border-radius:9px;border:0;background:transparent;color:#d7e0e8;font-size:27px;line-height:1;
+ border-radius:9px;border:1px solid #3c4854;background:#262e38;color:#e7eef5;font-size:27px;line-height:1;cursor:pointer;pointer-events:auto;touch-action:manipulation;
  padding:0}
 .sn-sheet-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
  padding:4px 11px 12px}
@@ -45,5 +47,6 @@
 }
 @media(prefers-reduced-motion:reduce){.sn-sheet,.sn-sheet-layer{transition:none}}
 
-.sn-sheet-refresh{display:inline-flex;align-items:center;justify-content:center;min-width:30px;color:#91a3b3;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sn-sheet-refresh{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:30px;color:#91a3b3;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sn-sheet-refresh-label{color:#8193a4;font-size:10px;letter-spacing:.2px;text-transform:uppercase}
 .sn-sheet-refresh.sn-refresh-error{color:#ec8a85}

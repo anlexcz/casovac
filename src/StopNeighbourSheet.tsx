@@ -47,10 +47,15 @@ export default function StopNeighbourSheet({
     <span className={'sn-sheet-refresh'+(error?' sn-refresh-error':'')}
      role="status" aria-label={error?'Aktualizace selhala':loading?'Probíhá aktualizace':'Stáří posledních živých dat'}
      title={error|| (age===null?'Čekám na první data':'Poslední dokončené či částečné načtení před '+age+' s')}>
-     {loading?'↻':error?'!':age===null?'…':age+' s'}
+     <span className="sn-sheet-refresh-label">Data</span>
+     <span>{loading?'↻':error?'!':age===null?'…':age+' s'}</span>
     </span>
-    {remainingSeconds!==null&&<span className="sn-sheet-countdown" aria-label={'Zavře se za '+Math.ceil(remainingSeconds)+' sekund'}>{Math.ceil(remainingSeconds)} s</span>}
-    <button className="sn-sheet-close" type="button" onClick={onClose} aria-label="Zavřít okolní spoje">×</button>
+    {remainingSeconds!==null&&<span className="sn-sheet-countdown" aria-label={'Zavře se za '+Math.ceil(remainingSeconds)+' sekund'}>
+     <span className="sn-sheet-countdown-label">Zavření</span>
+     <span>{Math.ceil(remainingSeconds)} s</span>
+    </span>}
+    <button className="sn-sheet-close" type="button" onPointerDown={e=>e.stopPropagation()}
+     onClick={e=>{e.stopPropagation();onClose();}} aria-label="Zavřít okolní spoje">×</button>
    </header>
    <div className="sn-sheet-body">
     <StopNeighbours key={stopKey} data={data} updatedAt={updatedAt} loading={loading} error={error}
