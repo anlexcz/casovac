@@ -1,20 +1,14 @@
-import {Fragment,useLayoutEffect,useRef,useState} from 'react';
+import {Fragment,useLayoutEffect,useRef} from 'react';
 import type {Stop} from './tripData';
 import {formatStopTime} from './tripData';
 import {chainBoard} from './chainStops';
-import StopNeighbours from './StopNeighbours';
-import type {NeighbourResult,NeighbourSettings} from './stopNeighbours';
 
 type Props={
  stops:Stop[];index:number|null;tripId:string;remaining:number|null;terminalWaiting:boolean;
- expanded:boolean;onExpand:()=>void;onChoose:(index:number)=>void;animate:boolean;
+ expanded:boolean;onExpand:()=>void;onOpenStop:(index:number)=>void;animate:boolean;
  continuation:{line:string;order:string;stops:Stop[]}|null;
  predecessor:{line:string;order:string;stops:Stop[]}|null;
  activeLine:string;visualBoundary:boolean;
- neighbours:NeighbourResult|null;neighbourLoading:boolean;neighbourError:string;
- ownOrder:string;ownVehicle:string;
- neighbourSettings:NeighbourSettings;neighbourIndex:number|null;
- setNeighbourIndex:(value:number|null)=>void;
 };
 function signed(remaining:number|null){
  if(remaining===null)return '—';
@@ -25,26 +19,7 @@ type Snapshot={
  trip:string;index:number;rects:Map<number,DOMRect>;
  previousName:string;previousTime:string;previousOffset:string;
 };
-export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onChoose,animate,continuation,predecessor,activeLine,visualBoundary,neighbours,neighbourLoading,neighbourError,ownOrder,ownVehicle,neighbourSettings,neighbourIndex,setNeighbourIndex}:Props){
- const [closedAuto,setClosedAuto]=useState('');
- const [forcedCurrent,setForcedCurrent]=useState('');
- const activeKey=tripId+'|'+index;
- const canAutoOpen=neighbourSettings.mode!=='off'&&
-  (neighbourSettings.mode==='all'?!!neighbours?.rows.length:!!neighbours?.significant);
- const currentOpen=neighbourSettings.enabled&&neighbourIndex===null&&
-  (forcedCurrent===activeKey||canAutoOpen)&&closedAuto!==activeKey;
- const selectedOpen=neighbourSettings.enabled&&neighbourIndex!==null;
- const toggleNeighbour=(i:number)=>{
-  if(i===index){
-   if(selectedOpen)setNeighbourIndex(null);
-   else if(currentOpen){setClosedAuto(activeKey);setForcedCurrent('');}
-   else {setClosedAuto('');setForcedCurrent(activeKey);setNeighbourIndex(null);}
-  }else setNeighbourIndex(neighbourIndex===i?null:i);
- };
- const table=(i:number)=>neighbourSettings.enabled&&(i===index?currentOpen||selectedOpen&&neighbourIndex===index:neighbourIndex===i)&&
-  <StopNeighbours data={neighbours} loading={neighbourLoading} error={neighbourError}
-   ownLine={activeLine} ownOrder={ownOrder} ownVehicle={ownVehicle}/>;
-
+export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onOpenStop,animate,continuation,predecessor,activeLine,visualBoundary}:Props){
  const stack=useRef<HTMLDivElement|null>(null);
  const activeCard=useRef<HTMLDivElement|null>(null);
  const previous=useRef<Snapshot|null>(null);
@@ -123,22 +98,16 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
  },[currentIndex,tripId,stops,expanded,animate,terminalWaiting]);
  if(!current)return null;
  return <div className="boardStack" ref={stack}>
-  <div ref={activeCard} className={'activeDeparture '+clock}>
+  <div ref={activeCard} className={'activeDeparture '+clock+' sb-current-interactive'}
+   role="button" tabIndex={0} aria-label={'Zobrazit okolní spoje: '+current.name}
+   onClick={()=>onOpenStop(index!)}
+   onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpenStop(index!);}}}>
    <span className="activeStopName">{current.name}</span>
    <span className="departureNumbers">
     <span className="liveOffset" aria-label="Časový rozdíl vůči jízdnímu řádu">{signed(remaining)}</span>
     <time className="scheduledTime" aria-label="Čas podle jízdního řádu">{formatStopTime(current.departure||current.arrival)}</time>
    </span>
-   {neighbourSettings.enabled&&<button type="button" className="sn-current-toggle"
-    aria-label="Okolní spoje u aktuální zastávky"
-    aria-expanded={currentOpen||selectedOpen&&neighbourIndex===index}
-    onClick={()=>toggleNeighbour(index!)}><span aria-hidden="true">↔</span>
-     {(neighbours?.rows.length??0)>0&&<span>{neighbours?.rows.length}</span>}
-     <span aria-hidden="true">{currentOpen?'⌃':'⌄'}</span>
-   </button>}
   </div>
-
-  {table(index!)}
   {shown.map(entry=>{
    const {stop,index:n,continuation:isNext,changeTo,localIndex}=entry;
    return <Fragment key={(isNext?'next-':'current-')+n}>
@@ -150,20 +119,13 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
        <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
       </div>
      ):(
-      <button type="button" className="upcomingButton" onClick={()=>onChoose(localIndex)}
-       title="Vybrat zastávku">
+      <button type="button" className="upcomingButton" onClick={()=>onOpenStop(localIndex)}
+       title={'Okolní spoje: '+stop.name}>
        <span className="upcomingName">{stop.name}</span>
        <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
       </button>
      )}
-     {neighbourSettings.enabled&&!isNext&&localIndex>=0&&localIndex-(index??0)<=neighbourSettings.lookahead&&
-      <button className="neighbourExpand neighbourExpandFuture" type="button"
-       onClick={()=>toggleNeighbour(localIndex)}
-       aria-label={'Okolní spoje: '+stop.name} aria-expanded={neighbourIndex===localIndex}>
-       <span aria-hidden="true">↔</span>
-      </button>}
     </div>
-    {neighbourIndex===localIndex&&!isNext&&table(localIndex)}
    </Fragment>;
   })}
   {allStops.length-currentIndex-1>6&&<button type="button" className="moreStops" onClick={onExpand}>
