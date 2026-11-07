@@ -13,6 +13,8 @@ const EMPTY:Snapshot={key:'',features:[],schedules:new Map(),ownStops:[],loading
 const STATIC_TTL=6*3600000;
 const details=new Map<string,{stops:Stop[];at:number}>();
 const platforms=new Map<string,{data:StaticPlatform;at:number}>();
+const liveSnapshots=new Map<string,Snapshot>();
+const LIVE_SNAPSHOT_TTL=90000;
 const dateLocal=(now:number)=>new Intl.DateTimeFormat('sv-SE',{
  timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'
 }).format(new Date(now));
@@ -91,6 +93,27 @@ export function useStopNeighbours(args:{
  const liveKeyRef=useRef('');
  liveKeyRef.current=enabled?key:'';
  const liveBusyRef=useRef('');
+ // Warm the static online platform catalogue for the complete condensed
+ // stopboard (current + six next stops). Work is low priority and sequential:
+ // it never competes with the timer for multiple network slots at once.
+ const visibleStops=args.stops;
+ const prefetchFrom=currentIndex;
+ useEffect(()=>{
+  if(!enabled||!token||!ownTripId||prefetchFrom===null||!visibleStops.length)return;
+  let cancelled=false;
+  const timer=window.setTimeout(()=>{
+   void (async()=>{
+    const end=Math.min(visibleStops.length,prefetchFrom+7);
+    for(let i=prefetchFrom;i<end&&!cancelled;i++){
+     // The selected stop is already fetched at interactive priority.
+     if(i===index)continue;
+     try{await getPlatform(ownTripId,i,date,token);}catch{/* Optional warmup only. */}
+    }
+   })();
+  },1800);
+  return()=>{cancelled=true;window.clearTimeout(timer);};
+ },[enabled,token,ownTripId,prefetchFrom,index,date,visibleStops.length]);
+
  // Static data are obtained once per selected stop and GTFS service day.
  // Crucially, the 30-second live refresh never restarts this request chain.
  useEffect(()=>{
@@ -118,10 +141,21 @@ export function useStopNeighbours(args:{
   if(liveBusyRef.current===key)return;
   liveBusyRef.current=key;
   const valid=()=>liveKeyRef.current===key;
-  setSnapshot(old=>old.key===key?{...old,loading:true,error:''}:{
-   key,features:[],schedules:new Map(),ownStops:activePlatform.ownStops,
-   loading:true,error:'',updatedAt:0
+  setSnapshot(old=>{
+   if(old.key===key)return {...old,loading:true,error:''};
+   const warmed=liveSnapshots.get(key);
+   return warmed&&Date.now()-warmed.updatedAt<LIVE_SNAPSHOT_TTL?
+    {...warmed,loading:true,error:''}:{
+     key,features:[],schedules:new Map(),ownStops:activePlatform.ownStops,
+     loading:true,error:'',updatedAt:0
+    };
   });
+  const publish=(value:Snapshot)=>{
+   if(!valid())return;
+   liveSnapshots.set(key,value);
+   if(liveSnapshots.size>20)liveSnapshots.delete(liveSnapshots.keys().next().value!);
+   setSnapshot(value);
+  };
   const run=async()=>{
    const routes=[...new Set([routeOf(ownFeature),...activePlatform.routes])].filter(Boolean).slice(0,9);
    const received:Feature[]=[];
@@ -144,7 +178,7 @@ export function useStopNeighbours(args:{
      const results=await Promise.all(slice.map(f=>getStops(selectedTripId(f),date,token).catch(()=>[])));
      if(!valid())return;
      slice.forEach((f,n)=>{if(results[n].length)schedules.set(selectedTripId(f),results[n]);});
-     setSnapshot({key,features:[...candidates],schedules:new Map(schedules),
+     publish({key,features:[...candidates],schedules:new Map(schedules),
       ownStops:activePlatform.ownStops,loading:true,error:'',updatedAt:Date.now()});
     }
    };
@@ -165,7 +199,7 @@ export function useStopNeighbours(args:{
      if(!valid())return;
     }
    }
-   if(valid())setSnapshot({key,features:candidates,schedules,
+   publish({key,features:candidates,schedules,
     ownStops:activePlatform.ownStops,loading:false,error:'',updatedAt:Date.now()});
   };
   void run().catch(e=>{
