@@ -5,7 +5,6 @@ const normalized=(name:string)=>name.normalize('NFD').replace(/[\u0300-\u036f]/g
 const at=(stops:Stop[],idx:number)=>idx>=0&&idx<stops.length?stops[idx]:null;
 const equivalent=(a:Stop|null,b:Stop|null):boolean=>{
  if(!a||!b)return false;
- if(a.id&&b.id)return a.id===b.id;
  // Public /v2/public/gtfs/trips returns stop-times with names and
  // coordinates but no stop_id. Names are useful only for the *route*
  // comparison, never to assign a platform identifier.
