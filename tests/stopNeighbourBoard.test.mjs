@@ -45,7 +45,7 @@ test('missing live delay remains unknown and not a fabricated on-time vehicle',(
 test('incoming branch is not inferred until the individual trip is independently verified',()=>{
  const board={departures:[departure('peer','7','2026-11-07T09:31:00Z')]};
  assert.equal(parseNeighbourBoard({...args,board}).significant,false);
- const peerStops=[stop('OTHER','10:29:00',1),stop('A','10:31:00',2),stop('N','10:32:00',3)];
+ const peerStops=[{...stop('OTHER','10:29:00',1),name:'Jiná příjezdová větev'},stop('A','10:31:00',2),stop('N','10:32:00',3)];
  assert.equal(parseNeighbourBoard({...args,board,candidateStops:new Map([['peer',peerStops]])}).significant,true);
 });
 test('cancelled or non-tram trips are excluded',()=>{
