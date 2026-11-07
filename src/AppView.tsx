@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 import {useNeighbourIdleTimeout} from './useNeighbourIdleTimeout';
 import StopNeighbourSheet from './StopNeighbourSheet';
 import Diagnostics from './Diagnostics';
@@ -8,7 +8,7 @@ import {chooserStop} from './chooserStops';
 import {useAppController,parseOrder,vehicleId} from './useAppController';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,results,lookupReady,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
  const sheetIndex=neighbourIndex??autoNeighbourIndex;
  const sheetStop=sheetIndex===null?null:trip.stops[sheetIndex]??null;
@@ -21,6 +21,11 @@ export default function AppView({neighbourSettings,updateNeighbourSettings,neigh
   (neighbourSettings.mode==='all'||!!stopNeighbours.result?.significant);
  const sheetOpen=neighbourSettings.enabled&&!diagnostics&&!settings&&
   (neighbourIndex!==null||autoOpen);
+ useEffect(()=>{
+  if(!autoOpen||sheetIndex===null||neighbourIndex!==null)return;
+  if(pinnedAutoNeighbour?.tripId===tripId&&pinnedAutoNeighbour.index===sheetIndex)return;
+  setPinnedAutoNeighbour({tripId,index:sheetIndex});
+ },[autoOpen,sheetIndex,neighbourIndex,tripId,pinnedAutoNeighbour,setPinnedAutoNeighbour]);
  const closeNeighbourSheet=()=>{
   setDismissedStop(sheetKey);
   setNeighbourIndex(null);
