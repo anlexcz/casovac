@@ -304,6 +304,11 @@ export function useStopNeighbours(args:{
    .map(d=>d.route?.short_name??'').filter(Boolean))].slice(0,10);
  },[readyBoard,selectedStopId]);
  const routeKey=routes.join('|');
+ const physicalReadyIds=new Set(readyBoard?.physicalStopIds?.includes(selectedStopId)?readyBoard.physicalStopIds:[selectedStopId]);
+ const allRouteCount=new Set((readyBoard?.departures??[]).filter(d=>
+  !!d.stop?.id&&physicalReadyIds.has(d.stop.id)&&[0,3,11].includes(d.route?.type??-1))
+  .map(d=>d.route?.short_name??'').filter(Boolean)).size;
+ const liveIncomplete=allRouteCount>routes.length||(live.key===key&&live.failed);
  useEffect(()=>{
   if(!enabled||!token||!readyBoard)return;
   if(!routes.length){setLive({key,features:knownFeatures,complete:true,failed:false});return;}
@@ -346,6 +351,7 @@ export function useStopNeighbours(args:{
        note:'Vehiclepositions prepared as one coordinated batch'});
       return fetched;
      }catch(e){
+      failed=true;
       recordNeighbourDiagnostic({...context,kind:'error',at:Date.now(),
        elapsedMs:Date.now()-started,note:'Vehicle enrichment: '+
         (e instanceof Error?e.message:String(e)).slice(0,300)});
@@ -429,7 +435,7 @@ export function useStopNeighbours(args:{
     displayed:result.rows.length,
     withVehicle:result.rows.filter(row=>!!row.vehicle).length,
     withOrder:result.rows.filter(row=>row.order!=='?').length},
-   note:'Panel result after exact-platform, tram, service-time and ETA filtering'
+   note:'Panel result after verified physical-platform, road-mode, service-time and ETA filtering'
   });
  // Logs only when board or enrichment changes, not every display countdown tick.
  // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -462,8 +468,8 @@ export function useStopNeighbours(args:{
   }
  }
  const activeState=boardState.key===key?boardState:null;
- return {result,gate,probeDepartureBoard,complete,
+ return {result,gate,probeDepartureBoard,complete,liveIncomplete,
   loading:!!activeState?.loading&&!readyBoard||!!readyBoard&&!complete,
-  error:activeState?.error??(live.failed?'Část živých poloh není dostupná.':''),
+  error:activeState?.error||(liveIncomplete?'Část živých poloh není dostupná.':''),
   updatedAt:activeState?.at??cached?.at??0};
 }
