@@ -18,7 +18,7 @@ export type PidDayInfo={trips:number;departures:number;routes:number;platforms:n
 export type PidManifest={
  schema:string;generatedAt:string;referenceDay:string;timezone:string;
  days:Record<string,PidDayInfo>;feed:{gtfsUrl:string;stopsUrl:string;startDate:string;endDate:string;stopsGeneratedAt:string|null};
- counts:Record<string,number>;format:Record<string,string>;
+ counts:Record<string,number>;format:Record<string,string>;checksums?:Record<string,string>;
 };
 export type PidTrip={id:string;date:string;routeId:string;serviceId:string;
  headsign:string;directionId:string;blockId:string;shapeId:string;
@@ -129,7 +129,22 @@ export class PidStaticEngine{
    if(response.status===404)throw new PidStaticError('not-found','Missing PID shard '+path);
    if(!response.ok)throw new PidStaticError('network','PID shard HTTP '+response.status);
    let value:unknown;
-   try{value=await response.json();}catch{throw new PidStaticError('invalid','Corrupted PID JSON '+path);}
+   const expected=this.lastManifest?.generatedAt===version?this.lastManifest?.checksums?.[path]:undefined;
+   try{
+    if(this.lastManifest?.checksums&&this.lastManifest.generatedAt===version&&!expected)
+     throw new PidStaticError('invalid','PID manifest does not list shard '+path);
+    if(expected){
+     const raw=await response.text();
+     if(!globalThis.crypto?.subtle)throw new PidStaticError('unsupported','Cannot verify PID release without Web Crypto');
+     const digest=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+     const actual=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+     if(actual!==expected)throw new PidStaticError('invalid','PID release mismatch at '+path);
+     value=JSON.parse(raw);
+    }else value=await response.json(); // compatibility with phase-1B outputs
+   }catch(e){
+    if(e instanceof PidStaticError)throw e;
+    throw new PidStaticError('invalid','Corrupted PID JSON '+path);
+   }
    if(!object(value))throw new PidStaticError('invalid','Unexpected PID JSON '+path);
    this.cache.set(key,{value,url});
    while(this.cache.size>CACHE_LIMIT)this.cache.delete(this.cache.keys().next().value!);
@@ -180,7 +195,8 @@ export class PidStaticEngine{
  private validateManifest(data:unknown):PidManifest{
   if(!object(data)||data.schema!=='casovac-pid-v1'||!isDay(String(data.referenceDay??''))||
      typeof data.generatedAt!=='string'||!object(data.days)||!object(data.counts)||
-     data.timezone!=='Europe/Prague'){
+     data.timezone!=='Europe/Prague'||
+     (data.checksums!==undefined&&!object(data.checksums))){
    throw new PidStaticError('invalid','Unsupported/corrupted PID manifest');
   }
   return data as unknown as PidManifest;
