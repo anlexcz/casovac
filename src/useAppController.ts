@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {selectTrip,isBeforeTrip,stateOf,terminalTrip} from './tripSelection';
 import {useTripData,countdownSeconds} from './tripData';
 import {safeStaticServiceDate} from './staticTripAdapter.ts';
@@ -29,7 +29,7 @@ import {usePlannedPeerPositions} from './usePlannedPeerPositions.ts';
 import {resolvePlannedLiveHeadways} from './plannedLiveHeadways.ts';
 import {useStopNeighbours} from './useStopNeighbours';
 import {useAutoPlatformPlan} from './useAutoPlatformPlan.ts';
-import {pickAutoPlatform,confirmedAtStop,confirmedBeyondStop} from './autoPlatformLifecycle.ts';
+import {pickAutoPlatform,confirmedAtStop,confirmedBeyondStop,platformMarkers} from './autoPlatformLifecycle.ts';
 import {DEFAULT_NEIGHBOUR_SETTINGS} from './stopNeighbours';
 import type {NeighbourSettings} from './stopNeighbours';
 export {vehicleId} from './featureUtils';
@@ -305,6 +305,9 @@ export function useAppController(){
  // dynamic telemetry decides when the driver can inspect it safely.
  const autoPlan=useAutoPlatformPlan(tripId,planDate,
   neighbourSettings.enabled&&neighbourSettings.mode!=='off'&&!!active);
+ const autoPlatformMarkers=useMemo(()=>autoPlan.ready?
+  platformMarkers(trip.stops,autoPlan.entries,autoPlan.stopMap):{},
+  [autoPlan.ready,autoPlan.entries,autoPlan.stopMap,trip.stops]);
  const evidence={
   state:remote.vehicleState,previousIndex:remote.previousIndex,nextIndex:remote.nextIndex,
   fresh:remote.status==='confirmed'&&remote.apiAge!==null&&remote.apiAge<=60&&
@@ -412,5 +415,5 @@ export function useAppController(){
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setNeighbourIndex(null);setSelectedTrip(id);setManual(null);}
- return {trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,autoTargetIndex:autoTarget?.index??null,autoTransfer:transferAuto,autoEvidence:evidence,pinnedStillActive,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,plannedHeadways,plannedLiveHeadways,peerFeatures:peerPositions.features,peerTripIds:peerPositions.tripIds,peerPositionUpdatedAt:peerPositions.updatedAt,peerPositionLoading:peerPositions.loading,planDate,now,peerPositionStatus:peerPositions.status,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ return {trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,autoTargetIndex:autoTarget?.index??null,autoPlatformMarkers,autoTransfer:transferAuto,autoEvidence:evidence,pinnedStillActive,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,plannedHeadways,plannedLiveHeadways,peerFeatures:peerPositions.features,peerTripIds:peerPositions.tripIds,peerPositionUpdatedAt:peerPositions.updatedAt,peerPositionLoading:peerPositions.loading,planDate,now,peerPositionStatus:peerPositions.status,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }
