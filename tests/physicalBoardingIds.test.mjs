@@ -8,7 +8,7 @@ const registry={
  async getStopMap(){return {TRAM:'P/1',BUS:'P/1',TROLLEY:'P/1',SIDE:'P/2'};},
  async getPlatforms(){return {
   'P/1':['group','A',50,14,'','tram','',['TRAM','BUS','TROLLEY'],''],
-  'P/2':['group','B',50,14,'','bus','','',['SIDE'],'']
+  'P/2':['group','B',50,14,'','bus','',['SIDE'],'']
  };}
 };
 const rows={TRAM:[{stopId:'TRAM',date,departureSeconds:36000,tripId:'own',routeId:'T',stopSequence:2}],
