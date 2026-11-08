@@ -108,3 +108,17 @@ test('same physical edge with different GTFS stop_id admits bus and trolley only
  assert.deepEqual(result.rows.map(x=>x.line),['140','58']);
  assert.equal(result.significant,true);
 });
+
+test('board carries preceding stop ID and time from the exact matching peer trip',()=>{
+ const board={departures:[departure('old','7','2026-11-07T09:31:00Z')]};
+ const peerStops=[
+  stop('P','10:28:00',1),
+  stop('A','10:31:00',2),
+  stop('N','10:33:00',3)
+ ];
+ const result=parseNeighbourBoard({...args,board,
+  candidateStops:new Map([['old',peerStops]])});
+ assert.equal(result.rows.length,1);
+ assert.equal(result.rows[0].previousId,'P');
+ assert.equal(result.rows[0].previousScheduledSeconds,10*3600+28*60);
+});
