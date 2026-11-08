@@ -179,6 +179,10 @@ export async function findPlannedHeadways(args:{
    }
   }
  }
+ // A terminating trip without any PROVEN foreign-line link has no usable
+ // forward corridor and must retain the prior safe unavailable behaviour.
+ if(ownIndex===ownStops.length-1&&considered===0)
+  return unavailable('Koncová zastávka bez ověřené přechodové návaznosti.');
  return {ahead:aheadTied?null:ahead,behind:behindTied?null:behind,
   considered,status:'ready',referenceStopId:actualReference,
   reason:aheadTied||behindTied?'Shodné časy dvou sousedů: strana je nejednoznačná.':
