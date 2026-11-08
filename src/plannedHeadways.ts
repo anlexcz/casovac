@@ -1,12 +1,13 @@
-/** Phase 4B: timetable-only neighbouring trips on a proven shared direction.
- * No vehiclepositions, delay or Golemio token is required to choose a planned
- * predecessor and successor. A distinct route is not assumed comparable just
- * because it visits the same platform (chain transitions are a later step).
+/** Phase 4C: timetable-only peers on the same directional corridor or
+ * at an independently proven block transition between ANY two PID routes.
+ * No LIVE vehicle, order or Golemio token is needed for planned identity.
  */
 import {pidStatic} from './pidStatic.ts';
 import type {PidStaticEngine,PidDeparture,PidTripStop} from './pidStatic.ts';
+import {findStaticBlockLinks} from './staticBlockPair.ts';
 
-type Source=Pick<PidStaticEngine,'getTripResolved'|'getTripStops'|'getDepartures'|'getRoutes'>;
+type Source=Pick<PidStaticEngine,'getTripResolved'|'getTripStops'|'getDepartures'|'getRoutes'>&
+ Partial<Pick<PidStaticEngine,'getTrip'|'getBlockTrips'>>;
 export type PlannedPeer={tripId:string;line:string;order:string;scheduledGap:number;
  departureSeconds:number;referenceStopId:string};
 export type PlannedHeadways={
@@ -38,6 +39,32 @@ const sameDirection=(own:PidTripStop[],peer:PidTripStop[],ownIndex:number,peerIn
  const ownNext=unique(own,next),peerNext=unique(peer,next);
  return ownNext===ownIndex+1&&peerNext>peerIndex&&peerNext-peerIndex<=3;
 };
+/** A shared platform alone does NOT prove that two different routes are
+ * headway neighbours. The candidate's own operating block must prove that
+ * it is entering/leaving the selected route at THIS terminal. Do not use
+ * the selected vehicle's block to authorize unrelated other vehicles.
+ * This gate is independent of route numbers (9/10, 5/6, 12/17/24 etc).
+ */
+async function verifiedCrossRouteBoundary(args:{
+ ownLine:string;ownIndex:number;ownLength:number;peerLine:string;
+ peerIndex:number;peerLength:number;peerTripId:string;date:string;
+ source:Source;
+}):Promise<boolean>{
+ const {ownLine,ownIndex,ownLength,peerLine,peerIndex,peerLength,
+  peerTripId,date,source}=args;
+ if(!ownLine||!peerLine||ownLine===peerLine||
+  !source.getTrip||!source.getBlockTrips)return false;
+ const outgoingOwn=ownIndex===0&&peerIndex===peerLength-1;
+ const incomingOwn=ownIndex===ownLength-1&&peerIndex===0;
+ if(!outgoingOwn&&!incomingOwn)return false;
+ // Only the IMMEDIATE adjacent trip in a verified same-day block counts.
+ // The transition was separately validated for exact shared edge and time.
+ const links=await findStaticBlockLinks(peerTripId,peerLine,date,
+  source as Pick<PidStaticEngine,'getTrip'|'getBlockTrips'|'getTripStops'|'getRoutes'>);
+ return outgoingOwn?links.next?.partner.line===ownLine:
+  links.previous?.partner.line===ownLine;
+}
+
 export async function findPlannedHeadways(args:{
  tripId:string;date:string;referenceStopId:string;
  nowMs?:number;maxGapSeconds?:number;source?:Source;
@@ -82,8 +109,8 @@ export async function findPlannedHeadways(args:{
  }
  const all=await source.getDepartures(actualReference,date);
  const ownIndex=unique(ownStops,actualReference);
- if(ownIndex<0||ownIndex+1>=ownStops.length)
-  return unavailable('Nejednoznačná nebo koncová referenční zastávka.');
+ if(ownIndex<0)
+  return unavailable('Nejednoznačná referenční nástupní hrana.');
  const ownSeconds=secs(ownStops[ownIndex].departure);
  if(ownSeconds===null)
   return unavailable('Není znám plánovaný odjezd vlastní tramvaje.');
@@ -92,11 +119,16 @@ export async function findPlannedHeadways(args:{
   return unavailable('Vlastní zastavení nesouhlasí s indexem PID odjezdů.');
  // Bound candidate requests to the closest timetable departures. Include
  // same-identity exclusion and never fabricate an order from trip ID.
- const candidates=all.filter(d=>d.tripId!==tripId&&d.routeId===own.routeId&&
+ const byDistance=(a:PidDeparture,b:PidDeparture)=>
+  Math.abs(a.departureSeconds-ownSeconds)-Math.abs(b.departureSeconds-ownSeconds);
+ const eligible=all.filter(d=>d.tripId!==tripId&&
   d.date===date&&d.departureSeconds!==ownSeconds&&
-  Math.abs(d.departureSeconds-ownSeconds)<=maxGapSeconds)
-  .sort((a,b)=>Math.abs(a.departureSeconds-ownSeconds)-
-    Math.abs(b.departureSeconds-ownSeconds)).slice(0,32);
+  Math.abs(d.departureSeconds-ownSeconds)<=maxGapSeconds);
+ // Reserve room for same-route candidates. A busy interchange must not
+ // exclude the regular scheduled peers because dozens of routes stop here.
+ const same=eligible.filter(d=>d.routeId===own.routeId).sort(byDistance).slice(0,32);
+ const cross=eligible.filter(d=>d.routeId!==own.routeId).sort(byDistance).slice(0,32);
+ const candidates=[...same,...cross];
  let ahead:PlannedPeer|null=null,behind:PlannedPeer|null=null,considered=0;
  let aheadTied=false,behindTied=false;
  const line=routes[own.routeId][0];
@@ -107,13 +139,24 @@ export async function findPlannedHeadways(args:{
    try{
     const trip=await source.getTripResolved(d.tripId,date);
     if(!trip||trip.id!==d.tripId||trip.date!==date||
-       trip.routeId!==own.routeId)return null;
+       trip.routeId!==d.routeId)return null;
     const stops=await source.getTripStops(d.tripId,date,trip.routeId);
     if(!stops||stops.length!==trip.stopTimes.length)return null;
     const index=unique(stops,actualReference);
     if(!validStop(stops,index,actualReference,d.departureSeconds)||
-       stops[index].sequence!==d.stopSequence||
+       stops[index].sequence!==d.stopSequence)return null;
+    const sameRoute=d.routeId===own.routeId;
+    if(sameRoute){
+     if(ownIndex>=ownStops.length-1||
        !sameDirection(ownStops,stops,ownIndex,index))return null;
+    }else{
+     const otherLine=routes[d.routeId]?.[0];
+     if(!otherLine||!await verifiedCrossRouteBoundary({
+      ownLine:line,ownIndex,ownLength:ownStops.length,
+      peerLine:otherLine,peerIndex:index,peerLength:stops.length,
+      peerTripId:d.tripId,date,source
+     }))return null;
+    }
     return d;
    }catch{return null;}
   }));
@@ -121,7 +164,8 @@ export async function findPlannedHeadways(args:{
    if(!d)continue;
    considered++;
    const diff=d.departureSeconds-ownSeconds;
-   const peer:PlannedPeer={tripId:d.tripId,line,order:'',
+   const peer:PlannedPeer={tripId:d.tripId,
+    line:routes[d.routeId]?.[0]??line,order:'',
     scheduledGap:Math.abs(diff),departureSeconds:d.departureSeconds,
     referenceStopId:actualReference};
    // Equal-gap ambiguous candidates must not be broken by arbitrary API order.
@@ -138,6 +182,6 @@ export async function findPlannedHeadways(args:{
  return {ahead:aheadTied?null:ahead,behind:behindTied?null:behind,
   considered,status:'ready',referenceStopId:actualReference,
   reason:aheadTied||behindTied?'Shodné časy dvou sousedů: strana je nejednoznačná.':
-  considered?'Plánované sousedství ověřeno z PID GTFS.':
+  considered?'Plánované sousedství ověřeno z PID GTFS, včetně doložených přechodů linek.':
    'Na ověřeném směrovém úseku není blízký plánovaný spoj.'};
 }
