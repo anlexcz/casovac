@@ -158,3 +158,34 @@ test('manifest with invalid schema must never be disguised as offline success',a
  const engine=new PidStaticEngine(base,async()=>({ok:true,status:200,json:async()=>({...manifest(),schema:'invalid'})}),store);
  await assert.rejects(engine.getManifest(),e=>e.reason==='invalid');
 });
+
+test('release SHA-256 rejects a shard from a different deployment',async()=>{
+ const pinned={...manifest(),checksums:{
+  'routes.json':createHash('sha256').update(JSON.stringify(sources['routes.json'])).digest('hex')
+ }};
+ const loader=async uri=>{
+  const key=String(uri).slice(base.length).split('?')[0];
+  if(key==='manifest.json')return {ok:true,status:200,json:async()=>pinned};
+  return {ok:true,status:200,text:async()=>JSON.stringify({L9:['9','CHANGED','0','','0','0']})};
+ };
+ const engine=new PidStaticEngine(base,loader,{
+  get:async()=>null,put:async()=>{},clear:async()=>{}
+ });
+ await assert.rejects(engine.getRoutes(),e=>e instanceof PidStaticError&&e.reason==='invalid'&&e.message.includes('mismatch'));
+});
+
+test('correct pinned SHA-256 shard loads and can be reused',async()=>{
+ const raw=JSON.stringify(sources['routes.json']);
+ const pinned={...manifest(),checksums:{
+  'routes.json':createHash('sha256').update(raw).digest('hex')
+ }};
+ const loader=async uri=>{
+  const key=String(uri).slice(base.length).split('?')[0];
+  if(key==='manifest.json')return {ok:true,status:200,json:async()=>pinned};
+  return {ok:true,status:200,text:async()=>raw};
+ };
+ const engine=new PidStaticEngine(base,loader,{
+  get:async()=>null,put:async()=>{},clear:async()=>{}
+ });
+ assert.equal((await engine.getRoutes()).L9[0],'9');
+});
