@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test PID builder with synthetic GTFS
-        run: python -m unittest discover -s tests -p 'test_pid_*.py' -v
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
       - name: Run regression tests

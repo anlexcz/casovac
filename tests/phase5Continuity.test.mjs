@@ -70,7 +70,7 @@ test('GTFS board includes a tram 30 minutes behind the schedule',async()=>{
   getRoutes:async()=>({...routes,bus:['100','','3','','','']})
  };
  const board=await staticNeighbourBoard('S',day,base,fixture);
- assert.deepEqual(board.departures.map(x=>x.trip.id),['late','near']);
+ assert.deepEqual(board.departures.map(x=>x.trip.id),['late','near','bus']);
  assert.equal(board.departures[0].scheduledSeconds,base-1800);
 });
 

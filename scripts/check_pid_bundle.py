@@ -27,6 +27,32 @@ def verify(root: Path) -> dict:
             raise ValueError(f"Missing trip locator for {date}")
         if not (folder / "blocks.json").is_file():
             raise ValueError(f"Missing block locator for {date}")
+        if "platformEncounterTrips" in info:
+            shards = info.get("platformEncounterShards", 0)
+            if shards:
+                if shards != 16:
+                    raise ValueError(f"Invalid 5B bucket count for {date}")
+                count = 0
+                for bucket in range(shards):
+                    name = folder / "platform-encounters" / f"{bucket:02d}.json"
+                    if not name.is_file():
+                        raise ValueError(f"Missing 5B encounter bucket {date}/{bucket}")
+                    encounters = json.loads(name.read_text(encoding="utf-8"))
+                    count += len(encounters)
+            else:
+                name = folder / "platform-encounters.json"
+                if not name.is_file():
+                    raise ValueError(f"Missing 5B encounter index for {date}")
+                count = len(json.loads(name.read_text(encoding="utf-8")))
+            if count != info["platformEncounterTrips"]:
+                raise ValueError(f"Invalid 5B encounter count for {date}")
+        if "platformCandidateTrips" in info:
+            candidate_file = folder / "platform-candidates.json"
+            if not candidate_file.is_file():
+                raise ValueError(f"Missing 5B candidate shard for {date}")
+            candidates = json.loads(candidate_file.read_text(encoding="utf-8"))
+            if len(candidates) != info["platformCandidateTrips"]:
+                raise ValueError(f"Invalid 5B candidate count for {date}")
         if info["available"] and not list((folder / "routes").glob("*.json")):
             raise ValueError(f"Missing route shards for {date}")
         for bucket in range(64):

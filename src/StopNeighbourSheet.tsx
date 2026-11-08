@@ -6,11 +6,11 @@ import './stopNeighbourSheet.css';
 type Props={
  open:boolean;stopKey:string;name:string;platformCode:string;data:NeighbourResult|null;updatedAt:number;
  colourOrder:NeighbourSettings['colourOrder'];tolerance:number;hysteresis:number;
- loading:boolean;error:string;ownLine:string;ownOrder:string;ownVehicle:string;
+ loading:boolean;error:string;liveIncomplete?:boolean;ownLine:string;ownOrder:string;ownVehicle:string;
  remainingSeconds:number|null;countdownTotalSeconds:number;onInteraction:()=>void;onClose:()=>void;
 };
 export default function StopNeighbourSheet({
- open,stopKey,name,platformCode,data,updatedAt,loading,error,colourOrder,tolerance,hysteresis,ownLine,ownOrder,ownVehicle,remainingSeconds,countdownTotalSeconds,onInteraction,onClose
+ open,stopKey,name,platformCode,data,updatedAt,loading,error,liveIncomplete,colourOrder,tolerance,hysteresis,ownLine,ownOrder,ownVehicle,remainingSeconds,countdownTotalSeconds,onInteraction,onClose
 }:Props){
  const touchStart=useRef<number|null>(null);
  const [ageNow,setAgeNow]=useState(Date.now());
@@ -65,7 +65,7 @@ export default function StopNeighbourSheet({
      onClick={e=>{e.stopPropagation();onClose();}} aria-label="Zavřít okolní spoje">×</button>
    </header>
    <div className="sn-sheet-body">
-    <StopNeighbours key={stopKey} data={data} updatedAt={updatedAt} loading={loading} error={error}
+    <StopNeighbours key={stopKey} data={data} updatedAt={updatedAt} loading={loading} error={error} liveIncomplete={liveIncomplete}
      colourOrder={colourOrder} tolerance={tolerance} hysteresis={hysteresis}
      ownLine={ownLine} ownOrder={ownOrder} ownVehicle={ownVehicle}/>
    </div>

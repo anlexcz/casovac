@@ -97,7 +97,16 @@ class PIDBuilderTests(unittest.TestCase):
             )
             self.assertFalse(manifest["days"]["2026-11-07"]["available"])
             self.assertEqual(manifest["days"]["2026-11-08"]["trips"], 2)
+            self.assertIn("platformEncounterTrips", manifest["days"]["2026-11-08"])
             day = root / "data/days/2026-11-08"
+            encounters = {}
+            for bucket in range(manifest["days"]["2026-11-08"]["platformEncounterShards"]):
+                encounters.update(json.loads((day / "platform-encounters" / f"{bucket:02d}.json").read_text()))
+            self.assertEqual(len(encounters), manifest["days"]["2026-11-08"]["platformEncounterTrips"])
+            candidates = json.loads((day / "platform-candidates.json").read_text())
+            self.assertEqual(len(candidates), manifest["days"]["2026-11-08"]["platformCandidateTrips"])
+            self.assertFalse(any(entry[2] == "tram-branch-candidate" for rows in encounters.values() for entry in rows))
+            self.assertFalse(any(entry[2] != "tram-branch-candidate" for rows in candidates.values() for entry in rows))
             blocks = json.loads((day / "blocks.json").read_text())
             self.assertEqual([entry[1] for entry in blocks["b9"]], ["t9", "t10"])
             bucket = departure_bucket("U1")

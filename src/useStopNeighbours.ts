@@ -42,6 +42,7 @@ async function tripStops(
   tripId,date,boardStopId,routeShortName,
   staticAllowed:!!safeStaticServiceDate(date,true,new Date()),
   fallback:async()=>{
+   if(!token)throw Error('Statický detail PID není dostupný a Golemio klíč chybí.');
    const url=new URL('https://api.golemio.cz/v2/gtfs/trips/'+encodeURIComponent(tripId));
    url.searchParams.set('date',date);
    url.searchParams.set('includeStops','true');
@@ -178,11 +179,10 @@ export function useStopNeighbours(args:{
  const cached=boardCache.get(boardId(date,selectedStopId));
  const readyBoard=boardState.key===key?boardState.board:
   cached&&Date.now()-cached.at<BOARD_TTL+30000?cached.board:null;
- // A single departureboard request contains all tram routes for this *exact*
- // GTFS platform. No more full-day GTFS trip list or per-route sequential
- // discovery before the first visible row.
+ // Static PID departures now cover all verified GTFS IDs of one physical edge.
+ // Golemio fallback remains scoped to the exact ID on source failure.
  useEffect(()=>{
-  if(!enabled||!token||!selectedStopId||!ownFeature){
+  if(!enabled||!selectedStopId||!ownTripId||ownTripId==='—'){
    const reasons=[
     !enabled?'Okolní spoje jsou vypnuté v nastavení':'',
     !token?'Není zadaný API klíč':'',
@@ -205,7 +205,7 @@ export function useStopNeighbours(args:{
    endpoint:'PID GTFS getDepartures / Golemio fallback'};
   recordNeighbourDiagnostic({
    ...context,at:started,kind:'request',
-   note:'PID GTFS first: exact stop_id '+selectedStopId+'; -45/+20 min; Golemio board only on failure'+
+   note:'PID GTFS first: verified physical platform '+selectedStopId+'; -45/+20 min; Golemio fallback only with token'+
     (old?' · cached board '+Math.round((started-old.at)/1000)+' s old':' · no local cache')
   });
   setBoardState(previous=>({
@@ -214,10 +214,11 @@ export function useStopNeighbours(args:{
    error:'',loading:true
   }));
   const ownSeconds=gtfsSeconds(stop?.arrival||stop?.departure||'');
-  const source=ownSeconds===null?
+  const fallback=()=>token?
    golemioJson<DepartureBoard>(departureBoardUrl([selectedStopId]),token,60000,'high'):
-   staticNeighbourBoard(selectedStopId,date,ownSeconds).catch(()=>
-    golemioJson<DepartureBoard>(departureBoardUrl([selectedStopId]),token,60000,'high'));
+   Promise.reject(Error('Bez statického PID GTFS nelze načíst odjezdy bez API klíče.'));
+  const source=ownSeconds===null?fallback():
+   staticNeighbourBoard(selectedStopId,date,ownSeconds).catch(fallback);
   void source.then(body=>{
    const at=Date.now();
    recordNeighbourDiagnostic({
@@ -247,7 +248,7 @@ export function useStopNeighbours(args:{
    if(valid)setBoardState(prev=>({...prev,key,loading:false,error:message}));
   });
   return()=>{valid=false;};
- },[enabled,token,key,selectedStopId,date,poll,!!ownFeature,resolved.key,resolved.error]);
+ },[enabled,token,key,selectedStopId,date,poll,resolved.key,resolved.error]);
 
  // Static departures and a bounded shared LIVE snapshot for four future stops.
  // A preview two stops ahead must open from warm data, not a new batch.
@@ -271,7 +272,7 @@ export function useStopNeighbours(args:{
     }));
     if(!alive)return;
     const lines=[...new Set(boards.flatMap(board=>(board?.departures??[])
-     .filter(d=>d.route?.type===0).map(d=>d.route?.short_name??'').filter(Boolean)))];
+     .filter(d=>[0,3,11].includes(d.route?.type??-1)).map(d=>d.route?.short_name??'').filter(Boolean)))];
     const ownLine=ownFeature?routeOf(ownFeature):'';
     // Bounded and cache-aware: avoid probing the whole fleet or every GTFS trip.
     const needed=lines.filter(line=>line!==ownLine&&
@@ -299,13 +300,20 @@ export function useStopNeighbours(args:{
  // Known live positions are used immediately; cached lines avoid re-querying.
  const routes=useMemo(()=>{
   if(!readyBoard||!selectedStopId)return [];
+  const physical=new Set(readyBoard.physicalStopIds?.includes(selectedStopId)?readyBoard.physicalStopIds:[selectedStopId]);
   return [...new Set((readyBoard.departures??[]).filter(d=>
-   d.stop?.id===selectedStopId&&d.route?.type===0)
+   !!d.stop?.id&&physical.has(d.stop.id)&&[0,3,11].includes(d.route?.type??-1))
    .map(d=>d.route?.short_name??'').filter(Boolean))].slice(0,10);
  },[readyBoard,selectedStopId]);
  const routeKey=routes.join('|');
+ const physicalReadyIds=new Set(readyBoard?.physicalStopIds?.includes(selectedStopId)?readyBoard.physicalStopIds:[selectedStopId]);
+ const allRouteCount=new Set((readyBoard?.departures??[]).filter(d=>
+  !!d.stop?.id&&physicalReadyIds.has(d.stop.id)&&[0,3,11].includes(d.route?.type??-1))
+  .map(d=>d.route?.short_name??'').filter(Boolean)).size;
+ const liveIncomplete=!token||allRouteCount>routes.length||(live.key===key&&live.failed);
  useEffect(()=>{
-  if(!enabled||!token||!readyBoard)return;
+  if(!enabled||!readyBoard)return;
+  if(!token){setLive({key,features:[],complete:true,failed:true});return;}
   if(!routes.length){setLive({key,features:knownFeatures,complete:true,failed:false});return;}
   let active=true;
   const ownLine=ownFeature?routeOf(ownFeature):'';
@@ -346,6 +354,7 @@ export function useStopNeighbours(args:{
        note:'Vehiclepositions prepared as one coordinated batch'});
       return fetched;
      }catch(e){
+      failed=true;
       recordNeighbourDiagnostic({...context,kind:'error',at:Date.now(),
        elapsedMs:Date.now()-started,note:'Vehicle enrichment: '+
         (e instanceof Error?e.message:String(e)).slice(0,300)});
@@ -367,13 +376,14 @@ export function useStopNeighbours(args:{
  // snapshot and prepare exact-trip geometry for both nearby scheduled rows
  // and delayed LIVE candidates.
  useEffect(()=>{
-  if(!enabled||!token||!readyBoard||!effectiveStop||index===null||
+  if(!enabled||!readyBoard||!effectiveStop||index===null||
    live.key!==key||!live.complete)return;
   let alive=true;
   const ownSeconds=gtfsSeconds(effectiveStop.arrival||effectiveStop.departure||'')??0;
   const liveIds=new Set(live.features.map(selectedTripId));
+  const physical=new Set(readyBoard.physicalStopIds?.includes(selectedStopId)?readyBoard.physicalStopIds:[selectedStopId]);
   const departures=[...(readyBoard.departures??[])].filter(d=>
-   d.stop?.id===selectedStopId&&d.route?.type===0&&
+   !!d.stop?.id&&physical.has(d.stop.id)&&[0,3,11].includes(d.route?.type??-1)&&
    !!d.trip?.id&&d.trip?.id!==ownTripId);
   const byDistance=(a:typeof departures[number],b:typeof departures[number])=>
    Math.abs((a.scheduledSeconds??ownSeconds)-ownSeconds)-
@@ -383,14 +393,14 @@ export function useStopNeighbours(args:{
   const observed=departures.filter(d=>liveIds.has(d.trip?.id??'')).sort(byDistance);
   const candidateRows=[...new Map([...observed,...scheduled]
    .map(d=>[d.trip!.id!,d])).values()].slice(0,40);
-  const candidates=candidateRows.map(d=>({id:d.trip!.id!,line:d.route!.short_name!}));
+  const candidates=candidateRows.map(d=>({id:d.trip!.id!,line:d.route!.short_name!,stopId:d.stop!.id!}));
   setDetail({key,stops:new Map(),complete:false});
   void (async()=>{
    const found=new Map<string,Stop[]>();
    for(let start=0;start<candidates.length;start+=4){
     const batch=candidates.slice(start,start+4);
     const values=await Promise.all(batch.map(candidate=>
-     tripStops(candidate.id,date,token,selectedStopId,candidate.line).catch(()=>[])));
+     tripStops(candidate.id,date,token,candidate.stopId,candidate.line).catch(()=>[])));
     if(!alive)return;
     batch.forEach((candidate,i)=>{if(values[i].length)found.set(candidate.id,values[i]);});
    }
@@ -428,7 +438,7 @@ export function useStopNeighbours(args:{
     displayed:result.rows.length,
     withVehicle:result.rows.filter(row=>!!row.vehicle).length,
     withOrder:result.rows.filter(row=>row.order!=='?').length},
-   note:'Panel result after exact-platform, tram, service-time and ETA filtering'
+   note:'Panel result after verified physical-platform, road-mode, service-time and ETA filtering'
   });
  // Logs only when board or enrichment changes, not every display countdown tick.
  // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -461,8 +471,8 @@ export function useStopNeighbours(args:{
   }
  }
  const activeState=boardState.key===key?boardState:null;
- return {result,gate,probeDepartureBoard,complete,
+ return {result,gate,probeDepartureBoard,complete,liveIncomplete,
   loading:!!activeState?.loading&&!readyBoard||!!readyBoard&&!complete,
-  error:activeState?.error??(live.failed?'Část živých poloh není dostupná.':''),
+  error:activeState?.error||(liveIncomplete?'Část živých poloh není dostupná.':''),
   updatedAt:activeState?.at??cached?.at??0};
 }

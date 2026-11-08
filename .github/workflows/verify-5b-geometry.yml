@@ -1,0 +1,32 @@
+name: Verify 5B against live PID GTFS
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/build_connection_index.py'
+      - 'scripts/branch_geometry.py'
+      - 'scripts/build_pid_data.py'
+      - 'scripts/audit_5b_geometry.py'
+      - '.github/workflows/verify-5b-geometry.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-pid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate synthetic branch geometry and PID builder
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Build three real PID GTFS operating days
+        run: python scripts/build_pid_data.py --out /tmp/casovac-pid-5b
+      - name: Validate bundle limits, checksums, and metadata
+        run: python scripts/check_pid_bundle.py /tmp/casovac-pid-5b
+      - name: Diagnose candidate shape matching on live PID
+        run: python scripts/debug_5b_candidates.py /tmp/casovac-pid-5b "$(TZ=Europe/Prague date +%F)"
+      - name: Report verified junctions and fail on empty geometry coverage
+        run: python scripts/audit_5b_geometry.py /tmp/casovac-pid-5b

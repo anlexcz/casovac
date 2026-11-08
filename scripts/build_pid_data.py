@@ -18,6 +18,10 @@ import tempfile
 import urllib.request
 import zipfile
 from zoneinfo import ZoneInfo
+if __package__:
+    from .build_connection_index import platform_encounters
+else:
+    from build_connection_index import platform_encounters
 
 GTFS_URL = "https://data.pid.cz/PID_GTFS.zip"
 STOPS_URL = "https://data.pid.cz/stops/json/stops.json"
@@ -244,6 +248,36 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             buckets[departure_bucket(stop_id)][stop_id] = events
         for bucket_id, contents in buckets.items():
             write_json(base / "departures" / (bucket_id + ".json"), contents)
+        # Prepared planned encounters on authoritative physical PID platforms.
+        # Tram branch candidates are NOT auto-opening decisions without shape proof.
+        encounters = platform_encounters(
+            day_routes[label], stop_times, trip_meta, routes, stop_map,
+            geometry=geometry, gtfs_stops=stops
+        )
+        # Keep runtime metadata compact and safely below the 5 MiB/browser
+        # per-item limit. Unverified candidate peers are for diagnostics only;
+        # they must not be sent to the automatic panel as a production trigger.
+        auto_encounters = {
+            tid: [entry for entry in items if entry[2] != "tram-branch-candidate"]
+            for tid, items in encounters.items()
+        }
+        auto_encounters = {tid: items for tid, items in auto_encounters.items() if items}
+        candidate_encounters = {
+            tid: [entry for entry in items if entry[2] == "tram-branch-candidate"]
+            for tid, items in encounters.items()
+        }
+        candidate_encounters = {tid: items for tid, items in candidate_encounters.items() if items}
+        # Split by trip SHA-256 bucket. A single daily platform index exceeded
+        # the browser's 5 MiB per-object budget once optional shared platforms
+        # were included. The client fetches just ONE small shard for its trip.
+        encounter_shards = defaultdict(dict)
+        for tid, records in auto_encounters.items():
+            bucket = hashlib.sha256(tid.encode()).digest()[0] % 16
+            encounter_shards[f"{bucket:02d}"][tid] = records
+        for bucket in range(16):
+            write_json(base / "platform-encounters" / f"{bucket:02d}.json",
+                       encounter_shards[f"{bucket:02d}"])
+        write_json(base / "platform-candidates.json", candidate_encounters)
         for entries in blocks.values():
             entries.sort(key=lambda e: (e[0], e[1]))
         write_json(base / "trips.json", locator)
@@ -252,6 +286,9 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "trips": len(locator), "departures": sum(map(len, departures.values())),
             "routes": len(day_routes[label]), "platforms": len(departures),
             "buckets": len(buckets), "blocks": len(blocks),
+            "platformEncounterTrips": len(auto_encounters),
+            "platformEncounterShards": 16,
+            "platformCandidateTrips": len(candidate_encounters),
             "available": bool(locator)
         }
     shape_files = defaultdict(dict)
@@ -291,7 +328,9 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "trip": "[serviceId,headsign,directionId,blockId,shapeId,shortName,[[stopId,arrival,departure,sequence,operationType],...]]",
             "departure": "[departureSeconds,tripId,routeId,stopSequence]",
             "platform": "[groupId,platformCode,lat,lon,zone,mode,wheelchair,gtfsIds,alternateName]",
-            "group": "[nodeId,name,municipality,lat,lon,physicalPlatformIds]"
+            "group": "[nodeId,name,municipality,lat,lon,physicalPlatformIds]",
+            "platformEncounter": "days/{date}/platform-encounters/{sha256(tripId)[0]%16:02d}.json; tripId -> [[stopSequence,physicalPlatformId,kind,peerTripIds],...]; shared-platform (all mode), mixed-platform, mixed-confirmed, tram-route-set, tram-branch-confirmed",
+            "platformCandidate": "tripId -> unverified tram-branch-candidate rows, separate diagnostic shard never used for auto opening"
         }
     }
     # A release manifest pins each shard's bytes. Clients reject mixed-generation

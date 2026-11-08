@@ -15,7 +15,7 @@ type BoardDeparture={
  delay?:{is_available?:boolean;seconds?:number|null};
  scheduledSeconds?:number;stopSequence?:number;
 };
-export type DepartureBoard={departures?:BoardDeparture[]};
+export type DepartureBoard={departures?:BoardDeparture[];physicalStopIds?:string[]};
 const pragueParts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Prague',
  hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 function seconds(value:string):number|null{
@@ -56,14 +56,15 @@ export function parseNeighbourBoard(args:{
  const live=new Map(features.map(f=>[selectedTripId(f),f]));
  const window=relevantWindows(settings,distance);
  const seen=new Set<string>();
+ const accepted=new Set(board.physicalStopIds?.includes(stop.id)?board.physicalStopIds:[stop.id]);
 
  for(const departure of board.departures??[]){
   const id=departure.trip?.id??'';
   if(!id||id===ownTripId||seen.has(id)||departure.trip?.is_canceled)continue;
   // Physical boarding edge is authoritative: never blend other directions,
   // other platforms or nearby stops just because their names match.
-  if(departure.stop?.id!==stop.id)continue;
-  if(departure.route?.type!==0)continue;
+  if(!departure.stop?.id||!accepted.has(departure.stop.id))continue;
+  if(![0,3,11].includes(departure.route?.type??-1))continue;
   const shortName=departure.route?.short_name;
   if(!shortName)continue;
   const plannedISO=departure.arrival_timestamp?.scheduled??departure.departure_timestamp?.scheduled;
@@ -93,13 +94,17 @@ export function parseNeighbourBoard(args:{
   }
   const car=feature?vehicleId(feature):'';
   const stops=candidateStops?.get(id);
-  const matches=stops?.map((s,i)=>s.id===stop.id?i:-1).filter(i=>i>=0)??[];
+  const matches=stops?.map((s,i)=>s.id===departure.stop?.id?i:-1).filter(i=>i>=0)??[];
   const position=matches.length===1?matches[0]:-1;
   const prev=position>=0?stops![position-1]?.id??'':'';
   const next=position>=0?stops![position+1]?.id??'':'';
   // Auto-open only where a DIFFERENT incoming branch joins our corridor
   // and continues on our next segment. A divergence does not qualify.
-  if(stops?.length){
+  if(departure.route?.type===3||departure.route?.type===11){
+   // Same verified physical edge: road vehicles can be relevant independently.
+   result.significant=true;
+   result.sharedOutgoing=true;
+  }else if(stops?.length&&departure.stop?.id===stop.id){
    const direction=joiningCorridor(ownStops,ownIndex,stops,planned,stop.id);
    if(direction.joining)result.significant=true;
    if(direction.joining||direction.reason==='same-incoming')result.sharedOutgoing=true;

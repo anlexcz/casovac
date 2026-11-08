@@ -21,13 +21,28 @@ Poslední zadané `linka/pořadí` se uchovává místně. Pokud je API klíč u
 - Manuální korekce zastávky je k dispozici na hlavní obrazovce i v diagnostice.
 - Odpočet je pouze vůči **plánovanému času odjezdu**, při překročení času pokračuje záporně. Nejde o výpočet skutečného oprávnění k odjezdu.
 
+## Okolní spoje a společné nástupní hrany – aktuální fáze 5B (PR #58)
+
+**Dokumentace modulu:** [docs/STOP_NEIGHBOURS.md](docs/STOP_NEIGHBOURS.md). Implementace v PR #58 je připravena ke kontrole; do sloučení a nasazení hlavní větve se běžící produkční funkce nemění.
+
+- **Předvýpočet:** Z každodenního PID GTFS se podle přesných fyzických nástupních hran porovnávají množiny linek na aktuální hraně proti množinám na jejich předchozích fyzických hranách. Nově se připojující linka je relevantní i při následném okamžitém rozdělení. GTFS shapes slouží jako doplňkové ověření/veto nejednoznačných případů; výlukové varianty pocházejí z konkrétního provozního dne.
+- **Dva automatické režimy:** „Jen významné zastávky“ (sbíhání a smíšené tram/bus/trolley hrany), „Všechny ověřené sdílené nástupní hrany“ (navíc běžná společná stanoviště několika tramvajových linek). Automatika může informovat i o nulovém aktuálním konfliktu. Neověřené kandidáty automaticky neotevírá.
+- **Provozní panel:** Tramvaje + autobusy + trolejbusy na stejné prokázané fyzické hraně, výchozí zobrazení ±2 minuty. Včasné otevření před příjezdem do předchozí zastávky, připnutí do potvrzeného odjezdu a předání při navazujících místech. Pořadí šipek zůstává podle pevného JŘ, barvy podle dostupného důvěryhodného LIVE; „JŘ“ označuje odhad bez živé odchylky.
+- **Ruční režim:** Kliknutí na **jakoukoliv** zastávku funguje nezávisle na automatickém příznaku, včetně obyčejných hran, nulového výsledku a případu bez LIVE. Ručně prohlížená zastávka nemůže falešně spustit automatické upozornění.
+- **Malá metadata:** `platform-encounters/00.json` až `15.json` jsou dělené hashovým bucketem `trip_id`, chráněné checksumy a čtené jen pro sledovaný trip; neověření kandidáti jsou mimo produkční index. Viditelné malé značky v seznamu zastávek nejsou varování před živým konfliktem.
+- **Ověření:** Standardní CI a samostatný workflow sestavující skutečný PID GTFS; provozní test z kabiny a kontrola mobilního zobrazení před nasazením zůstávají povinné.
+
+### Historie fáze 5A (PR #56)
+
+Následující text popisuje předchozí vydanou základní verzi; v PR #58 jsou popsané rozdíly nahrazeny funkcí 5B.
+
 ## Fáze 5 – minutový LIVE cyklus, okolní spoje a pokračující bloky (PR #56)
 
 **Živá data:** První načtení vybraného vozidla proběhne hned, pravidelný refresh `useVehicleTracking` a `usePlannedPeerPositions` každých **60 sekund**. `useCoreDutyTracking` už používá 60 sekund. Vyhledávání rozestupů neprohledává celou flotilu; dohledává konkrétní tripy z PID GTFS. `golemioClient` nadále slučuje identické současné URL požadavky, uplatňuje TTL a respektuje HTTP 429.
 
 **Pokračování sousední tramvaje:** `src/peerDutyContinuity.ts` naváže původního plánovaného souseda na bezprostřední další tripy stejného `block_id` v jednom provozním dni, pouze pokud souhlasí chronologie a přechodová zastávka. `usePlannedPeerPositions` ověřuje příchozí LIVE také podle evidenčního čísla skutečně dříve pozorovaného vozu; samotný GTFS blok neprokazuje fyzickou identitu při výměně vozu. `plannedLiveHeadways` a detail polohy používají ID aktuálního tripu, aniž by se změnila plánovaná identita souseda. Při neprokázané identitě zůstává zobrazení v režimu bez LIVE. **Rozestup po přechodu souseda na jinou linku je odhadem odvozeným z původního plánovaného odstupu a aktuálních odchylek, nikoli nově změřenou vzdáleností na společném koridoru.**
 
-**Okolní odjezdy:** `src/staticNeighbourBoard.ts` čte primárně publikovaný PID GTFS index přesného `stop_id` a provozního dne. Hledá tramvajové odjezdy **45 minut před a 20 minut po** našem plánovaném času na dané zastávce. Vyhledávací okno je širší než výsledné okno: např. tramvaj plánovaná 14:30 s potvrzeným +30 min může být relevantní v 15:00. Čerstvá živá odchylka se přiřazuje k přesnému `trip_id`; dostupná `next_stop.sequence` chrání před zobrazením již projeté nástupní hrany. Bez důvěryhodné odchylky jde pouze o plánový odhad, ne o automaticky potvrzený nulový konflikt. Pokud statický index selže, existuje výslovný Golemio departureboard fallback, nikoliv falešně kompletní výsledek.
+**Okolní odjezdy ve fázi 5A (historicky):** Původně jen tramvaje a přesné GTFS `stop_id`; rozšířený model 5B používá ověřenou fyzickou hranu společnou pro tramvaje, autobusy i trolejbusy. Široké hledání -45/+20 min kvůli velkým zpožděním zůstává zachováno, výsledné okno je ±2 min a při nedostupném LIVE se zobrazuje plánový stav bez předstírání nulové odchylky.
 
 **Přednačítání:** `useStopNeighbours` předpřipravuje statické odjezdy aktuální a čtyř následujících zastávek. Přibližně po minutě obnovuje omezený výběr živých route snapshotů sdílenou `vehicleCache` a `golemioClient`, bez samostatného požadavku na každého kandidáta na každé zastávce. Limitem je nejvýše osm dalších linek v jednom cyklu; při rozsáhlém přestupním uzlu proto není zaručeno, že byl zjištěn LIVE každého spoje. Výsledky otevřeného detailu se vyhodnocují po dokončení příslušné dávky, ne po jednotlivých příchozích trasách. Automatický list může po dokončené kontrole otevřít i nulový výsledek, který poctivě uvádí **„Žádný potvrzený konflikt“**, nikoliv absolutní jistotu bez dostupného LIVE.
 

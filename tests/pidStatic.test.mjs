@@ -6,11 +6,12 @@ import {PidStaticEngine,PidStaticError,comparePidTripStops,formatGtfsSeconds,pid
 globalThis.crypto??=webcrypto;
 const hash=name=>createHash('sha256').update(name).digest('hex').slice(0,16)+'.json';
 const bucket=id=>String(createHash('sha256').update(id).digest()[0]%64).padStart(2,'0');
+const platformBucket=id=>String(createHash('sha256').update(id).digest()[0]%16).padStart(2,'0');
 const base='/data/pid/v1/';
 const day='2026-11-08',route='L9',filename=hash(route);
 const manifest=(generatedAt='2026-11-08T09:00:00Z')=>({
  schema:'casovac-pid-v1',generatedAt,referenceDay:day,timezone:'Europe/Prague',
- days:{[day]:{available:true,trips:2,departures:3,routes:1,platforms:2,buckets:2,blocks:1}},
+ days:{[day]:{available:true,trips:2,departures:3,routes:1,platforms:2,buckets:2,blocks:1,platformEncounterTrips:1,platformEncounterShards:16}},
  counts:{uniqueTrips:2},feed:{gtfsUrl:'',stopsUrl:'',startDate:'',endDate:'',stopsGeneratedAt:null}
 });
 const sources={
@@ -29,8 +30,10 @@ const sources={
   T10:['service','Řepy','0','B9','shape','',[
    ['U2',87300,87360,1,'1']]]},
  ['days/'+day+'/blocks.json']:{B9:[[86100,'T9',route],[87300,'T10',route]]},
+ ['days/'+day+'/platform-encounters/'+platformBucket('T9')+'.json']:{T9:[[2,'4/2','tram-route-set',[]]]},
  ['shapes/'+filename]:{shape:[[50,14],[50.1,14.1]]},
 };
+for(let i=0;i<16;i++)sources['days/'+day+'/platform-encounters/'+String(i).padStart(2,'0')+'.json']??={};
 for(const id of ['U1','U2'])sources['days/'+day+'/departures/'+bucket(id)+'.json']??={};
 sources['days/'+day+'/departures/'+bucket('U1')+'.json'].U1=[[86160,'T9','L9',1]];
 sources['days/'+day+'/departures/'+bucket('U2')+'.json'].U2=[[86820,'T9','L9',2],[87360,'T10','L9',1]];
@@ -71,6 +74,9 @@ test('lookup trip, departures, blocks, stops and shape without Golemio',async()=
  assert.deepEqual(board.map(x=>x.tripId),['T9','T10']);
  const block=await engine.getBlockTrips('B9',day);
  assert.deepEqual(block.map(x=>x.id),['T9','T10']);
+ const join=await engine.getPlatformEncounters('T9',day);
+ assert.deepEqual(join,[[2,'4/2','tram-route-set',[]]]);
+ assert.deepEqual(await engine.getPlatformEncounters('missing',day),[]);
  const shape=await engine.getRouteShape('L9','shape');
  assert.equal(shape.length,2);
  const same=await Promise.all([engine.getTrip('T9',day),engine.getTrip('T10',day)]);

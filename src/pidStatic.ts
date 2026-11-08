@@ -10,11 +10,13 @@ export type PidRouteRow=[string,string,string,string,string,string];
 export type PidStopTime=[string,number,number,number,string];
 export type PidTripRow=[string,string,string,string,string,string,PidStopTime[]];
 export type PidBlockRow=[number,string,string];
+/** [stopSequence,physicalPlatformId,kind,peerTripIds] produced by 5B builder. */
+export type PidPlatformEncounter=[number,string,'shared-platform'|'mixed-platform'|'mixed-confirmed'|'tram-branch-confirmed'|'tram-route-set'|'tram-branch-candidate',string[]];
 export type PidDepartureRow=[number,string,string,number];
 export type PidPlatformRow=[string,string,number,number,string,string,string,string[],string];
 export type PidGroupRow=[string,string,string,number,number,string[]];
 export type PidShapePoint=[number,number];
-export type PidDayInfo={trips:number;departures:number;routes:number;platforms:number;buckets:number;blocks:number;available:boolean};
+export type PidDayInfo={trips:number;departures:number;routes:number;platforms:number;buckets:number;blocks:number;available:boolean;platformEncounterTrips?:number;platformEncounterShards?:number;platformCandidateTrips?:number};
 export type PidManifest={
  schema:string;generatedAt:string;referenceDay:string;timezone:string;
  days:Record<string,PidDayInfo>;feed:{gtfsUrl:string;stopsUrl:string;startDate:string;endDate:string;stopsGeneratedAt:string|null};
@@ -358,6 +360,18 @@ export class PidStaticEngine{
    'days/'+day+'/departures/'+bucket+'.json',manifest.generatedAt);
   return (all[stopId]??[]).map(([departureSeconds,tripId,routeId,stopSequence])=>
    ({stopId,date:day,departureSeconds,tripId,routeId,stopSequence}));
+ }
+ /** Daily precomputed physical-platform encounters; no Golemio calls. */
+ async getPlatformEncounters(tripId:string,day:string):Promise<PidPlatformEncounter[]>{
+  const manifest=await this.day(day);
+  if(!tripId)return [];
+  const shards=manifest.days[day]?.platformEncounterShards;
+  const path=shards===16?
+   'days/'+day+'/platform-encounters/'+
+    String((await this.hash(tripId))[0]%16).padStart(2,'0')+'.json':
+   'days/'+day+'/platform-encounters.json'; // Compatibility with phase-5B drafts.
+  const rows=await this.request<Record<string,PidPlatformEncounter[]>>(path,manifest.generatedAt);
+  return rows[tripId]??[];
  }
  async getBlockTrips(blockId:string,day:string):Promise<PidBlockTrip[]>{
   const manifest=await this.day(day);

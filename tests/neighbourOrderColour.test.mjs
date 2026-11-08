@@ -14,6 +14,9 @@ test('uncertain near simultaneous ETA and neutral for the same scheduled minute'
  assert.equal(orderColour('before',-10),'uncertain');
  assert.equal(orderColour('after',20),'uncertain');
  assert.equal(orderColour('same',-120),'neutral');
+ assert.equal(orderColour('same',0),'uncertain');
+ assert.equal(orderColour('same',15),'uncertain');
+ assert.equal(orderColour('same',null),'neutral');
  assert.equal(orderColour('before',null),'neutral');
 });
 test('colour hysteresis holds status near threshold',()=>{
