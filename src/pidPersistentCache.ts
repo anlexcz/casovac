@@ -1,6 +1,7 @@
 /** Best-effort persistent PID shard cache. No Golemio tokens or personal data.
  * IndexedDB failures (private mode, quotas, blocked storage) must never block live use.
  */
+export type PidCacheInfo={available:boolean;entries:number;bytes:number;limitBytes:number;entryLimit:number;largestBytes:number;manifestSaved:boolean};
 export interface PidStore{
  get(key:string):Promise<unknown|null>;
  put(key:string,value:unknown):Promise<void>;
@@ -93,6 +94,27 @@ export class IndexedPidStore implements PidStore{
     tx.onerror=()=>resolve();
     tx.onabort=()=>resolve();
    }catch{resolve();}
+  });
+ }
+ async inspect():Promise<PidCacheInfo>{
+  const empty:PidCacheInfo={available:false,entries:0,bytes:0,limitBytes:MAX_BYTES,
+   entryLimit:MAX_ENTRIES,largestBytes:0,manifestSaved:false};
+  const db=await this.open();if(!db)return empty;
+  return new Promise(resolve=>{
+   try{
+    const tx=db.transaction(STORE,'readonly');
+    const req=tx.objectStore(STORE).getAll();
+    req.onsuccess=()=>{
+     const entries=req.result as Entry[];
+     resolve({available:true,entries:entries.length,
+      bytes:entries.reduce((sum,item)=>sum+item.size,0),
+      limitBytes:MAX_BYTES,entryLimit:MAX_ENTRIES,
+      largestBytes:entries.reduce((max,item)=>Math.max(max,item.size),0),
+      manifestSaved:entries.some(item=>item.key==='manifest')});
+    };
+    req.onerror=()=>resolve(empty);
+    tx.onabort=()=>resolve(empty);
+   }catch{resolve(empty);}
   });
  }
  async clear():Promise<void>{
