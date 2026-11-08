@@ -2,6 +2,9 @@
  * Independent from Golemio. Never silently infers a stop, service date or block.
  * Phase 1B deliberately does not replace the live timer's legacy data flow.
  */
+import {IndexedPidStore} from './pidPersistentCache.ts';
+import type {PidStore} from './pidPersistentCache.ts';
+
 export type PidStopRow={n:string;a:number;o:number;p:string;l:string;parent:string};
 export type PidRouteRow=[string,string,string,string,string,string];
 export type PidStopTime=[string,number,number,number,string];
@@ -15,7 +18,7 @@ export type PidDayInfo={trips:number;departures:number;routes:number;platforms:n
 export type PidManifest={
  schema:string;generatedAt:string;referenceDay:string;timezone:string;
  days:Record<string,PidDayInfo>;feed:{gtfsUrl:string;stopsUrl:string;startDate:string;endDate:string;stopsGeneratedAt:string|null};
- counts:Record<string,number>;format:Record<string,string>;
+ counts:Record<string,number>;format:Record<string,string>;checksums?:Record<string,string>;
 };
 export type PidTrip={id:string;date:string;routeId:string;serviceId:string;
  headsign:string;directionId:string;blockId:string;shapeId:string;
@@ -87,14 +90,25 @@ export class PidStaticEngine{
  private manifestPromise:Promise<PidManifest>|null=null;
  private manifestAt=0;
  private version='';
+ private manifestSource:'network'|'persisted'|'none'='none';
  private readonly cache=new Map<string,Cached>();
  private readonly pending=new Map<string,Promise<unknown>>();
  private readonly base:string;
  private readonly loader:typeof fetch;
- constructor(base:string=basePath()+'data/pid/v1/',loader:typeof fetch=(input,init)=>globalThis.fetch(input,init)){
+ private readonly persistent:PidStore;
+ constructor(base:string=basePath()+'data/pid/v1/',
+  loader:typeof fetch=(input,init)=>globalThis.fetch(input,init),
+  persistent:PidStore=new IndexedPidStore()){
   this.base=base.endsWith('/')?base:base+'/';
   this.loader=loader;
+  this.persistent=persistent;
  }
+ /** Explicit freshness, never present a persisted manifest as a live fetch. */
+ getDataStatus():{source:'network'|'persisted'|'none';version:string;referenceDay:string|null}{
+  return {source:this.manifestSource,version:this.version,
+   referenceDay:this.lastManifest?.referenceDay??null};
+ }
+ private lastManifest:PidManifest|null=null;
  private async request<T>(path:string,version:string):Promise<T>{
   const key=version+'|'+path;
   const existing=this.cache.get(key);
@@ -103,16 +117,38 @@ export class PidStaticEngine{
   if(inFlight)return inFlight as Promise<T>;
   const url=this.base+path+'?v='+encodeURIComponent(version);
   const task=(async()=>{
+   const saved=await this.persistent.get(key).catch(()=>null);
+   if(object(saved)){
+    this.cache.set(key,{value:saved,url});
+    while(this.cache.size>CACHE_LIMIT)this.cache.delete(this.cache.keys().next().value!);
+    return saved as T;
+   }
    let response:Response;
    try{response=await this.loader(url,{cache:'default'});}
    catch(e){throw new PidStaticError('network','PID static request failed: '+(e instanceof Error?e.message:String(e)));}
    if(response.status===404)throw new PidStaticError('not-found','Missing PID shard '+path);
    if(!response.ok)throw new PidStaticError('network','PID shard HTTP '+response.status);
    let value:unknown;
-   try{value=await response.json();}catch{throw new PidStaticError('invalid','Corrupted PID JSON '+path);}
+   const expected=this.lastManifest?.generatedAt===version?this.lastManifest?.checksums?.[path]:undefined;
+   try{
+    if(this.lastManifest?.checksums&&this.lastManifest.generatedAt===version&&!expected)
+     throw new PidStaticError('invalid','PID manifest does not list shard '+path);
+    if(expected){
+     const raw=await response.text();
+     if(!globalThis.crypto?.subtle)throw new PidStaticError('unsupported','Cannot verify PID release without Web Crypto');
+     const digest=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+     const actual=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+     if(actual!==expected)throw new PidStaticError('invalid','PID release mismatch at '+path);
+     value=JSON.parse(raw);
+    }else value=await response.json(); // compatibility with phase-1B outputs
+   }catch(e){
+    if(e instanceof PidStaticError)throw e;
+    throw new PidStaticError('invalid','Corrupted PID JSON '+path);
+   }
    if(!object(value))throw new PidStaticError('invalid','Unexpected PID JSON '+path);
    this.cache.set(key,{value,url});
    while(this.cache.size>CACHE_LIMIT)this.cache.delete(this.cache.keys().next().value!);
+   await this.persistent.put(key,value).catch(()=>{});
    return value as T;
   })();
   this.pending.set(key,task);
@@ -122,22 +158,48 @@ export class PidStaticEngine{
   const now=Date.now();
   if(!force&&this.manifestPromise&&now-this.manifestAt<60_000)return this.manifestPromise;
   const task=(async()=>{
-   let response:Response;
-   try{response=await this.loader(this.base+'manifest.json',{cache:'no-store'});}
-   catch(e){throw new PidStaticError('network','PID manifest unreachable: '+String(e));}
-   if(!response.ok)throw new PidStaticError('network','PID manifest HTTP '+response.status);
-   const data:unknown=await response.json();
-   if(!object(data)||data.schema!=='casovac-pid-v1'||!isDay(String(data.referenceDay??''))||
-      typeof data.generatedAt!=='string'||!object(data.days)||!object(data.counts)){
-    throw new PidStaticError('invalid','Unsupported/corrupted PID manifest');
+   let fetched:PidManifest|null=null;
+   let networkError:unknown=null;
+   try{
+    const response=await this.loader(this.base+'manifest.json',{cache:'no-store'});
+    if(!response.ok)throw new PidStaticError('network','PID manifest HTTP '+response.status);
+    let value:unknown;
+    try{value=await response.json();}
+    catch{throw new PidStaticError('invalid','Invalid PID manifest JSON');}
+    fetched=this.validateManifest(value);
+   }catch(e){networkError=e;}
+   let manifest:PidManifest;
+   if(fetched){
+    manifest=fetched;
+    this.manifestSource='network';
+    await this.persistent.put('manifest',manifest).catch(()=>{});
+   }else{
+    // Do not silently rescue a corrupt/unsupported live manifest.
+    if(networkError instanceof PidStaticError&&networkError.reason==='invalid')throw networkError;
+    const stored=await this.persistent.get('manifest').catch(()=>null);
+    if(!stored&&!this.lastManifest)throw new PidStaticError('network','PID manifest unavailable, no local copy: '+String(networkError));
+    manifest=this.validateManifest(stored??this.lastManifest);
+    // An old publication is not a valid substitute for a different operating day.
+    if(!manifest.days[pidServiceDate(new Date())])
+     throw new PidStaticError('unavailable','Offline PID manifest does not cover today');
+    this.manifestSource='persisted';
    }
-   const manifest=data as unknown as PidManifest;
    if(this.version&&this.version!==manifest.generatedAt)this.cache.clear();
    this.version=manifest.generatedAt;
+   this.lastManifest=manifest;
    return manifest;
   })();
   this.manifestAt=now;this.manifestPromise=task;
-  try{return await task;}catch(e){this.manifestPromise=null;throw e;}
+  try{return await task;}catch(e){this.manifestPromise=null;this.manifestSource='none';throw e;}
+ }
+ private validateManifest(data:unknown):PidManifest{
+  if(!object(data)||data.schema!=='casovac-pid-v1'||!isDay(String(data.referenceDay??''))||
+     typeof data.generatedAt!=='string'||!object(data.days)||!object(data.counts)||
+     data.timezone!=='Europe/Prague'||
+     (data.checksums!==undefined&&!object(data.checksums))){
+   throw new PidStaticError('invalid','Unsupported/corrupted PID manifest');
+  }
+  return data as unknown as PidManifest;
  }
  private async day(day:string):Promise<PidManifest>{
   if(!isDay(day))throw new PidStaticError('invalid','Expected service date YYYY-MM-DD');
@@ -247,6 +309,13 @@ export class PidStaticEngine{
   const shapes=await this.shard<Record<string,PidShapePoint[]>>('shapes/'+filename);
   return shapes[shapeId]??null;
  }
- clearCache():void{this.cache.clear();this.pending.clear();this.manifestPromise=null;this.version='';}
+ clearCache():void{
+  this.cache.clear();this.pending.clear();this.manifestPromise=null;
+  this.version='';this.lastManifest=null;this.manifestSource='none';
+ }
+ async clearPersistentCache():Promise<void>{
+  this.clearCache();
+  await this.persistent.clear().catch(()=>{});
+ }
 }
 export const pidStatic=new PidStaticEngine();

@@ -39,9 +39,11 @@ jobs:
         if: steps.gtfs-cache.outputs.cache-hit != 'true'
         run: python scripts/build_gtfs_lookup.py
       - name: Test PID builder with synthetic GTFS
-        run: python -m unittest discover -s tests -p 'test_pid_builder.py' -v
+        run: python -m unittest discover -s tests -p 'test_pid_*.py' -v
       - name: Build static PID data for Prague service days -1/0/+1
         run: python scripts/build_pid_data.py
+      - name: Check PID shard sizes and integrity
+        run: python scripts/check_pid_bundle.py
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
       - name: Run regression tests

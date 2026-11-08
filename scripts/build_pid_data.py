@@ -294,6 +294,13 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "group": "[nodeId,name,municipality,lat,lon,physicalPlatformIds]"
         }
     }
+    # A release manifest pins each shard's bytes. Clients reject mixed-generation
+    # assets instead of silently combining old and new timetable files.
+    manifest["checksums"] = {
+        file.relative_to(root).as_posix(): hashlib.sha256(file.read_bytes()).hexdigest()
+        for file in sorted(root.rglob("*.json"))
+        if file.name != "manifest.json"
+    }
     write_json(root / "manifest.json", manifest)
     return manifest
 
