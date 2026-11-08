@@ -125,10 +125,8 @@ export function usePlannedPeerPositions(args:{
   const block=available.find(item=>item.tripId===peer.tripId)?.blockId;
   const anchor=known.current.get(side+'|'+peer.tripId)||
    (block?known.current.get('block|'+date+'|'+block):undefined);
-  const freshIds=new Set(current.filter(feature=>freshTripPosition(feature,now)).map(selectedTripId));
   const cached=available.map(candidate=>vehicleObservations.retained(date,candidate.tripId,now))
-   .filter((feature):feature is Feature=>feature!==null&&
-    !freshIds.has(selectedTripId(feature)));
+   .filter((feature):feature is Feature=>feature!==null);
   const found=selectDutyLive({originalTripId:peer.tripId,candidates:available,
    features:[...current,...cached],now,anchor});
   if(!found.feature)return {feature:null,tripId:'',source:'unavailable' as const};
