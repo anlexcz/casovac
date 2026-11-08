@@ -63,6 +63,8 @@ test('lookup trip, departures, blocks, stops and shape without Golemio',async()=
  assert.equal(trip.stopTimes[1][1],86820);
  const stops=await engine.getTripStops('T9',day);
  assert.equal(stops[1].name,'Arbesovo náměstí');
+ assert.equal(stops[0].physicalId,'1040/1');
+ assert.equal(stops[1].physicalId,'4/2');
  const physical=await engine.getPhysicalPlatform('U1');
  assert.equal(physical.id,'1040/1');
  const board=await engine.getDepartures('U2',day);

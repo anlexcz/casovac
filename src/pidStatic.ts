@@ -220,8 +220,8 @@ export class PidStaticEngine{
  async getTripStops(id:string,day:string,routeId?:string):Promise<PidTripStop[]|null>{
   const trip=await this.getTrip(id,day,routeId);
   if(!trip)return null;
-  const stops=await this.getGtfsStops();
-  return pidTripStopRows(trip,stops);
+  const [stops,mapping]=await Promise.all([this.getGtfsStops(),this.getStopMap()]);
+  return pidTripStopRows(trip,stops,mapping);
  }
  async getDepartures(stopId:string,day:string):Promise<PidDeparture[]>{
   const manifest=await this.day(day);
