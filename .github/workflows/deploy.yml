@@ -24,15 +24,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Identify UTC GTFS update day
+      - name: Identify Prague GTFS update day
         id: gtfs-day
-        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+        run: echo "day=$(TZ=Europe/Prague date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
       - name: Restore today's GTFS lookup
         id: gtfs-cache
         uses: actions/cache@v4
         with:
-          path: public/data
-          key: casovac-gtfs-v1-${{ steps.gtfs-day.outputs.day }}
+          path: |
+            public/data/stops.json
+            public/data/tram-trip-first-stops.json
+          key: casovac-gtfs-lookup-v2-${{ steps.gtfs-day.outputs.day }}
       - name: Build PID GTFS lookup when today's cache is unavailable
         if: steps.gtfs-cache.outputs.cache-hit != 'true'
         run: python scripts/build_gtfs_lookup.py
