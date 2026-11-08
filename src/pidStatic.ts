@@ -88,8 +88,11 @@ export class PidStaticEngine{
  private version='';
  private readonly cache=new Map<string,Cached>();
  private readonly pending=new Map<string,Promise<unknown>>();
- constructor(private readonly base:string=basePath()+'data/pid/v1/',private readonly loader:typeof fetch=fetch){
-  if(!base.endsWith('/'))this.base+='/';
+ private readonly base:string;
+ private readonly loader:typeof fetch;
+ constructor(base:string=basePath()+'data/pid/v1/',loader:typeof fetch=fetch){
+  this.base=base.endsWith('/')?base:base+'/';
+  this.loader=loader;
  }
  private async request<T>(path:string,version:string):Promise<T>{
   const key=version+'|'+path;
@@ -127,7 +130,7 @@ export class PidStaticEngine{
       typeof data.generatedAt!=='string'||!object(data.days)||!object(data.counts)){
     throw new PidStaticError('invalid','Unsupported/corrupted PID manifest');
    }
-   const manifest=data as PidManifest;
+   const manifest=data as unknown as PidManifest;
    if(this.version&&this.version!==manifest.generatedAt)this.cache.clear();
    this.version=manifest.generatedAt;
    return manifest;
