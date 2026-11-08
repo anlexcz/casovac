@@ -18,7 +18,7 @@ test('departure board query requests an exact platform, all lines and scheduled 
  assert.equal(url.searchParams.get('order'),'timetable');
  assert.equal(url.searchParams.get('mode'),'mixed');
 });
-test('a single board yields same-platform trams across unrelated lines without individual GTFS lookups',()=>{
+test('a single board yields mixed-mode services across unrelated lines without individual GTFS lookups',()=>{
  const bus=departure('bus','125','2026-11-07T09:29:00Z');
  bus.route.type=3;
  const rows=[
@@ -29,9 +29,9 @@ test('a single board yields same-platform trams across unrelated lines without i
   departure('own','9','2026-11-07T09:30:00Z')
  ];
  const result=parseNeighbourBoard({...args,board:{departures:rows}});
- assert.deepEqual(result.rows.map(x=>x.line),['23','22']);
- assert.deepEqual(result.rows.map(x=>x.relative),['before','after']);
- assert.deepEqual(result.rows.map(x=>x.scheduled.slice(0,5)),['10:29','10:32']);
+ assert.deepEqual(result.rows.map(x=>x.line),['125','23','22']);
+ assert.deepEqual(result.rows.map(x=>x.relative),['before','before','after']);
+ assert.deepEqual(result.rows.map(x=>x.scheduled.slice(0,5)),['10:29','10:29','10:32']);
  assert.equal(result.rows[0].order,'?');
  assert.equal(result.rows[0].vehicle,'');
 });
@@ -48,13 +48,15 @@ test('incoming branch is not inferred until the individual trip is independently
  const peerStops=[{...stop('OTHER','10:29:00',1),name:'Jiná příjezdová větev'},stop('A','10:31:00',2),stop('N','10:32:00',3)];
  assert.equal(parseNeighbourBoard({...args,board,candidateStops:new Map([['peer',peerStops]])}).significant,true);
 });
-test('cancelled or non-tram trips are excluded',()=>{
+test('cancelled trips and unsupported modes are excluded while buses are retained',()=>{
  const bus=departure('bus','125','2026-11-07T09:31:00Z');
  bus.route.type=3;
  const cancelled=departure('cancelled','7','2026-11-07T09:32:00Z');
  cancelled.trip.is_canceled=true;
- const result=parseNeighbourBoard({...args,board:{departures:[bus,cancelled]}});
- assert.equal(result.rows.length,0);
+ const train=departure('train','S1','2026-11-07T09:31:00Z');
+ train.route.type=2;
+ const result=parseNeighbourBoard({...args,board:{departures:[bus,train,cancelled]}});
+ assert.deepEqual(result.rows.map(x=>x.line),['125']);
 });
 
 test('departure at divergence remains visible manually, but never triggers either automatic mode',()=>{
@@ -91,4 +93,18 @@ test('continuation can open all-mode, but important-mode requires an incoming jo
   candidateStops:new Map([['peer',same]])});
  assert.equal(result.significant,false);
  assert.equal(result.sharedOutgoing,true);
+});
+
+test('same physical edge with different GTFS stop_id admits bus and trolley only when verified',()=>{
+ const bus=departure('bus','140','2026-11-07T09:31:00Z','BUS');
+ bus.route.type=3;
+ const trolley=departure('trolley','58','2026-11-07T09:31:30Z','TROLLEY');
+ trolley.route.type=11;
+ const unknown=departure('unknown','120','2026-11-07T09:31:00Z','OTHER');
+ unknown.route.type=3;
+ const rows=[bus,trolley,unknown];
+ assert.deepEqual(parseNeighbourBoard({...args,board:{departures:rows}}).rows,[]);
+ const result=parseNeighbourBoard({...args,board:{departures:rows,physicalStopIds:['A','BUS','TROLLEY']}});
+ assert.deepEqual(result.rows.map(x=>x.line),['140','58']);
+ assert.equal(result.significant,true);
 });
