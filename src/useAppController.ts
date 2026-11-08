@@ -154,9 +154,16 @@ export function useAppController(){
  // Planned peer selection is independent of live vehiclepositions/delays.
  // A verified current GTFS stop_id is needed to avoid comparing the wrong
  // platform or the wrong direction on a repeating loop.
+ const planTripId=tripId||(trackedService?.verified&&active&&
+  matchesCurrent(trackedService,active[0],active[1])?
+  trackedService.currentTripId??'':'');
+ const planDate=trackedService?.verified&&planTripId&&
+  trackedService.currentTripId===planTripId&&active&&
+  matchesCurrent(trackedService,active[0],active[1])?
+  safeStaticServiceDate(trackedService.serviceDate,true,new Date(now)):'';
  const plannedReferenceStopId=String(path(chosen,'properties.last_position.next_stop.id')??'');
  const plannedHeadways=usePlannedHeadways({enabled:showHeadways&&!!active,
-  tripId,date:staticDate,referenceStopId:plannedReferenceStopId});
+  tripId:planTripId,date:planDate,referenceStopId:plannedReferenceStopId,nowMs:now});
  const headwaySource=useHeadwayTimetables({
   enabled:showHeadways&&!!active,selected:chosen,features,currentStops:trip.stops,
   token:token.trim(),now,
