@@ -6,6 +6,7 @@ import {parseStops} from './tripData.ts';
 import {resolveNeighbourStops} from './neighbourStatic.ts';
 import {safeStaticServiceDate} from './staticTripAdapter.ts';
 import {golemioJson} from './golemioClient.ts';
+import {NEIGHBOUR_POLL_MS,NEIGHBOUR_RETAIN_MS,UPCOMING_STOP_COUNT} from './pollingCadence.ts';
 import type {NeighbourSettings} from './stopNeighbours.ts';
 import {departureBoardUrl,parseNeighbourBoard} from './stopNeighbourBoard.ts';
 import {staticNeighbourBoard} from './staticNeighbourBoard.ts';
@@ -22,8 +23,12 @@ const tripCache=new Map<string,Stop[]>();
 const platformCache=new Map<string,{id:string;platformCode:string;at:number}>();
 const vehicleCache=new Map<string,{features:Feature[];at:number}>();
 const PLATFORM_TTL=15*60000;
-const VEHICLE_TTL=60000;
-const BOARD_TTL=60000;
+// Keep the last successful snapshot across three 60-second poll attempts.
+// Freshness for *new queries* remains 60 s; retention is NOT LIVE validity.
+const VEHICLE_TTL=NEIGHBOUR_POLL_MS;
+const VEHICLE_RETAIN_MS=NEIGHBOUR_RETAIN_MS;
+const BOARD_TTL=NEIGHBOUR_POLL_MS;
+const BOARD_RETAIN_MS=NEIGHBOUR_RETAIN_MS;
 const gtfsSeconds=(time:string)=>{const m=/^(\d{1,3}):(\d{2})(?::(\d{2}))?$/.exec(time);
  return m?Number(m[1])*3600+Number(m[2])*60+Number(m[3]??0):null;};
 const dateLocal=(now:number)=>new Intl.DateTimeFormat('sv-SE',{
@@ -127,13 +132,13 @@ export function useStopNeighbours(args:{
   return()=>{active=false;};
  },[enabled,token,unresolvedKey,stop?.name,stop?.id,stop?.arrival,stop?.departure,ownTripId,!!rememberedPlatform]);
  // The public GTFS trip contains names but often no platform IDs. A
- // short, sequential, low-priority warmup resolves only the next FOUR stop
+ // short, sequential, low-priority warmup resolves only the next THREE stop
  // occurrences before the tram reaches them. No speculative full-day scan.
  useEffect(()=>{
   if(!enabled||!token||!ownFeature||!ownTripId||ownTripId==='—'||
    currentIndex===null||!stops.length)return;
   let active=true;
-  const upcoming=stops.slice(currentIndex+1,currentIndex+5)
+  const upcoming=stops.slice(currentIndex+1,currentIndex+1+UPCOMING_STOP_COUNT)
    .map((candidate,offset)=>({candidate,index:currentIndex+1+offset}))
    .filter(({candidate})=>!!candidate.name&&!candidate.id);
   const timer=window.setTimeout(()=>{
@@ -172,13 +177,21 @@ export function useStopNeighbours(args:{
   },1500);
   return()=>{active=false;window.clearTimeout(timer);};
  },[enabled,token,ownTripId,date,currentIndex,stops,!!ownFeature]);
- const poll=Math.floor(now/60000);
+ // A stop advance starts a new 60-second refresh cycle. A further advance
+ // within that minute restarts it; do not align requests to wall-clock minutes.
+ const [refreshCycle,setRefreshCycle]=useState(0);
+ useEffect(()=>{
+  if(!enabled||currentIndex===null||!ownTripId||ownTripId==='—')return;
+  setRefreshCycle(v=>v+1);
+  const timer=window.setInterval(()=>setRefreshCycle(v=>v+1),NEIGHBOUR_POLL_MS);
+  return()=>window.clearInterval(timer);
+ },[enabled,currentIndex,ownTripId,date]);
  const [boardState,setBoardState]=useState<BoardState>(EMPTY);
  const [live,setLive]=useState<FeatureState>({key:'',features:[],complete:false,failed:false});
  const [detail,setDetail]=useState<DetailState>({key:'',stops:new Map(),complete:false});
  const cached=boardCache.get(boardId(date,selectedStopId));
- const readyBoard=boardState.key===key?boardState.board:
-  cached&&Date.now()-cached.at<BOARD_TTL+30000?cached.board:null;
+ const readyBoard=boardState.key===key&&boardState.board?boardState.board:
+  cached&&Date.now()-cached.at<BOARD_RETAIN_MS?cached.board:null;
  // Static PID departures now cover all verified GTFS IDs of one physical edge.
  // Golemio fallback remains scoped to the exact ID on source failure.
  useEffect(()=>{
@@ -248,20 +261,20 @@ export function useStopNeighbours(args:{
    if(valid)setBoardState(prev=>({...prev,key,loading:false,error:message}));
   });
   return()=>{valid=false;};
- },[enabled,token,key,selectedStopId,date,poll,resolved.key,resolved.error]);
+ },[enabled,token,key,selectedStopId,date,refreshCycle,resolved.key,resolved.error]);
 
  // Static departures and a bounded shared LIVE snapshot for four future stops.
  // A preview two stops ahead must open from warm data, not a new batch.
  useEffect(()=>{
   if(!enabled||!token||currentIndex===null||!stops.length)return;
   let alive=true;
-  const upcoming=stops.slice(currentIndex,currentIndex+5).filter(s=>!!s.id);
+  const upcoming=stops.slice(currentIndex,currentIndex+1+UPCOMING_STOP_COUNT).filter(s=>!!s.id);
   const timer=window.setTimeout(()=>{
    void (async()=>{
     const boards=await Promise.all(upcoming.map(async item=>{
      const cacheKey=boardId(date,item.id);
      const cachedBoard=boardCache.get(cacheKey);
-     if(cachedBoard)return cachedBoard.board;
+     if(cachedBoard&&Date.now()-cachedBoard.at<BOARD_TTL)return cachedBoard.board;
      const secs=gtfsSeconds(item.arrival||item.departure||'');
      if(secs===null)return null;
      try{
@@ -293,7 +306,7 @@ export function useStopNeighbours(args:{
   },350);
   return()=>{alive=false;window.clearTimeout(timer);};
  // A fresh minute updates the bounded LIVE subset; static boards stay cached.
- },[enabled,token,ownTripId,date,currentIndex,stops,poll,ownFeature?routeOf(ownFeature):'']);
+ },[enabled,token,ownTripId,date,currentIndex,stops,refreshCycle,ownFeature?routeOf(ownFeature):'']);
 
  // Build ONE enrichment snapshot per platform/refresh rather than
  // progressively re-rendering after every route's individual API response.
@@ -322,14 +335,18 @@ export function useStopNeighbours(args:{
   for(const line of routes){
    if(line===ownLine)continue;
    const cache=vehicleCache.get(line);
-   if(cache&&Date.now()-cache.at<VEHICLE_TTL){
+   if(cache&&Date.now()-cache.at<VEHICLE_RETAIN_MS){
     for(const feature of cache.features){
      const id=selectedTripId(feature);
      if(id&&id!=='—')initial.set(id,feature);
     }
-   }else toFetch.push(line);
+   }
+   if(!cache||Date.now()-cache.at>=VEHICLE_TTL)toFetch.push(line);
   }
-  setLive({key,features:[...initial.values()],complete:!toFetch.length,failed:false});
+  // Preserve a completed snapshot while a replacement is pending; old
+  // observations are individually rejected as LIVE by origin_timestamp.
+  setLive(old=>({key,features:[...initial.values()],
+   complete:!toFetch.length||(old.key===key&&old.complete),failed:false}));
   if(!toFetch.length)return;
   // Requests are bounded to three concurrent routes and published as a
   // single complete snapshot. Late individual responses only warm the
@@ -348,11 +365,16 @@ export function useStopNeighbours(args:{
       url.searchParams.set('limit','1000');
       const response=await golemioJson<unknown>(url.toString(),token,60000,'low');
       const fetched=collectFeatures(response);
-      vehicleCache.set(line,{features:fetched,at:Date.now()});
+      // HTTP 200 with no matching vehicles does not prove previously seen
+      // vehicles ceased to exist; keep their last observation for 3 cycles.
+      const previous=vehicleCache.get(line);
+      const remembered=previous&&Date.now()-previous.at<VEHICLE_RETAIN_MS?
+       previous.features.filter(f=>!fetched.some(n=>selectedTripId(n)===selectedTripId(f))):[];
+      vehicleCache.set(line,{features:[...fetched,...remembered],at:Date.now()});
       recordNeighbourDiagnostic({...context,kind:'vehicle',at:Date.now(),
        elapsedMs:Date.now()-started,counts:{positions:fetched.length},
        note:'Vehiclepositions prepared as one coordinated batch'});
-      return fetched;
+      return vehicleCache.get(line)?.features??fetched;
      }catch(e){
       failed=true;
       recordNeighbourDiagnostic({...context,kind:'error',at:Date.now(),
@@ -370,7 +392,7 @@ export function useStopNeighbours(args:{
   })();
   return()=>{active=false;};
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[enabled,token,key,routeKey,Math.floor(now/60000)]);
+ },[enabled,token,key,routeKey,refreshCycle]);
 
  // Do not publish partial route enrichment: calculate from one completed
  // snapshot and prepare exact-trip geometry for both nearby scheduled rows
@@ -394,7 +416,9 @@ export function useStopNeighbours(args:{
   const candidateRows=[...new Map([...observed,...scheduled]
    .map(d=>[d.trip!.id!,d])).values()].slice(0,40);
   const candidates=candidateRows.map(d=>({id:d.trip!.id!,line:d.route!.short_name!,stopId:d.stop!.id!}));
-  setDetail({key,stops:new Map(),complete:false});
+  // Do not blank an already rendered board for routine enrichment updates.
+  setDetail(old=>({key,stops:old.key===key?old.stops:new Map(),
+   complete:old.key===key&&old.complete}));
   void (async()=>{
    const found=new Map<string,Stop[]>();
    for(let start=0;start<candidates.length;start+=4){
@@ -404,7 +428,8 @@ export function useStopNeighbours(args:{
     if(!alive)return;
     batch.forEach((candidate,i)=>{if(values[i].length)found.set(candidate.id,values[i]);});
    }
-   if(alive)setDetail({key,stops:found,complete:true});
+   if(alive)setDetail(old=>({key,stops:new Map([
+    ...(old.key===key?[...old.stops]:[]),...found]),complete:true}));
   })();
   return()=>{alive=false;};
  // eslint-disable-next-line react-hooks/exhaustive-deps

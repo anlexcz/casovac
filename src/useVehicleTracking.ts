@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import type {Dispatch,MutableRefObject,SetStateAction} from 'react';
 import {golemioJson} from './golemioClient';
+import {OWN_VEHICLE_POLL_MS,OWN_VEHICLE_RETAIN_MS} from './pollingCadence.ts';
 import {filterCoreFeatures} from './coreDutySelection.ts';
 import type {TrackedService} from './trackedService.ts';
 import {selectTrip,stateOf} from './tripSelection';
@@ -13,6 +14,8 @@ import type {GpsFix} from './position';
 import type {useRecorder} from './recorder';
 
 const API='https://api.golemio.cz/v2/vehiclepositions';
+// Own vehicle is the highest-priority stream. Missed refreshes retain the
+// last confirmed response; stale measurements must not be claimed as fresh.
 export type HandoffFallback={target:string;vehicle:string;feature:Feature;until:number};
 type Props={
  active:[string,string]|null;
@@ -32,6 +35,7 @@ export function useVehicleTracking({active,trackedService,token,recorder,gps,set
  const [terminalCandidates,setTerminalCandidates]=useState<unknown[]>([]);
  const [loading,setLoading]=useState(false);
  const previousScanRef=useRef(0);
+ const lastUsefulRef=useRef<{key:string;features:Feature[];at:number}|null>(null);
  const requestRef=useRef(0);
  const gpsRef=useRef<GpsFix|null>(null);
  gpsRef.current=gps;
@@ -53,6 +57,20 @@ export function useVehicleTracking({active,trackedService,token,recorder,gps,set
     if(alive&&generation===requestRef.current){
      const standard=(data as {features:Feature[]}).features;
      let fetched=filterCoreFeatures(standard,trackedService);
+     // A successful HTTP response may omit this particular service for one
+     // cycle. Preserve the previously identified vehicle for three attempts,
+     // without rewriting its original position timestamp.
+     const serviceKey=active![0]+'/'+active![1];
+     const observed=fetched.filter(f=>
+      String(path(f,'properties.trip.gtfs.route_short_name')??'')===active![0]&&
+      normalize(orderOf(f))===normalize(active![1]));
+     if(observed.length){
+      lastUsefulRef.current={key:serviceKey,features:observed,at:Date.now()};
+     }else{
+      const saved=lastUsefulRef.current;
+      if(saved?.key===serviceKey&&Date.now()-saved.at<OWN_VEHICLE_RETAIN_MS)
+       fetched=[...fetched,...saved.features];
+     }
      // Keep the prepared successor visible while Golemio still reports the old line.
      // Never treat this cached object as a fresh observation.
      const fallback=handoffFallbackRef.current;
@@ -121,7 +139,10 @@ export function useVehicleTracking({active,trackedService,token,recorder,gps,set
      recordApiRef.current({line:active![0],order:active![1],responseStatus:200,
       requestStartedAt,responseAt:Date.now(),matchingCount:matching.length,vehicle:selected,gps:gpsRef.current,
       source:selected?(selected===handoffFallbackRef.current?.feature?'handoff_pending':'unique_order'):'ambiguous_or_missing',candidateVehicles:candidates,queryMode});
-     if(selected&&selected!==handoffFallbackRef.current?.feature){
+     // A retained snapshot must not update lastSeenAt as though Golemio
+     // had just measured the tram again. Only a newly received feature can.
+     if(selected&&(standard.includes(selected)||queryMode==='knownVehicle')&&
+      selected!==handoffFallbackRef.current?.feature){
       const loc=selected.geometry?.coordinates;
       const coords=Array.isArray(loc)&&loc.length>=2?loc:null;
       const p=path(selected,'properties.last_position') as Obj|undefined;
@@ -140,7 +161,7 @@ export function useVehicleTracking({active,trackedService,token,recorder,gps,set
    }catch(e){if(alive&&!controller.signal.aborted){const message=e instanceof Error?e.message:String(e);setError(message);recordErrorRef.current(active![0],active![1],'fetch_error',message);}}
    finally{busy=false;if(alive)setLoading(false);}
   }
-  void refresh();const timer=setInterval(()=>void refresh(),60000);
+  void refresh();const timer=setInterval(()=>void refresh(),OWN_VEHICLE_POLL_MS);
   return()=>{alive=false;clearInterval(timer);controller.abort();};
  },[active?.[0],active?.[1],token,trackedService?.verified,trackedService?.originRoute,trackedService?.sequenceId]);
  return {features,setFeatures,lastFetch,setLastFetch,queryMode,relatedVehicle,terminalCandidates,loading};

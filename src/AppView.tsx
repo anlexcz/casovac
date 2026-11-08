@@ -7,16 +7,17 @@ import {formatHeadway} from './lineHeadways';
 import HeadwayDetails from './HeadwayDetails.tsx';
 import {chooserStop} from './chooserStops';
 import {useAppController,vehicleId} from './useAppController';
+import {OWN_VEHICLE_POLL_MS,OWN_VEHICLE_RETAIN_MS} from './pollingCadence.ts';
 import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopIdentity';
 import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit.ts';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,autoTargetIndex,autoPlatformMarkers,autoTransfer,pinnedStillActive,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,plannedHeadways,plannedLiveHeadways,peerFeatures,peerTripIds,peerPositionLoading,planDate,now,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,autoTargetIndex,autoPlatformMarkers,autoTransfer,pinnedStillActive,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,submitLookup,resetLookup,lookupConfirmed,plannedHeadways,plannedLiveHeadways,peerFeatures,peerTripIds,peerPositionLoading,planDate,now,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
  const refreshAge=lastFetch===null?null:Math.max(0,now-lastFetch);
- const refreshPercent=refreshAge===null?4:Math.max(4,Math.min(100,refreshAge/60000*100));
- const refreshState=error||refreshAge!==null&&refreshAge>100000?'error':
-  loading||peerPositionLoading?'loading':refreshAge!==null&&refreshAge>75000?'stale':'ok';
+ const refreshPercent=refreshAge===null?4:Math.max(4,Math.min(100,refreshAge/OWN_VEHICLE_POLL_MS*100));
+ const refreshState=error||refreshAge!==null&&refreshAge>OWN_VEHICLE_RETAIN_MS?'error':
+  loading||peerPositionLoading?'loading':refreshAge!==null&&refreshAge>OWN_VEHICLE_POLL_MS*2?'stale':'ok';
  const plannedReady=plannedHeadways.data.status==='ready';
  const front=plannedReady?plannedHeadways.data.ahead:null;
  const rear=plannedReady?plannedHeadways.data.behind:null;
@@ -80,7 +81,7 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
   <header className="topbar">
    <div><h1>ČASOVAČ<span className="dot">.</span></h1></div>
    <div className="headActions">
-    <button className="headButton" type="button" onClick={()=>{setQuery(active?.[0]??'');setEditing(true);setError('');}} aria-label="Vybrat sledovaný spoj" title="Vybrat sledovaný spoj"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="m15 5 4 4M4 20l4.8-1 10-10a2.8 2.8 0 0 0-4-4l-10 10L4 20Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+    <button className="headButton" type="button" onClick={()=>{resetLookup();setQuery(active?.[0]??'');setEditing(true);setError('');}} aria-label="Vybrat sledovaný spoj" title="Vybrat sledovaný spoj"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="m15 5 4 4M4 20l4.8-1 10-10a2.8 2.8 0 0 0-4-4l-10 10L4 20Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
     <button className={'headButton '+(gpsWanted&&!gpsError&&gpsAge!==null&&gpsAge<=20?'gpsActive':'')} onClick={toggleGPS} aria-pressed={gpsWanted} aria-label={gpsWanted?'Vypnout GPS':'Zapnout GPS'} title={gpsError||pos.status}>⌖ <span>GPS</span></button>
     <a className="headButton rawDebugLink" href={import.meta.env.BASE_URL+'rawdebug/'} title="Syrová online data Golemia" aria-label="Otevřít RAWDEBUG">RAW</a>
     <button className="headButton" onClick={()=>setSettings(true)} aria-label="Nastavení">⚙</button>
@@ -92,15 +93,21 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
    </div>}
   </header>
 
-  {!active&&!editing&&<section className="panel searchPanel compactSearch"><button className="primary full" onClick={()=>setEditing(true)}>Vybrat sledovaný spoj</button></section>}
+  {!active&&!editing&&<section className="panel searchPanel compactSearch"><button className="primary full" onClick={()=>{resetLookup();setEditing(true);}}>Vybrat sledovaný spoj</button></section>}
   {editing&&<div className="overlay chooserOverlay"
    style={chooserViewport?{height:chooserViewport.height,top:chooserViewport.top}:undefined}
    onMouseDown={e=>{if(e.target===e.currentTarget)setEditing(false);}}>
    <section className="modal chooserModal" role="dialog" aria-modal="true" aria-label="Vybrat sledovaný spoj">
     <div className="row chooserHeading"><div><h2>Vybrat spoj</h2></div><button className="iconButton" onClick={()=>setEditing(false)} aria-label="Zavřít">✕</button></div>
-    <input id="orderInput" autoFocus aria-label="Linka, pořadí nebo evidenční číslo" placeholder="Např. 7, 91/71 nebo #8266" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&lookupReady&&!searchingAcrossRoutes&&results.length===1&&!results[0].ambiguous)start(results[0].line+'/'+results[0].order);}}/>
+    <input id="orderInput" autoFocus aria-label="Linka, pořadí nebo evidenční číslo" placeholder="Např. 7, 91/71 nebo #8266" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){
+      if(lookupConfirmed&&lookupReady&&!searchingAcrossRoutes&&results.length===1&&!results[0].ambiguous)start(results[0].line+'/'+results[0].order);
+      else submitLookup();
+     }}}/>
+    <button className="quiet" type="button" disabled={!token.trim()||!query.trim()}
+     onClick={submitLookup}>Vyhledat</button>
     <p className="chooserCaption" role="status" aria-live="polite">
      {!token.trim()?'API KLÍČ NENÍ ZADANÝ':
+      !lookupConfirmed?'POTVRĎ ENTER NEBO TLAČÍTKEM VYHLEDAT':
       queryKind==='invalid'?'ZADEJ LINKU, POŘADÍ NEBO # VOZU':
       !lookupReady&&!results.length?'NAČÍTÁM DOSTUPNÁ POŘADÍ…':
       queryKind==='vehicle'?'VOZIDLO #'+queryVehicle+' · '+results.length+' VÝSLEDKŮ':
@@ -109,6 +116,7 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
     </p>
     <div className="chooserResults">
      {!token.trim()?<p className="hint">Pro vyhledávání je potřeba API klíč Golemio v nastavení.</p>:
+      !lookupConfirmed?<p className="hint">Vyhledávání se spustí až po potvrzení, během psaní neposílá LIVE dotazy.</p>:
       queryKind==='invalid'?<p className="hint">Zadej linku, aktuální či kmenové pořadí nebo #evidenční číslo.</p>:<>
        {searchingAcrossRoutes&&<p className="hint" role="status">Dohledávám také kmenová pořadí na ostatních linkách…</p>}
        {lookup.error&&<p className="hint" role="status">{lookup.error}</p>}
