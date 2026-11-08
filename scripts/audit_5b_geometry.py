@@ -41,15 +41,19 @@ def audit(root: Path) -> dict:
                     locations[name] += 1
         counts[day] = dict(sorted(kinds.items()))
         highlights[day] = locations.most_common(12)
-        if manifest["days"][day]["available"] and (
-            kinds["mixed-platform"] == 0 or kinds["tram-branch-confirmed"] == 0
-        ):
-            raise ValueError("No verified mixed platforms or tram junctions for " + day)
-    return {"counts": counts, "mostFrequentTramJunctionStops": highlights}
+    report = {"counts": counts, "mostFrequentTramJunctionStops": highlights}
+    print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
+    missing = [day for day, values in counts.items()
+               if manifest["days"][day]["available"] and
+               (values.get("mixed-platform", 0) == 0 or
+                values.get("tram-branch-confirmed", 0) == 0)]
+    if missing:
+        raise ValueError("Missing verified geometry for " + ", ".join(missing))
+    return report
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path, nargs="?", default=Path("public/data/pid/v1"))
     args = parser.parse_args()
-    print(json.dumps(audit(args.root), ensure_ascii=False, indent=2))
+    audit(args.root)
