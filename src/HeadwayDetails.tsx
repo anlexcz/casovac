@@ -9,12 +9,18 @@ import {plannedPeerStopName,livePeerStopName} from './headwayPeerLocation.ts';
 import {routeOf,selectedTripId,vehicleId} from './featureUtils.ts';
 import type {Feature} from './featureUtils.ts';
 import {freshTripPosition} from './plannedPeerPosition.ts';
+import {observationTimestamp} from './remoteTracking.ts';
+import {displayDutyPhase} from './trackedDuty.ts';
+import type {DutyPhase} from './trackedDuty.ts';
+import {stableHeadway} from './stableHeadway.ts';
+import type {HeadwaySnapshot} from './stableHeadway.ts';
 
 type Side='ahead'|'behind';
 type Props={
  planned:PlannedHeadways;loading:boolean;live:PlannedLiveHeadways;
  features:Feature[];selected:Feature|null;date:string;now:number;
  tripId:string;peerTripIds:{ahead:string;behind:string};
+ phases?:Record<Side,DutyPhase>;peerStatus?:Record<Side,string>;
 };
 function StateIcon({verified}:{verified:boolean}){
  return verified?
@@ -52,7 +58,9 @@ const matchLive=(peer:PlannedPeer,observedId:string,features:Feature[],now:numbe
   (observedId!==peer.tripId||routeOf(f)===peer.line)&&freshTripPosition(f,now));
  return matching.length===1?matching[0]:null;
 };
-export default function HeadwayDetails({planned,loading,live,features,selected,date,now,tripId,peerTripIds}:Props){
+export default function HeadwayDetails({planned,loading,live,features,selected,date,now,tripId,peerTripIds,
+ phases={ahead:'unknown',behind:'unknown'},peerStatus={ahead:'none',behind:'none'}}:Props){
+ const remembered=useRef<Record<Side,HeadwaySnapshot|null>>({ahead:null,behind:null});
  const [side,setSide]=useState<Side|null>(null);
  const root=useRef<HTMLDivElement>(null);
  const buttons=useRef<Record<Side,HTMLButtonElement|null>>({ahead:null,behind:null});
@@ -96,24 +104,34 @@ export default function HeadwayDetails({planned,loading,live,features,selected,d
    window.removeEventListener('scroll',reposition,true);};
  },[side]);
  const renderButton=(which:Side,peer:PlannedPeer|null)=>{
+  if(!peer||!displayDutyPhase(phases[which]))return null;
   const measured=which==='ahead'?live.ahead:live.behind;
-  const verified=!!peer&&measured!==null;
-  const seconds=verified?measured!.seconds:estimatedPeerGap({
+  const observed=features.find(f=>selectedTripId(f)===(peerTripIds[which]||peer.tripId));
+  const timeA=selected?observationTimestamp(selected):null;
+  const timeB=observed?observationTimestamp(observed):null;
+  const observationTime=timeA!==null&&timeB!==null?Math.min(timeA,timeB):null;
+  const stable=stableHeadway(remembered.current[which],
+   [date,tripId,peer.tripId,peer.referenceStopId].join('|'),measured,observationTime,now);
+  remembered.current[which]=stable.snapshot;
+  const verified=stable.quality==='live';
+  const seconds=stable.seconds??estimatedPeerGap({
    planned:peer,side:which,selected,now
   });
   const label=which==='ahead'?'Spoj přede mnou':'Spoj za mnou';
   return <button key={which} ref={node=>{buttons.current[which]=node;}} type="button" className={'headwayToggle'+
    (side===which?' headwayToggleSelected':'')} aria-expanded={side===which}
    aria-label={label+': '+formatHeadway(seconds)+
-    (verified?', živě ověřeno':', bez živého ověření')+
+    (verified?', živě ověřeno':stable.quality==='last-known'?', poslední známá hodnota':', pouze podle JŘ')+
     '. Otevřít podrobnosti.'}
-   title={label+(verified?' · LIVE':' · PID GTFS / odhad')}
+   title={label+(verified?' · LIVE':stable.quality==='last-known'?
+    ' · poslední měření, bez aktuální LIVE polohy':' · PID GTFS / odhad')+
+    (peerStatus[which]==='provisional'?' · návaznost bloku bez ověření téhož vozu':'')}
    onClick={event=>{place(event.currentTarget.getBoundingClientRect());
     setSide(previous=>previous===which?null:which);}}
    disabled={!peer}>
    <span className="headwayArrow" aria-hidden="true">{which==='ahead'?'↑':'↓'}</span>
-   <span className="headwayTime">{formatHeadway(seconds)}</span>
-   {peer&&<StateIcon verified={verified}/>}
+   <span className="headwayTime">{stable.quality==='last-known'?'≈':''}{formatHeadway(seconds)}</span>
+   <StateIcon verified={verified}/>
   </button>;
  };
  return <div className="headwayDetailsRoot" ref={root}>
@@ -121,7 +139,7 @@ export default function HeadwayDetails({planned,loading,live,features,selected,d
    {renderButton('ahead',front)}
    {renderButton('behind',rear)}
   </div>
-  {side&&current&&<div className="headwayPopover headwayPopoverInline" role="dialog"
+  {side&&current&&displayDutyPhase(phases[side])&&<div className="headwayPopover headwayPopoverInline" role="dialog"
    style={placement?{left:placement.left,top:placement.top}:undefined}
    aria-label={'Podrobnosti: spoj '+(side==='ahead'?'přede mnou':'za mnou')}>
    <span className="headwayInlineIdentity">
