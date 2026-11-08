@@ -74,6 +74,18 @@ export function networkAuditReport():NetworkAuditReport{
   summary:[...grouped.values()].map(({totalMs,timed,...rest})=>({...rest,meanDurationMs:timed?Math.round(totalMs/timed):null}))
    .sort((a,b)=>b.http-a.http||a.endpoint.localeCompare(b.endpoint))};
 }
+/** Instrument direct fetches which bypass the Golemio coordinator. */
+export async function auditedFetch(input:string|URL,init:RequestInit|undefined,source:string):Promise<Response>{
+ const target=String(input),started=Date.now();
+ try{
+  const response=await fetch(input,init);
+  recordNetworkEvent({source,url:target,kind:'http',status:response.status,durationMs:Date.now()-started});
+  return response;
+ }catch(error){
+  recordNetworkEvent({source,url:target,kind:'http',durationMs:Date.now()-started});
+  throw error;
+ }
+}
 export function downloadNetworkAudit():void{
  if(typeof document==='undefined')return;
  const report=networkAuditReport();
