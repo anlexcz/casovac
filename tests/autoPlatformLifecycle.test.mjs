@@ -24,6 +24,10 @@ test('opens verified mixed platform before reaching its preceding stop',()=>{
 test('arrival at predecessor is sufficient to open even if timetable estimate is stale',()=>{
  assert.equal(pick({evidence:state('at_stop',1,2),remainingToCurrent:999})?.index,2);
 });
+test('shape-confirmed tram confluence opens even without a nearby scheduled peer',()=>{
+ const target=pick({entries:[[3,'P/C','tram-branch-confirmed',[]]]});
+ assert.deepEqual(target,{index:2,physicalId:'P/C',kind:'tram-branch-confirmed'});
+});
 test('a branch candidate alone never triggers automatic opening before geometry verification',()=>{
  assert.equal(pick({entries:entries.slice(1),currentIndex:2,remainingToCurrent:20}),null);
 });
