@@ -7,7 +7,7 @@ from pathlib import Path
 
 KINDS = {
     "mixed-platform", "mixed-confirmed",
-    "tram-branch-candidate", "tram-branch-confirmed"
+    "tram-branch-candidate", "tram-branch-confirmed", "tram-route-set"
 }
 
 
