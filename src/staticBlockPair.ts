@@ -61,6 +61,11 @@ export async function findStaticBlockLinks(
  const check=async(entryIndex:number,role:'first'|'second'):Promise<BlockPair|null>=>{
   const entry=ordered[entryIndex];
   if(!entry||entry.startSeconds===currentItem.startSeconds)return null;
+  // A duplicate departure time around either neighbour destroys the
+  // uniqueness of its position in the chronological block.
+  if((entryIndex>0&&ordered[entryIndex-1].startSeconds===entry.startSeconds)||
+     (entryIndex<ordered.length-1&&ordered[entryIndex+1].startSeconds===entry.startSeconds))
+   return null;
   const otherLine=routes[entry.routeId]?.[0]??'';
   // A same-line trip is still the immediate block neighbour, but not a
   // *route change*: never skip it to reach a more distant different line.
