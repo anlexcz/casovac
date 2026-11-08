@@ -63,6 +63,7 @@ export default function HeadwayDetails({planned,loading,live,features,selected,d
  const isLive=!!current&&currentLive!==null;
  const feature=current&&isLive?matchLive(current,features,now):null;
  const location=isLive&&feature?livePeerLocation(feature,stops.stops):null;
+ const liveLocationMissing=isLive&&location===null;
  const estimated=current?plannedPeerLocation(stops.stops,date,now):null;
  useEffect(()=>{setSide(null);},[tripId]);
  useEffect(()=>{
@@ -127,9 +128,9 @@ export default function HeadwayDetails({planned,loading,live,features,selected,d
     <strong>{deviation===null?'Nedostupné':(deviation>0?'+':'')+Math.round(deviation)+' s'}</strong></div>}
    <div className="headwayPopoverLocation">
     <span>{isLive?'AKTUÁLNÍ ZASTÁVKA / POLOHA':'PLÁNOVANÁ POLOHA'}</span>
-    <strong>{location?.title??estimated?.title??
+    <strong>{location?.title??(liveLocationMissing&&estimated?'Živá zastávka není dostupná':null)??estimated?.title??
      (stops.loading?'Načítám zastávky…':'Poloha není dostupná')}</strong>
-    <small>{location?.detail??estimated?.detail??
+    <small>{location?.detail??(liveLocationMissing&&estimated?'Podle JŘ: '+estimated.title+' · '+estimated.detail:null)??estimated?.detail??
      (stops.loading?'Podrobnosti z PID GTFS':'Jízdní řád nelze bezpečně vyhodnotit')}</small>
    </div>
    {!isLive&&<p className="headwayPopoverNote">Odstup z jízdního řádu
