@@ -11,13 +11,15 @@ import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopI
 import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit.ts';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,plannedHeadways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,plannedHeadways,plannedLiveHeadways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
  const plannedReady=plannedHeadways.data.status==='ready';
  const front=plannedReady?plannedHeadways.data.ahead:headways?.ahead??null;
  const rear=plannedReady?plannedHeadways.data.behind:headways?.behind??null;
- const frontLive=front&&headways?.ahead?.tripId===front.tripId?headways.aheadSeconds:null;
- const rearLive=rear&&headways?.behind?.tripId===rear.tripId?headways.behindSeconds:null;
+ const frontLive=plannedReady?plannedLiveHeadways.ahead?.seconds??null:
+  front&&headways?.ahead?.tripId===front.tripId?headways.aheadSeconds:null;
+ const rearLive=plannedReady?plannedLiveHeadways.behind?.seconds??null:
+  rear&&headways?.behind?.tripId===rear.tripId?headways.behindSeconds:null;
  const frontPlan=!!front&&frontLive===null&&plannedReady;
  const rearPlan=!!rear&&rearLive===null&&plannedReady;
  const frontValue=frontLive??(frontPlan?front?.scheduledGap:null);
@@ -147,14 +149,14 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
           plannedReady?'Plánovaný předchůdce nenalezen':'Předchozí spoj zatím není ověřen'} className="headwayValue">
           <span aria-hidden="true">↑</span><span>{formatHeadway(frontValue??null)}</span>
           {frontPlan&&<span className="headwayBadge">plán</span>}
-          {front&&<span className="headwayBadge">{front.line}/{front.order||'?'}</span>}
+          {front&&<span className="headwayBadge">{front.line}/{(plannedReady?plannedLiveHeadways.ahead?.order:front.order)||'?'}</span>}
          </span>
          <span title={rearPlan?'Pouze plánovaný odstup PID GTFS · '+rear?.tripId:
           rearLive!==null?'Skutečný odstup ověřeného plánovaného následníka':
           plannedReady?'Plánovaný následník nenalezen':'Následující spoj zatím není ověřen'} className="headwayValue">
           <span aria-hidden="true">↓</span><span>{formatHeadway(rearValue??null)}</span>
           {rearPlan&&<span className="headwayBadge">plán</span>}
-          {rear&&<span className="headwayBadge">{rear.line}/{rear.order||'?'}</span>}
+          {rear&&<span className="headwayBadge">{rear.line}/{(plannedReady?plannedLiveHeadways.behind?.order:rear.order)||'?'}</span>}
          </span>
         </div>}
       </div>
