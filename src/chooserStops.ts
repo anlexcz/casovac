@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import {useEffect,useState} from 'react';
+import {auditedFetch} from './networkAudit.ts';
 
 /** Only static, public PID GTFS data. No per-vehicle Golemio lookup. */
 export type ChooserTarget={
@@ -13,7 +14,7 @@ let cached:Lookup|null=null;
 let pending:Promise<Lookup>|null=null;
 const url=(name:string)=>import.meta.env.BASE_URL+'data/'+name;
 async function readMap(name:string):Promise<Names>{
- const response=await fetch(url(name),{cache:'default'});
+ const response=await auditedFetch(url(name),{cache:'default'},'chooserStops-static');
  if(!response.ok)throw new Error('PID GTFS lookup: '+response.status);
  const body:unknown=await response.json();
  if(!body||typeof body!=='object'||Array.isArray(body))throw new Error('PID GTFS: invalid lookup');

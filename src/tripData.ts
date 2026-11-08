@@ -1,4 +1,5 @@
 import {useEffect,useMemo,useState} from 'react';
+import {auditedFetch} from './networkAudit.ts';
 
 export type Stop = {id:string;name:string;sequence:number;arrival:string;departure:string;lat:number|null;lon:number|null;platformCode?:string};
 type RecordValue=Record<string,unknown>;
@@ -82,7 +83,7 @@ export function useTripData(tripId:string,token:string):TripData{
     url.searchParams.append('scopes[]','stop_times');
     url.searchParams.append('scopes[]','shapes');
     const headers={'X-Access-Token':token};
-    const response=await fetch(url,{headers,cache:'no-store',signal:abort.signal});
+    const response=await auditedFetch(url,{headers,cache:'no-store',signal:abort.signal},'tripData');
     if(!response.ok)throw new Error('Detail tripu: HTTP '+response.status);
     const data:unknown=await response.json();
     if(abort.signal.aborted)return;
@@ -94,7 +95,7 @@ export function useTripData(tripId:string,token:string):TripData{
      // A usable timetable without stop_id cannot drive departureboards.
      // The backup endpoint might expose the missing authoritative platform ID.
      try{
-      const fallback=await fetch('https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(tripId),{headers,cache:'no-store',signal:abort.signal});
+      const fallback=await auditedFetch('https://api.golemio.cz/v2/gtfs/stoptimes/'+encodeURIComponent(tripId),{headers,cache:'no-store',signal:abort.signal},'tripData-fallback');
       if(fallback.ok){
        const item:unknown=await fallback.json();
        const alternative=parseStops(item);

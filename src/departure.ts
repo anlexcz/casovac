@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
-import type {GpsFix} from './position';
-import {distanceMeters} from './position';
+import type {GpsFix} from './position.ts';
+import {distanceMeters} from './position.ts';
 import type {Stop} from './tripData';
 
 export type RoutePoint={lon:number;lat:number;metres:number};

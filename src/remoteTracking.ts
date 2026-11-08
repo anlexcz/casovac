@@ -1,6 +1,6 @@
-import {path} from './featureUtils';
-import {decodeRoute,buildStopProgress} from './departure';
-import {normalizedStopId,distanceMeters} from './position';
+import {path} from './featureUtils.ts';
+import {decodeRoute,buildStopProgress} from './departure.ts';
+import {normalizedStopId,distanceMeters} from './position.ts';
 import type {Stop} from './tripData';
 
 type Feature={properties?:Record<string,unknown>;geometry?:{coordinates?:unknown}};
