@@ -97,6 +97,8 @@ export function parseNeighbourBoard(args:{
   const matches=stops?.map((s,i)=>s.id===departure.stop?.id?i:-1).filter(i=>i>=0)??[];
   const position=matches.length===1?matches[0]:-1;
   const prev=position>=0?stops![position-1]?.id??'':'';
+  const peerPrior=position>=0?stops![position-1]:undefined;
+  const priorTime=peerPrior?seconds(peerPrior.departure||peerPrior.arrival):null;
   const next=position>=0?stops![position+1]?.id??'':'';
   // Auto-open only where a DIFFERENT incoming branch joins our corridor
   // and continues on our next segment. A divergence does not qualify.
@@ -116,7 +118,8 @@ export function parseNeighbourBoard(args:{
     [Math.floor(planned/3600)%24,Math.floor(planned%3600/60),planned%60].map(v=>String(v).padStart(2,'0')).join(':'),
    scheduledSeconds:planned,delay:liveDelay,
    relative:planned<ownTime?'before':planned>ownTime?'after':'same',
-   predictedDifference:diff,previousId:prev,nextId:next
+   predictedDifference:diff,previousId:prev,nextId:next,
+   previousScheduledSeconds:priorTime
   });
   seen.add(id);
  }
