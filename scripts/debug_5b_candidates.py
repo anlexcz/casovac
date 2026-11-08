@@ -4,7 +4,7 @@ import argparse
 from collections import Counter
 import json
 from pathlib import Path
-from scripts.branch_geometry import incoming_points, different_incoming_branches
+from branch_geometry import incoming_points, different_incoming_branches
 
 def analyze(root, day, limit=1500):
     directory=root/"days"/day
