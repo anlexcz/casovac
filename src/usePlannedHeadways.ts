@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {findPlannedHeadways,EMPTY_PLANNED_HEADWAYS} from './plannedHeadways.ts';
 import type {PlannedHeadways} from './plannedHeadways.ts';
 
@@ -13,15 +13,23 @@ export function usePlannedHeadways(args:{
  const {enabled,tripId,date,referenceStopId,nowMs}=args;
  const key=enabled&&tripId&&date?
   [tripId,date,referenceStopId,referenceStopId?'':Math.floor(nowMs/60000)].join('|'):'';
+ const lastConfirmed=useRef<{scope:string;data:PlannedHeadways}|null>(null);
+ const scope=tripId+'|'+date;
  const [state,setState]=useState<{
   key:string;data:PlannedHeadways;loading:boolean
  }>({key:'',data:EMPTY_PLANNED_HEADWAYS,loading:false});
  useEffect(()=>{
   if(!key){setState({key:'',data:EMPTY_PLANNED_HEADWAYS,loading:false});return;}
   let alive=true;
-  setState({key,data:EMPTY_PLANNED_HEADWAYS,loading:true});
+  // Preserve the prior planned peer while the reference stop advances.
+  // Never carry it across a different trip or service date.
+  setState({key,data:lastConfirmed.current?.scope===scope?
+   lastConfirmed.current.data:EMPTY_PLANNED_HEADWAYS,loading:true});
   void findPlannedHeadways({tripId,date,referenceStopId,nowMs})
-   .then(data=>{if(alive)setState({key,data,loading:false});})
+   .then(data=>{if(alive){
+    if(data.status==='ready')lastConfirmed.current={scope,data};
+    setState({key,data,loading:false});
+   }})
    .catch(e=>{
     if(alive)setState({key,data:{
      ...EMPTY_PLANNED_HEADWAYS,referenceStopId,
@@ -32,5 +40,6 @@ export function usePlannedHeadways(args:{
  },[key,tripId,date,referenceStopId]);
  return state.key===key?
   {data:state.data,loading:state.loading}:
-  {data:EMPTY_PLANNED_HEADWAYS,loading:!!key};
+  {data:lastConfirmed.current?.scope===scope?lastConfirmed.current.data:
+   EMPTY_PLANNED_HEADWAYS,loading:!!key};
 }

@@ -5,6 +5,7 @@ import {selectedTripId,vehicleId,orderOf,path,routeOf,stateOfFeature} from './fe
 import {observationTimestamp} from './remoteTracking.ts';
 import {relevantWindows} from './stopNeighbours.ts';
 import {joiningCorridor} from './neighbourRouteJoining.ts';
+import type {BoardContinuation} from './boardBlockContinuity.ts';
 
 type BoardDeparture={
  trip?:{id?:string;is_canceled?:boolean};
@@ -47,20 +48,28 @@ export function parseNeighbourBoard(args:{
  board:DepartureBoard;stop:Stop;ownTripId:string;ownStops:Stop[];
  ownIndex:number;ownDelay:number|null;settings:NeighbourSettings;
  distance:number;features:Feature[];candidateStops?:ReadonlyMap<string,Stop[]>;
+ continuations?:ReadonlyMap<string,BoardContinuation>;
  now?:number;
 }):NeighbourResult{
- const {board,stop,ownTripId,ownStops,ownIndex,ownDelay,settings,distance,features,candidateStops,now=Date.now()}=args;
+ const {board,stop,ownTripId,ownStops,ownIndex,ownDelay,settings,distance,features,candidateStops,continuations,now=Date.now()}=args;
  const ownSchedule=stop.arrival||stop.departure,ownTime=seconds(ownSchedule);
  const result:NeighbourResult={rows:[],significant:false,sharedOutgoing:false,stopId:stop.id,ownSchedule,ownDelay};
  if(ownTime===null||!stop.id)return result;
  const live=new Map(features.map(f=>[selectedTripId(f),f]));
  const window=relevantWindows(settings,distance);
  const seen=new Set<string>();
+ const ownBlockIds=new Set<string>();
+ for(const transition of continuations?.values()??[]){
+  if(transition.incomingTripId===ownTripId||transition.outgoingTripId===ownTripId){
+   ownBlockIds.add(transition.incomingTripId);
+   ownBlockIds.add(transition.outgoingTripId);
+  }
+ }
  const accepted=new Set(board.physicalStopIds?.includes(stop.id)?board.physicalStopIds:[stop.id]);
 
  for(const departure of board.departures??[]){
   const id=departure.trip?.id??'';
-  if(!id||id===ownTripId||seen.has(id)||departure.trip?.is_canceled)continue;
+  if(!id||id===ownTripId||ownBlockIds.has(id)||seen.has(id)||departure.trip?.is_canceled)continue;
   // Physical boarding edge is authoritative: never blend other directions,
   // other platforms or nearby stops just because their names match.
   if(!departure.stop?.id||!accepted.has(departure.stop.id))continue;
@@ -123,6 +132,21 @@ export function parseNeighbourBoard(args:{
   });
   seen.add(id);
  }
+ // Collapse only when BOTH boundary trip events made it through the actual
+ // time/physical-edge filter. A planned block is not by itself a live car ID.
+ const present=new Map(result.rows.map(row=>[row.tripId,row]));
+ const removed=new Set<string>();
+ for(const [outgoingId,link] of continuations??[]){
+  const incoming=present.get(link.incomingTripId),outgoing=present.get(outgoingId);
+  if(!incoming||!outgoing)continue;
+  removed.add(link.incomingTripId);
+  outgoing.transition={fromTripId:incoming.tripId,fromLine:incoming.line,
+   fromOrder:incoming.order,arrivalSeconds:link.incomingArrivalSeconds,
+   fromVehicle:incoming.vehicle,fromDelay:incoming.delay,blockId:link.blockId};
+  // The vehicle seen arriving may be useful for identification, but it is
+  // NOT verified LIVE on the outgoing trip. Do not transfer its delay.
+ }
+ result.rows=result.rows.filter(row=>!removed.has(row.tripId));
  result.rows.sort((a,b)=>a.scheduledSeconds-b.scheduledSeconds||
   a.line.localeCompare(b.line,'cs')||a.order.localeCompare(b.order,'cs'));
  return result;

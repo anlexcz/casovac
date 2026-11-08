@@ -30,7 +30,10 @@ export function reconcileNeighbours(
  now:number
 ):StableNeighbourState{
  const byTrip=new Map(incoming.map(row=>[row.tripId,row]));
- const entries=previous.entries.map(entry=>{
+ // A verified block transition supersedes its arrival trip. Do not retain
+ // that arrival as a phantom second vehicle on a temporary missed-cycle cache.
+ const superseded=new Set(incoming.flatMap(row=>row.transition?[row.transition.fromTripId]:[]));
+ const entries=previous.entries.filter(entry=>!superseded.has(entry.row.tripId)).map(entry=>{
   const current=byTrip.get(entry.row.tripId);
   const missed=complete&&revision>previous.lastCompleteRevision;
   if(!current){
@@ -55,7 +58,7 @@ export function reconcileNeighbours(
    vehicle:current.vehicle||entry.row.vehicle},
    missingCycles:0,lastSeen:now,lastLiveAt:entry.lastLiveAt,exiting:false};
  });
- const previousIds=new Set(previous.entries.map(entry=>entry.row.tripId));
+ const previousIds=new Set(entries.map(entry=>entry.row.tripId));
  for(const row of incoming){
   if(!previousIds.has(row.tripId)){
    entries.push({row,missingCycles:0,lastSeen:now,

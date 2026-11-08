@@ -48,3 +48,8 @@
 .sn-status-none .sn-status-icon{color:#4dd094;border-color:#477c67}
 .sn-status-error .sn-status-icon{color:#f47779;border-color:#915657}
 .sn-coverage{margin:5px 4px 2px;padding:5px 1px;color:#a6b4c0;font-size:11px;line-height:1.45}
+
+/* A block handoff is one stop event: outgoing trip as primary, incoming trip as context. */
+.sn-badge .sn-chain{display:block;font-size:10px;color:#a6b8c5;font-weight:450;
+ line-height:1.15;margin-top:2px;white-space:nowrap}
+.sn-row:has(.sn-chain){min-height:44px}

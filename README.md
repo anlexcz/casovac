@@ -14,12 +14,23 @@ Poslední zadané `linka/pořadí` se uchovává místně. Pokud je API klíč u
 
 ## Princip
 
-- Živá vozidla z Golemio vehiclepositions okamžitě při zahájení sledování a následně přibližně každých 60 sekund; statická PID GTFS data jsou cachovaná samostatně.
+- Živá poloha vlastní tramvaje z Golemio vehiclepositions okamžitě při zahájení sledování a poté přibližně každých **20 sekund**; okolní vozidla mají zpravidla 60s obnovu. Statická PID GTFS data jsou cachovaná samostatně.
 - Pořadí primárně přes `trip.sequence_id`.
 - Zastávky, časy a geometrie se u ověřeného tripu primárně načítají z lokálně publikovaného PID GTFS (`public/data/pid/v1/`); pokud nelze bezpečně potvrdit datum, identitu nebo úplnost dat, zachová se původní Golemio GTFS fallback.
 - GPS porovnává telefon s polohou vozidla a očekávanou zastávkou. Dvě po sobě jdoucí měření s rozestupem 3 sekund, dostatečná přesnost a poloha kompatibilní s Golemiem jsou potřebné k potvrzení zastávky.
 - Manuální korekce zastávky je k dispozici na hlavní obrazovce i v diagnostice.
-- Odpočet je pouze vůči **plánovanému času odjezdu**, při překročení času pokračuje záporně. Nejde o výpočet skutečného oprávnění k odjezdu.
+- Odpočet je pouze vůči **plánovanému času odjezdu**: před odjezdem záporně (−), po odjezdu kladně (+). Nejde o výpočet skutečného oprávnění k odjezdu.
+
+## Stabilita blokových výkonů a rozestupů – PR #62
+
+**Kompletní pravidla:** [docs/BLOCK_DUTY_LIFECYCLE.md](docs/BLOCK_DUTY_LIFECYCLE.md). `block_id` prokazuje **plánovou** návaznost sousedních tripů, nikoliv nutně reálné evidenční číslo vozu.
+
+- **Přestupy mezi tripy na jedné konečné:** jen bezprostředně sousední tripy téhož provozního dne a bloku, stejné ověřené nástupní stanoviště a přechod do 3 minut. V okolních odjezdech se zobrazí **jeden řádek odjíždějícího tripu** a malá poznámka o přijíždějící lince. Starý příjezdový záznam se odstraní i z vizuální cache.
+- **Plánové rozestupy:** zachovat identitu souseda při přepočtu zastávky; nevybírat souseda podle momentálního LIVE pořadí. Při chybějících datech nezahazovat předchozí ověřené GTFS spojení.
+- **LIVE návaznost:** čerstvý přesný navazující trip se dá sledovat i bez předchozího LIVE původního tripu, ale jeho fyzická návaznost je do ověření evidenčního čísla **provisional**. Rozdílný vůz proti existujícímu LIVE anchoru se odmítá.
+- **Společná krátkodobá paměť:** poslední observace tripu s původním `origin_timestamp`, novější data vítězí; stará poloha se nestane aktuální jen následkem úspěšného HTTP. Platnost LIVE výpočtu **90 s**, pomocné poslední měření **180 s**, pak návrat k JŘ.
+- **Provozní fáze:** před výjezdem, na konečné a po ukončení výkonu aktivní rozestup skrýt. Plánovou identitu stále uchovávat pro další pokračování. Neznámá fáze není důkazem skončeného výkonu.
+- **Diagnostika:** pro oba sousedy je dostupná fáze, zdroj, důvod odmítnutí a čas posledního měření. Regresní testy jsou v `tests/*BlockContinuity*`, `tests/peerLiveResolve.test.mjs`, `tests/trackedDuty.test.mjs` a `tests/vehicleObservationStore.test.mjs`.
 
 ## Oprava obnovování LIVE dat a cache – PR #59 (8. 11. 2026)
 
