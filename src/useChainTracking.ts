@@ -49,7 +49,9 @@ export function useChainTracking({active,chosen,lastSeen,features,token,tripId,t
  const plannedHandoff:PlannedHandoff|null=pair?.role==='first'?
   {next:pair.partner,reason:pair.reason}:null;
  const nextTrip=useTripData(plannedHandoff?.next.tripId??'',token.trim());
- const previousPartner=pair?.role==='second'?pair.partner:null;
+ // A middle trip can have both a previous and a next route in the same block.
+ // The primary pair prioritizes the upcoming handoff; preserve predecessor too.
+ const previousPartner=block.previousPair?.partner??(pair?.role==='second'?pair.partner:null);
  const previousTrip=useTripData(previousPartner?.tripId??'',token.trim());
  const continuity=pair?.role==='first'&&nextTrip.stops.length?
   {ok:validBlockBoundary(trip.stops,nextTrip.stops),reason:pair.reason}:
