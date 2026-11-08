@@ -2,9 +2,11 @@ import {Fragment,useLayoutEffect,useRef} from 'react';
 import type {Stop} from './tripData';
 import {formatStopTime} from './tripData';
 import {chainBoard} from './chainStops';
+import type {PlatformMarker} from './autoPlatformLifecycle.ts';
 
 type Props={
  stops:Stop[];index:number|null;tripId:string;remaining:number|null;terminalWaiting:boolean;
+ connectionMarkers?:Record<number,PlatformMarker>;
  expanded:boolean;onExpand:()=>void;onOpenStop:(index:number)=>void;onChoose:(index:number)=>void;animate:boolean;
  continuation:{line:string;order:string;stops:Stop[]}|null;
  predecessor:{line:string;order:string;stops:Stop[]}|null;
@@ -19,7 +21,7 @@ type Snapshot={
  trip:string;index:number;rects:Map<number,DOMRect>;
  previousName:string;previousTime:string;previousOffset:string;
 };
-export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onOpenStop,onChoose,animate,continuation,predecessor,activeLine,visualBoundary}:Props){
+export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,expanded,onExpand,onOpenStop,onChoose,animate,continuation,predecessor,activeLine,visualBoundary,connectionMarkers={}}:Props){
  const heldStop=useRef(false);
  const heldTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const cancelHold=()=>{if(heldTimer.current!==null)clearTimeout(heldTimer.current);heldTimer.current=null;};
@@ -42,6 +44,11 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
  const end=expanded?allStops.length:Math.min(allStops.length,currentIndex+7);
  const shown=valid?allStops.slice(currentIndex+1,end):[];
  const clock=terminalWaiting?'clockTerminal':remaining===null?'clockUnknown':remaining>0?'clockEarly':'clockReady';
+ const marker=(kind:PlatformMarker|undefined)=>kind===undefined?null:
+  <span className={'stopLinkMark stopLinkMark-'+kind} aria-label={kind==='join'?'Sbíhání linek':kind==='mixed'?'Společná hrana s autobusem nebo trolejbusem':'Společná hrana více linek'}
+   title={kind==='join'?'Připojují se jiné linky':kind==='mixed'?'Společné nástupiště tramvají a silniční MHD':'Společné stanoviště více linek'}>
+   {kind==='join'?'⋈':kind==='mixed'?'◈':'↔'}
+  </span>;
 
  useLayoutEffect(()=>{
   const root=stack.current,card=activeCard.current;
@@ -113,7 +120,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
    role="button" tabIndex={0} aria-label={'Zobrazit okolní spoje: '+current.name}
    onClick={()=>onOpenStop(index!)}
    onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpenStop(index!);}}}>
-   <span className="activeStopName">{current.name}</span>
+   <span className="activeStopName">{current.name}{marker(connectionMarkers[index!])}</span>
    <span className="departureNumbers">
     <span className="liveOffset" aria-label="Časový rozdíl vůči jízdnímu řádu">{signed(remaining)}</span>
     <time className="scheduledTime" aria-label="Čas podle jízdního řádu">{formatStopTime(current.departure||current.arrival)}</time>
@@ -126,7 +133,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
     <div data-stop-index={n} className="upcomingStop">
      {isNext?(
       <div className="upcomingButton chainUpcoming">
-       <span className="upcomingName">{stop.name}</span>
+       <span className="upcomingName">{stop.name}{!isNext&&marker(connectionMarkers[localIndex])}</span>
        <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
       </div>
      ):(
@@ -135,7 +142,7 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
        onPointerCancel={cancelHold} onPointerLeave={cancelHold}
        onContextMenu={e=>{e.preventDefault();cancelHold();onChoose(localIndex);}}
        title={'Okolní spoje: '+stop.name+' (podržet pro ruční výběr zastávky)'}>
-       <span className="upcomingName">{stop.name}</span>
+       <span className="upcomingName">{stop.name}{marker(connectionMarkers[localIndex])}</span>
        <time className="upcomingTime">{formatStopTime(stop.departure||stop.arrival)}</time>
       </button>
      )}
