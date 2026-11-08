@@ -10,6 +10,8 @@ export type PidRouteRow=[string,string,string,string,string,string];
 export type PidStopTime=[string,number,number,number,string];
 export type PidTripRow=[string,string,string,string,string,string,PidStopTime[]];
 export type PidBlockRow=[number,string,string];
+/** [stopSequence,physicalPlatformId,kind,peerTripIds] produced by 5B builder. */
+export type PidPlatformEncounter=[number,string,'mixed-confirmed'|'tram-branch-candidate',string[]];
 export type PidDepartureRow=[number,string,string,number];
 export type PidPlatformRow=[string,string,number,number,string,string,string,string[],string];
 export type PidGroupRow=[string,string,string,number,number,string[]];
@@ -358,6 +360,13 @@ export class PidStaticEngine{
    'days/'+day+'/departures/'+bucket+'.json',manifest.generatedAt);
   return (all[stopId]??[]).map(([departureSeconds,tripId,routeId,stopSequence])=>
    ({stopId,date:day,departureSeconds,tripId,routeId,stopSequence}));
+ }
+ /** Daily precomputed physical-platform encounters; no Golemio calls. */
+ async getPlatformEncounters(tripId:string,day:string):Promise<PidPlatformEncounter[]>{
+  const manifest=await this.day(day);
+  const rows=await this.request<Record<string,PidPlatformEncounter[]>>(
+   'days/'+day+'/platform-encounters.json',manifest.generatedAt);
+  return rows[tripId]??[];
  }
  async getBlockTrips(blockId:string,day:string):Promise<PidBlockTrip[]>{
   const manifest=await this.day(day);
