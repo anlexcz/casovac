@@ -267,7 +267,16 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             for tid, items in encounters.items()
         }
         candidate_encounters = {tid: items for tid, items in candidate_encounters.items() if items}
-        write_json(base / "platform-encounters.json", auto_encounters)
+        # Split by trip SHA-256 bucket. A single daily platform index exceeded
+        # the browser's 5 MiB per-object budget once optional shared platforms
+        # were included. The client fetches just ONE small shard for its trip.
+        encounter_shards = defaultdict(dict)
+        for tid, records in auto_encounters.items():
+            bucket = hashlib.sha256(tid.encode()).digest()[0] % 16
+            encounter_shards[f"{bucket:02d}"][tid] = records
+        for bucket in range(16):
+            write_json(base / "platform-encounters" / f"{bucket:02d}.json",
+                       encounter_shards[f"{bucket:02d}"])
         write_json(base / "platform-candidates.json", candidate_encounters)
         for entries in blocks.values():
             entries.sort(key=lambda e: (e[0], e[1]))
@@ -278,6 +287,7 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "routes": len(day_routes[label]), "platforms": len(departures),
             "buckets": len(buckets), "blocks": len(blocks),
             "platformEncounterTrips": len(auto_encounters),
+            "platformEncounterShards": 16,
             "platformCandidateTrips": len(candidate_encounters),
             "available": bool(locator)
         }
@@ -319,7 +329,7 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "departure": "[departureSeconds,tripId,routeId,stopSequence]",
             "platform": "[groupId,platformCode,lat,lon,zone,mode,wheelchair,gtfsIds,alternateName]",
             "group": "[nodeId,name,municipality,lat,lon,physicalPlatformIds]",
-            "platformEncounter": "tripId -> [[stopSequence,physicalPlatformId,kind,peerTripIds],...]; runtime: shared-platform (all mode only), mixed-platform, mixed-confirmed, tram-route-set from directional line delta, and shape-proven tram-branch-confirmed",
+            "platformEncounter": "days/{date}/platform-encounters/{sha256(tripId)[0]%16:02d}.json; tripId -> [[stopSequence,physicalPlatformId,kind,peerTripIds],...]; shared-platform (all mode), mixed-platform, mixed-confirmed, tram-route-set, tram-branch-confirmed",
             "platformCandidate": "tripId -> unverified tram-branch-candidate rows, separate diagnostic shard never used for auto opening"
         }
     }
