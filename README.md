@@ -21,6 +21,15 @@ Poslední zadané `linka/pořadí` se uchovává místně. Pokud je API klíč u
 - Manuální korekce zastávky je k dispozici na hlavní obrazovce i v diagnostice.
 - Odpočet je pouze vůči **plánovanému času odjezdu**, při překročení času pokračuje záporně. Nejde o výpočet skutečného oprávnění k odjezdu.
 
+## Oprava obnovování LIVE dat a cache – PR #59 (8. 11. 2026)
+
+- **Odpočet odjezdu je vždy jen aktuální čas versus pevný JŘ.** Dopravní znaménka zůstávají beze změny: **− před odjezdem, + po odjezdu**. Žádná hranice stáří LIVE dat už nesmí odpočet vypnout. LIVE rozhoduje pouze o tom, kterou zastávku máme vybranou.
+- **Vlastní tramvaj:** prioritní dotaz na Golemio každých **20 s** (původně 60 s). Při jedné až třech chybějících aktualizacích se může zachovat naposledy identifikovaný vůz maximálně **60 s**; datum a čas původního pozorování se nesmí posunout na čas nového HTTP požadavku. Čerstvost skutečné polohy se dál posuzuje podle `origin_timestamp`, ne podle přijetí HTTP 200.
+- **Okolní odjezdy a polohy linek:** refresh přibližně **60 s**, poslední použitelný statický board a line snapshot se uchovávají až **180 s**. Nový refresh nesmaže dosavadní seznam jen kvůli tomu, že právě probíhá obohacení LIVE/tripů. Zastaralý údaj nesmí být označený jako čerstvá poloha.
+- **Přednačítání:** aktuální zastávka + **3 následující**. Posun zastávky okamžitě zahájí nový 60s cyklus a restartuje jeho časování; bez posunu se další cyklus spustí po minutě. Cache brání opakovaným zbytečným dotazům.
+- **Výběr linky/pořadí:** během psaní žádné LIVE vyhledávání a žádný samostatný 45s polling. Uživatel musí potvrdit **Enter** nebo tlačítkem **Vyhledat**; poté lze zvolit nalezený spoj.
+- **Bezpečnost a limity:** Golemio koordinátor zachovává prioritu dotazů, slučuje identické souběžné požadavky a respektuje HTTP 429. Retence cache není oprávněním počítat LIVE odchylku ze zastaralé polohy.
+
 ## Okolní spoje a společné nástupní hrany – aktuální fáze 5B (PR #58)
 
 **Dokumentace modulu:** [docs/STOP_NEIGHBOURS.md](docs/STOP_NEIGHBOURS.md). Implementace v PR #58 je připravena ke kontrole; do sloučení a nasazení hlavní větve se běžící produkční funkce nemění.
