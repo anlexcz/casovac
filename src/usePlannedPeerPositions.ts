@@ -9,6 +9,7 @@ import {tripPositionUrl,exactTripPosition,freshTripPosition} from './plannedPeer
 import {peerDutyCandidates} from './peerDutyContinuity.ts';
 import {vehicleObservations} from './vehicleObservationStore.ts';
 import {selectDutyLive} from './peerLiveResolve.ts';
+import type {PeerLiveResolution} from './peerLiveResolve.ts';
 import {dutyPhase} from './trackedDuty.ts';
 import type {DutyPhase} from './trackedDuty.ts';
 import type {DutyTrip} from './peerDutyContinuity.ts';
@@ -29,6 +30,7 @@ export function usePlannedPeerPositions(args:{
  date:string;
 }):{features:Feature[];status:PeerPositionStatus;tripIds:Record<Side,string>;
  updatedAt:number;loading:boolean;phases:Record<Side,DutyPhase>;
+ reasons:Record<Side,PeerLiveResolution['reason']|'none'>;
  lastKnown:Record<Side,{vehicle:string;observedAt:number}|null>}{
  const {enabled,planned,features,token,now,date}=args;
  const ready=enabled&&planned.status==='ready'&&!!token.trim()&&!!date;
@@ -120,7 +122,7 @@ export function usePlannedPeerPositions(args:{
  },[key,candidatesKey,minute,token]);
  const current=remote.key===key?[...features,...remote.values]:features;
  const find=(side:Side,peer:PlannedPeer|null)=>{
-  if(!peer)return {feature:null,tripId:'',source:'none' as const};
+  if(!peer)return {feature:null,tripId:'',source:'none' as const,reason:'none' as const};
   const available=routes[side];
   const block=available.find(item=>item.tripId===peer.tripId)?.blockId;
   const anchor=known.current.get(side+'|'+peer.tripId)||
@@ -129,10 +131,11 @@ export function usePlannedPeerPositions(args:{
    .filter((feature):feature is Feature=>feature!==null);
   const found=selectDutyLive({originalTripId:peer.tripId,candidates:available,
    features:[...current,...cached],now,anchor});
-  if(!found.feature)return {feature:null,tripId:'',source:'unavailable' as const};
+  if(!found.feature)return {feature:null,tripId:'',source:'unavailable' as const,
+   reason:found.reason};
   const own=unique(features,found.tripId,
    available.find(item=>item.tripId===found.tripId)?.line??peer.line,now);
-  return {feature:found.feature,tripId:found.tripId,
+  return {feature:found.feature,tripId:found.tripId,reason:found.reason,
    source:found.confidence==='provisional'?'provisional' as const:
     own?'existing' as const:'direct' as const};
  };
@@ -150,6 +153,7 @@ export function usePlannedPeerPositions(args:{
  return {
   features:[...new Set([first.feature,second.feature].filter((v):v is Feature=>v!==null))],
   status:{ahead:first.source,behind:second.source},
+  reasons:{ahead:first.reason,behind:second.reason},
   tripIds:{ahead:first.tripId,behind:second.tripId},
   updatedAt:remote.updatedAt,loading:remote.loading,
   phases:{ahead:candidates.verified&&candidates.key===key?
