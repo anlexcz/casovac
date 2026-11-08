@@ -24,7 +24,8 @@ class PlatformEncounterTests(unittest.TestCase):
 
     def test_bus_and_trolley_exact_physical_edge(self):
         rows = self.build()["tram"]
-        self.assertEqual(rows, [[2, "physical-1", "mixed-confirmed", ["bus", "trolley"]]])
+        self.assertEqual(rows, [[2, "physical-1", "mixed-platform", []],
+                                [2, "physical-1", "mixed-confirmed", ["bus", "trolley"]]])
 
     def test_different_physical_edge_never_matches(self):
         rows = self.build({"T": ["tram"], "B": ["wrong"]})
@@ -37,7 +38,7 @@ class PlatformEncounterTests(unittest.TestCase):
     def test_outside_time_window_does_not_match(self):
         self.trips["bus"][1][1] = 321
         rows = self.build({"T": ["tram"], "B": ["bus"]})
-        self.assertNotIn("tram", rows)
+        self.assertEqual(rows["tram"], [[2, "physical-1", "mixed-platform", []]])
 
     def test_different_approach_is_only_candidate(self):
         self.trips["other_tram"] = [["B", 100, 100, 1], ["P-B", 205, 205, 2]]
@@ -53,7 +54,7 @@ class PlatformEncounterTests(unittest.TestCase):
         self.trips["tram"].append(["P-T", 400, 400, 3])
         self.trips["bus"].append(["P-B", 401, 401, 3])
         rows = self.build({"T": ["tram"], "B": ["bus"]})["tram"]
-        self.assertEqual([row[0] for row in rows], [2, 3])
+        self.assertEqual([row[0] for row in rows], [2, 2, 3, 3])
 
 
 if __name__ == "__main__":
