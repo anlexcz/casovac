@@ -43,9 +43,9 @@ export function pickAutoPlatform(args:{
  stops:Stop[];currentIndex:number|null;
  entries:PidPlatformEncounter[];stopMap:Readonly<Record<string,string>>;mode?:'important'|'all';
  evidence:StopEvidence;remainingToCurrent:number|null;remainingToTarget:(index:number)=>number|null;
- leadSeconds:number;
+ leadSeconds:number;prefetchOnly?:boolean;
 }):AutoPlatformTarget|null{
- const {stops,currentIndex,entries,stopMap,evidence,remainingToCurrent,remainingToTarget,leadSeconds,mode='important'}=args;
+ const {stops,currentIndex,entries,stopMap,evidence,remainingToCurrent,remainingToTarget,leadSeconds,mode='important',prefetchOnly=false}=args;
  if(currentIndex===null||currentIndex<0)return null;
  const eligible=new Map<number,AutoPlatformTarget>();
  for(const [sequence,physicalId,kind] of entries){
@@ -58,6 +58,12 @@ export function pickAutoPlatform(args:{
  for(const target of [...eligible.values()].sort((a,b)=>a.index-b.index)){
   const previous=target.index-1;
   if(confirmedBeyondStop(evidence,target.index))continue;
+  // Prefetch the nearest relevant target (at most three stops ahead) well
+  // before opening. Novelty requires complete trip sequences, not just LIVE.
+  if(prefetchOnly){
+   if(target.index>=currentIndex&&target.index<=currentIndex+3)return target;
+   continue;
+  }
   if(confirmedAtStop(evidence,previous))return target;
   // With a valid "at_stop" for target we still keep the active target
   // until real departure, but do not create a fresh panel late.
