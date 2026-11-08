@@ -251,7 +251,8 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
         # Prepared planned encounters on authoritative physical PID platforms.
         # Tram branch candidates are NOT auto-opening decisions without shape proof.
         encounters = platform_encounters(
-            day_routes[label], stop_times, trip_meta, routes, stop_map
+            day_routes[label], stop_times, trip_meta, routes, stop_map,
+            geometry=geometry, gtfs_stops=stops
         )
         write_json(base / "platform-encounters.json", encounters)
         for entries in blocks.values():
@@ -303,7 +304,7 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "departure": "[departureSeconds,tripId,routeId,stopSequence]",
             "platform": "[groupId,platformCode,lat,lon,zone,mode,wheelchair,gtfsIds,alternateName]",
             "group": "[nodeId,name,municipality,lat,lon,physicalPlatformIds]",
-            "platformEncounter": "tripId -> [[stopSequence,physicalPlatformId,kind,peerTripIds],...]; mixed-confirmed versus tram-branch-candidate"
+            "platformEncounter": "tripId -> [[stopSequence,physicalPlatformId,kind,peerTripIds],...]; mixed-platform, mixed-confirmed, shape-verified tram-branch-confirmed or unverified candidate"
         }
     }
     # A release manifest pins each shard's bytes. Clients reject mixed-generation
