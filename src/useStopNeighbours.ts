@@ -6,6 +6,7 @@ import {parseStops} from './tripData.ts';
 import {resolveNeighbourStops} from './neighbourStatic.ts';
 import {safeStaticServiceDate} from './staticTripAdapter.ts';
 import {golemioJson} from './golemioClient.ts';
+import {NEIGHBOUR_POLL_MS,NEIGHBOUR_RETAIN_MS,UPCOMING_STOP_COUNT} from './pollingCadence.ts';
 import type {NeighbourSettings} from './stopNeighbours.ts';
 import {departureBoardUrl,parseNeighbourBoard} from './stopNeighbourBoard.ts';
 import {staticNeighbourBoard} from './staticNeighbourBoard.ts';
@@ -24,10 +25,10 @@ const vehicleCache=new Map<string,{features:Feature[];at:number}>();
 const PLATFORM_TTL=15*60000;
 // Keep the last successful snapshot across three 60-second poll attempts.
 // Freshness for *new queries* remains 60 s; retention is NOT LIVE validity.
-const VEHICLE_TTL=60000;
-const VEHICLE_RETAIN_MS=3*60000;
-const BOARD_TTL=60000;
-const BOARD_RETAIN_MS=3*60000;
+const VEHICLE_TTL=NEIGHBOUR_POLL_MS;
+const VEHICLE_RETAIN_MS=NEIGHBOUR_RETAIN_MS;
+const BOARD_TTL=NEIGHBOUR_POLL_MS;
+const BOARD_RETAIN_MS=NEIGHBOUR_RETAIN_MS;
 const gtfsSeconds=(time:string)=>{const m=/^(\d{1,3}):(\d{2})(?::(\d{2}))?$/.exec(time);
  return m?Number(m[1])*3600+Number(m[2])*60+Number(m[3]??0):null;};
 const dateLocal=(now:number)=>new Intl.DateTimeFormat('sv-SE',{
@@ -137,7 +138,7 @@ export function useStopNeighbours(args:{
   if(!enabled||!token||!ownFeature||!ownTripId||ownTripId==='—'||
    currentIndex===null||!stops.length)return;
   let active=true;
-  const upcoming=stops.slice(currentIndex+1,currentIndex+4)
+  const upcoming=stops.slice(currentIndex+1,currentIndex+1+UPCOMING_STOP_COUNT)
    .map((candidate,offset)=>({candidate,index:currentIndex+1+offset}))
    .filter(({candidate})=>!!candidate.name&&!candidate.id);
   const timer=window.setTimeout(()=>{
@@ -182,7 +183,7 @@ export function useStopNeighbours(args:{
  useEffect(()=>{
   if(!enabled||currentIndex===null||!ownTripId||ownTripId==='—')return;
   setRefreshCycle(v=>v+1);
-  const timer=window.setInterval(()=>setRefreshCycle(v=>v+1),60000);
+  const timer=window.setInterval(()=>setRefreshCycle(v=>v+1),NEIGHBOUR_POLL_MS);
   return()=>window.clearInterval(timer);
  },[enabled,currentIndex,ownTripId,date]);
  const [boardState,setBoardState]=useState<BoardState>(EMPTY);
@@ -267,7 +268,7 @@ export function useStopNeighbours(args:{
  useEffect(()=>{
   if(!enabled||!token||currentIndex===null||!stops.length)return;
   let alive=true;
-  const upcoming=stops.slice(currentIndex,currentIndex+4).filter(s=>!!s.id);
+  const upcoming=stops.slice(currentIndex,currentIndex+1+UPCOMING_STOP_COUNT).filter(s=>!!s.id);
   const timer=window.setTimeout(()=>{
    void (async()=>{
     const boards=await Promise.all(upcoming.map(async item=>{
