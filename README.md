@@ -14,12 +14,26 @@ Poslední zadané `linka/pořadí` se uchovává místně. Pokud je API klíč u
 
 ## Princip
 
-- Živá vozidla z Golemio vehiclepositions každých 20 sekund.
+- Živá vozidla z Golemio vehiclepositions okamžitě při zahájení sledování a následně přibližně každých 60 sekund; statická PID GTFS data jsou cachovaná samostatně.
 - Pořadí primárně přes `trip.sequence_id`.
 - Zastávky, časy a geometrie se u ověřeného tripu primárně načítají z lokálně publikovaného PID GTFS (`public/data/pid/v1/`); pokud nelze bezpečně potvrdit datum, identitu nebo úplnost dat, zachová se původní Golemio GTFS fallback.
 - GPS porovnává telefon s polohou vozidla a očekávanou zastávkou. Dvě po sobě jdoucí měření s rozestupem 3 sekund, dostatečná přesnost a poloha kompatibilní s Golemiem jsou potřebné k potvrzení zastávky.
 - Manuální korekce zastávky je k dispozici na hlavní obrazovce i v diagnostice.
 - Odpočet je pouze vůči **plánovanému času odjezdu**, při překročení času pokračuje záporně. Nejde o výpočet skutečného oprávnění k odjezdu.
+
+## Fáze 5 – minutový LIVE cyklus, okolní spoje a pokračující bloky (PR #56)
+
+**Živá data:** První načtení vybraného vozidla proběhne hned, pravidelný refresh `useVehicleTracking` a `usePlannedPeerPositions` každých **60 sekund**. `useCoreDutyTracking` už používá 60 sekund. Vyhledávání rozestupů neprohledává celou flotilu; dohledává konkrétní tripy z PID GTFS. `golemioClient` nadále slučuje identické současné URL požadavky, uplatňuje TTL a respektuje HTTP 429.
+
+**Pokračování sousední tramvaje:** `src/peerDutyContinuity.ts` naváže původního plánovaného souseda na bezprostřední další tripy stejného `block_id` v jednom provozním dni, pouze pokud souhlasí chronologie a přechodová zastávka. `usePlannedPeerPositions` ověřuje příchozí LIVE také podle evidenčního čísla skutečně dříve pozorovaného vozu; samotný GTFS blok neprokazuje fyzickou identitu při výměně vozu. `plannedLiveHeadways` a detail polohy používají ID aktuálního tripu, aniž by se změnila plánovaná identita souseda. Při neprokázané identitě zůstává zobrazení v režimu bez LIVE. **Rozestup po přechodu souseda na jinou linku je odhadem odvozeným z původního plánovaného odstupu a aktuálních odchylek, nikoli nově změřenou vzdáleností na společném koridoru.**
+
+**Okolní odjezdy:** `src/staticNeighbourBoard.ts` čte primárně publikovaný PID GTFS index přesného `stop_id` a provozního dne. Hledá tramvajové odjezdy **45 minut před a 20 minut po** našem plánovaném času na dané zastávce. Vyhledávací okno je širší než výsledné okno: např. tramvaj plánovaná 14:30 s potvrzeným +30 min může být relevantní v 15:00. Čerstvá živá odchylka se přiřazuje k přesnému `trip_id`; dostupná `next_stop.sequence` chrání před zobrazením již projeté nástupní hrany. Bez důvěryhodné odchylky jde pouze o plánový odhad, ne o automaticky potvrzený nulový konflikt. Pokud statický index selže, existuje výslovný Golemio departureboard fallback, nikoliv falešně kompletní výsledek.
+
+**Přednačítání:** `useStopNeighbours` předpřipravuje statické odjezdy aktuální a čtyř následujících zastávek. Přibližně po minutě obnovuje omezený výběr živých route snapshotů sdílenou `vehicleCache` a `golemioClient`, bez samostatného požadavku na každého kandidáta na každé zastávce. Limitem je nejvýše osm dalších linek v jednom cyklu; při rozsáhlém přestupním uzlu proto není zaručeno, že byl zjištěn LIVE každého spoje. Výsledky otevřeného detailu se vyhodnocují po dokončení příslušné dávky, ne po jednotlivých příchozích trasách. Automatický list může po dokončené kontrole otevřít i nulový výsledek, který poctivě uvádí **„Žádný potvrzený konflikt“**, nikoliv absolutní jistotu bez dostupného LIVE.
+
+**Indikátor:** Pod horní lištou aplikace je pouze **2px linka bez viditelného textu**. Sleduje uplynulou dobu od poslední aktualizace vlastních dat v šedesátisekundovém cyklu, barva upozorňuje na načítání, stárnutí nebo chybu. Nepředstavuje důkaz, že všechny externí zdroje byly úspěšně obnoveny; důkladné globální metriky a společný stav více nezávislých zdrojů patří do fáze 6.
+
+**Ověření a nedokončená akceptace:** Přidané automatické regresní scénáře testují ověřený přechod block_id, zamítnutí nekonzistentního přechodu, nevynechání mezilehlého tripu, vyhledání +30 min opožděné tramvaje a odmítnutí již projeté zastávky. Na skutečném telefonu je stále nutné otestovat řetězení v provozu, hranice provozního dne, počet LIVE dotazů, UI nulového výsledku, stáří dat a případnou změnu vozu uprostřed bloku. Nezaměňovat dokončení CI za terénní akceptaci.
 
 ## Časovač 2.0 – stav migrace dat a rozestupů (8. listopadu 2026)
 
