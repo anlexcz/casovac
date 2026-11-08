@@ -8,6 +8,7 @@ import {safeStaticServiceDate} from './staticTripAdapter.ts';
 import {golemioJson} from './golemioClient.ts';
 import type {NeighbourSettings} from './stopNeighbours.ts';
 import {departureBoardUrl,parseNeighbourBoard} from './stopNeighbourBoard.ts';
+import {staticNeighbourBoard} from './staticNeighbourBoard.ts';
 import type {DepartureBoard} from './stopNeighbourBoard.ts';
 import {departureBoardNameUrl,resolveOwnPlatform} from './resolveNeighbourPlatform.ts';
 import {recordNeighbourDiagnostic,summarizeNeighbourBoardResponse,summarizeNeighbourBoardCounts,summarizeTripStopSchema} from './neighbourDiagnostics.ts';
@@ -22,6 +23,9 @@ const platformCache=new Map<string,{id:string;platformCode:string;at:number}>();
 const vehicleCache=new Map<string,{features:Feature[];at:number}>();
 const PLATFORM_TTL=15*60000;
 const VEHICLE_TTL=60000;
+const BOARD_TTL=60000;
+const gtfsSeconds=(time:string)=>{const m=/^(\d{1,3}):(\d{2})(?::(\d{2}))?$/.exec(time);
+ return m?Number(m[1])*3600+Number(m[2])*60+Number(m[3]??0):null;};
 const dateLocal=(now:number)=>new Intl.DateTimeFormat('sv-SE',{
  timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'
 }).format(new Date(now));
@@ -70,13 +74,13 @@ function collectFeatures(raw:unknown):Feature[]{
 const boardId=(date:string,stopId:string)=>date+'|'+stopId;
 export function useStopNeighbours(args:{
  enabled:boolean;token:string;now:number;ownFeature:Feature|null;rawTrip?:unknown;
- ownTripId:string;stops:Stop[];currentIndex:number|null;
+ ownTripId:string;stops:Stop[];currentIndex:number|null;staticDate?:string;
  requestedIndex:number|null;settings:NeighbourSettings;knownFeatures:Feature[];
 }){
- const {enabled,token,now,ownFeature,ownTripId,stops,currentIndex,requestedIndex,settings,knownFeatures}=args;
+ const {enabled,token,now,ownFeature,ownTripId,stops,currentIndex,requestedIndex,settings,knownFeatures,staticDate}=args;
  const index=requestedIndex??currentIndex;
  const stop=index===null?null:stops[index]??null;
- const date=dateLocal(now);
+ const date=staticDate||dateLocal(now);
  const unresolvedKey=date+'|'+ownTripId+'|'+String(index??-1)+'|'+(stop?.name??'')+'|'+(stop?.arrival||stop?.departure||'');
  const [resolved,setResolved]=useState<{key:string;id:string;platformCode:string;error:string}>({key:'',id:'',platformCode:'',error:''});
  const prefetchedPlatform=platformCache.get(unresolvedKey);
@@ -122,13 +126,13 @@ export function useStopNeighbours(args:{
   return()=>{active=false;};
  },[enabled,token,unresolvedKey,stop?.name,stop?.id,stop?.arrival,stop?.departure,ownTripId,!!rememberedPlatform]);
  // The public GTFS trip contains names but often no platform IDs. A
- // short, sequential, low-priority warmup resolves only the next TWO stop
+ // short, sequential, low-priority warmup resolves only the next FOUR stop
  // occurrences before the tram reaches them. No speculative full-day scan.
  useEffect(()=>{
   if(!enabled||!token||!ownFeature||!ownTripId||ownTripId==='—'||
    currentIndex===null||!stops.length)return;
   let active=true;
-  const upcoming=stops.slice(currentIndex+1,currentIndex+3)
+  const upcoming=stops.slice(currentIndex+1,currentIndex+5)
    .map((candidate,offset)=>({candidate,index:currentIndex+1+offset}))
    .filter(({candidate})=>!!candidate.name&&!candidate.id);
   const timer=window.setTimeout(()=>{
@@ -167,13 +171,13 @@ export function useStopNeighbours(args:{
   },1500);
   return()=>{active=false;window.clearTimeout(timer);};
  },[enabled,token,ownTripId,date,currentIndex,stops,!!ownFeature]);
- const poll=Math.floor(now/20000);
+ const poll=Math.floor(now/60000);
  const [boardState,setBoardState]=useState<BoardState>(EMPTY);
  const [live,setLive]=useState<FeatureState>({key:'',features:[]});
  const [detail,setDetail]=useState<DetailState>({key:'',stops:new Map()});
  const cached=boardCache.get(boardId(date,selectedStopId));
  const readyBoard=boardState.key===key?boardState.board:
-  cached&&Date.now()-cached.at<90000?cached.board:null;
+  cached&&Date.now()-cached.at<BOARD_TTL+30000?cached.board:null;
  // A single departureboard request contains all tram routes for this *exact*
  // GTFS platform. No more full-day GTFS trip list or per-route sequential
  // discovery before the first visible row.
@@ -198,10 +202,10 @@ export function useStopNeighbours(args:{
   const old=boardCache.get(boardId(date,selectedStopId));
   const started=Date.now();
   const context={stopId:selectedStopId,stopName:stop?.name??'',tripId:ownTripId,
-   endpoint:'/v2/pid/departureboards'};
+   endpoint:'PID GTFS getDepartures / Golemio fallback'};
   recordNeighbourDiagnostic({
    ...context,at:started,kind:'request',
-   note:'ids[]='+selectedStopId+'; minutesBefore=20; minutesAfter=60; order=timetable; mode=mixed; filter=none; limit=200'+
+   note:'PID GTFS first: exact stop_id '+selectedStopId+'; -45/+20 min; Golemio board only on failure'+
     (old?' · cached board '+Math.round((started-old.at)/1000)+' s old':' · no local cache')
   });
   setBoardState(previous=>({
@@ -209,8 +213,12 @@ export function useStopNeighbours(args:{
    at:previous.key===key?previous.at:old?.at??0,
    error:'',loading:true
   }));
-  void golemioJson<DepartureBoard>(departureBoardUrl([selectedStopId]),
-   token,12000,'high').then(body=>{
+  const ownSeconds=gtfsSeconds(stop?.arrival||stop?.departure||'');
+  const source=ownSeconds===null?
+   golemioJson<DepartureBoard>(departureBoardUrl([selectedStopId]),token,60000,'high'):
+   staticNeighbourBoard(selectedStopId,date,ownSeconds).catch(()=>
+    golemioJson<DepartureBoard>(departureBoardUrl([selectedStopId]),token,60000,'high'));
+  void source.then(body=>{
    const at=Date.now();
    recordNeighbourDiagnostic({
     ...context,at,kind:'response',elapsedMs:at-started,
@@ -220,10 +228,10 @@ export function useStopNeighbours(args:{
    });
    if(!valid){
     recordNeighbourDiagnostic({...context,at,kind:'discarded',
-     note:'A pending request completed after the 20-second poll invalidated this effect.'});
+     note:'A pending request completed after the minute poll invalidated this effect.'});
     return;
    }
-   if(!Array.isArray(body?.departures))throw Error('Golemio nevrátilo očekávané pole departures.');
+   if(!Array.isArray(body?.departures))throw Error('Zdroj odjezdů nevrátil očekávané pole departures.');
    boardCache.set(boardId(date,selectedStopId),{board:body,at});
    if(boardCache.size>70)boardCache.delete(boardCache.keys().next().value!);
    setBoardState({key,board:body,at,error:'',loading:false});
@@ -241,32 +249,25 @@ export function useStopNeighbours(args:{
   return()=>{valid=false;};
  },[enabled,token,key,selectedStopId,date,poll,!!ownFeature,resolved.key,resolved.error]);
 
- // One low-priority batched request warms *all* six upcoming platforms.
- // The selected platform is handled above at high priority; this warmup
- // never starts seven competing full-day trip catalogues.
+ // Prefetch four following GTFS boarding edges without repeated API calls.
  useEffect(()=>{
-  if(!enabled||!token||currentIndex===null||!stops.length)return;
-  const ids=[...new Set(stops.slice(currentIndex,currentIndex+7)
-   .map(x=>x.id).filter(Boolean))].filter(id=>id!==selectedStopId);
-  const needed=ids.filter(id=>{
-   const entry=boardCache.get(boardId(date,id));
-   return !entry||Date.now()-entry.at>30000;
-  });
-  if(!needed.length)return;
-  let active=true;
+  if(!enabled||currentIndex===null||!stops.length)return;
+  let alive=true;
+  const upcoming=stops.slice(currentIndex,currentIndex+5).filter(s=>!!s.id);
   const timer=window.setTimeout(()=>{
-   void golemioJson<DepartureBoard>(departureBoardUrl(needed),token,15000,'low')
-    .then(body=>{
-     if(!active||!Array.isArray(body?.departures))return;
-     const at=Date.now();
-     for(const id of needed){
-      const departures=body.departures.filter(d=>d.stop?.id===id);
-      boardCache.set(boardId(date,id),{board:{departures},at});
-     }
-    }).catch(()=>{});
-  },1800);
-  return()=>{active=false;window.clearTimeout(timer);};
- },[enabled,token,ownTripId,date,currentIndex,selectedStopId,stops.length]);
+   void Promise.all(upcoming.map(async stop=>{
+    const cacheKey=boardId(date,stop.id);
+    if(boardCache.has(cacheKey))return;
+    const secs=gtfsSeconds(stop.arrival||stop.departure||'');
+    if(secs===null)return;
+    try{
+     const board=await staticNeighbourBoard(stop.id,date,secs);
+     if(alive)boardCache.set(cacheKey,{board,at:Date.now()});
+    }catch{/* GTFS unavailable, later selected stop uses safe fallback. */}
+   }));
+  },350);
+  return()=>{alive=false;window.clearTimeout(timer);};
+ },[enabled,ownTripId,date,currentIndex,stops]);
 
  // Build ONE enrichment snapshot per platform/refresh rather than
  // progressively re-rendering after every route's individual API response.
@@ -365,7 +366,10 @@ export function useStopNeighbours(args:{
  },[enabled,token,key,readyBoard,date]);
 
  const ownDelayRaw=path(ownFeature,'properties.last_position.delay.actual');
- const ownDelay=typeof ownDelayRaw==='number'&&Number.isFinite(ownDelayRaw)?
+ const ownObserved=path(ownFeature,'properties.last_position.origin_timestamp');
+ const ownStamp=typeof ownObserved==='string'?Date.parse(ownObserved):NaN;
+ const ownDelay=typeof ownDelayRaw==='number'&&Number.isFinite(ownDelayRaw)&&
+  Number.isFinite(ownStamp)&&now-ownStamp<=90000&&now-ownStamp>=-10000?
   ownDelayRaw:null;
  const result=useMemo(()=>{
   if(!enabled||!effectiveStop||!selectedStopId||index===null||!readyBoard)return null;
@@ -373,10 +377,10 @@ export function useStopNeighbours(args:{
    board:readyBoard,stop:effectiveStop,ownTripId,ownStops:stops,ownIndex:index,ownDelay,
    settings,distance:currentIndex===null?0:Math.max(0,index-currentIndex),
    features:live.key===key?[...knownFeatures,...live.features]:knownFeatures,
-   candidateStops:detail.key===key?detail.stops:undefined
+   candidateStops:detail.key===key?detail.stops:undefined,now
   });
  },[enabled,effectiveStop,index,selectedStopId,readyBoard,ownTripId,stops,ownDelay,settings,currentIndex,
-  live,knownFeatures,detail,key]);
+  live,knownFeatures,detail,key,now]);
  useEffect(()=>{
   if(!result||!readyBoard||!selectedStopId)return;
   recordNeighbourDiagnostic({
