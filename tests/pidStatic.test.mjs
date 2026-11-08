@@ -111,3 +111,50 @@ test('default fetch retains browser receiver (Illegal invocation regression)',as
   assert.equal(calls,1);
  }finally{globalThis.fetch=original;}
 });
+
+test('persistent PID shards survive engine restart without extra shard fetches',async()=>{
+ const disk=new Map();
+ const store={get:async key=>structuredClone(disk.get(key)??null),
+  put:async(key,value)=>{disk.set(key,structuredClone(value));},
+  clear:async()=>{disk.clear();}};
+ let requests=0;
+ const loader=async uri=>{
+  const key=String(uri).slice(base.length).split('?')[0];
+  requests++;
+  if(!(key in sources))return {ok:false,status:404};
+  return {ok:true,status:200,json:async()=>structuredClone(sources[key])};
+ };
+ const first=new PidStaticEngine(base,loader,store);
+ assert.equal((await first.getTrip('T9',day)).routeId,'L9');
+ const afterFirst=requests;
+ const second=new PidStaticEngine(base,loader,store);
+ assert.equal((await second.getTrip('T9',day)).routeId,'L9');
+ assert.equal(requests,afterFirst+1,'only manifest is fetched, shards are persisted');
+ assert.equal(second.getDataStatus().source,'network');
+});
+
+test('offline fallback uses manifest and shards only when date is covered',async()=>{
+ const disk=new Map();
+ const store={get:async key=>structuredClone(disk.get(key)??null),
+  put:async(key,value)=>{disk.set(key,structuredClone(value));},
+  clear:async()=>{disk.clear();}};
+ const data=manifest();
+ const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ data.days[today]??={available:true,trips:2,departures:2,routes:1,platforms:2,buckets:2,blocks:1};
+ await store.put('manifest',data);
+ await store.put(data.generatedAt+'|days/'+day+'/trips.json',sources['days/'+day+'/trips.json']);
+ await store.put(data.generatedAt+'|days/'+day+'/routes/'+filename,sources['days/'+day+'/routes/'+filename]);
+ const offline=new PidStaticEngine(base,async()=>{throw Error('offline');},store);
+ assert.equal((await offline.getTrip('T9',day)).id,'T9');
+ assert.equal(offline.getDataStatus().source,'persisted');
+ await assert.rejects(offline.getDepartures('U1','2050-01-01'),e=>e.reason==='unavailable');
+ await offline.clearPersistentCache();
+ await assert.rejects(offline.getTrip('T9',day),e=>e.reason==='network');
+});
+
+test('manifest with invalid schema must never be disguised as offline success',async()=>{
+ const disk=new Map([['manifest',manifest()]]);
+ const store={get:async key=>disk.get(key)??null,put:async()=>{},clear:async()=>{}};
+ const engine=new PidStaticEngine(base,async()=>({ok:true,status:200,json:async()=>({...manifest(),schema:'invalid'})}),store);
+ await assert.rejects(engine.getManifest(),e=>e.reason==='invalid');
+});
