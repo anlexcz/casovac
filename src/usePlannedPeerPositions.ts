@@ -8,6 +8,7 @@ import {routeOf,selectedTripId,vehicleId} from './featureUtils.ts';
 import {tripPositionUrl,exactTripPosition,freshTripPosition} from './plannedPeerPosition.ts';
 import {peerDutyCandidates} from './peerDutyContinuity.ts';
 import {vehicleObservations} from './vehicleObservationStore.ts';
+import {selectDutyLive} from './peerLiveResolve.ts';
 import {dutyPhase} from './trackedDuty.ts';
 import type {DutyPhase} from './trackedDuty.ts';
 import type {DutyTrip} from './peerDutyContinuity.ts';
@@ -75,6 +76,8 @@ export function usePlannedPeerPositions(args:{
   const original=unique(allLocal,peer.tripId,peer.line,now);
   if(original&&vehicleId(original)!=='—'){
    known.current.set(side+'|'+peer.tripId,vehicleId(original));
+   const block=routes[side].find(item=>item.tripId===peer.tripId)?.blockId;
+   if(block)known.current.set('block|'+date+'|'+block,vehicleId(original));
    if(known.current.size>60)known.current.delete(known.current.keys().next().value!);
   }
  };
@@ -119,19 +122,21 @@ export function usePlannedPeerPositions(args:{
  const find=(side:Side,peer:PlannedPeer|null)=>{
   if(!peer)return {feature:null,tripId:'',source:'none' as const};
   const available=routes[side];
-  const anchor=known.current.get(side+'|'+peer.tripId);
-  for(const candidate of [...available].reverse()){
-   const exact=unique([...current,...(vehicleObservations.retained(date,candidate.tripId,now)?
-    [vehicleObservations.retained(date,candidate.tripId,now)!]:[])],
-    candidate.tripId,candidate.line,now);
-   if(!exact||vehicleId(exact)==='—')continue;
-   if(candidate.tripId!==peer.tripId&&anchor&&vehicleId(exact)!==anchor)continue;
-   const own=unique(features,candidate.tripId,candidate.line,now);
-   return {feature:exact,tripId:candidate.tripId,
-    source:candidate.tripId!==peer.tripId&&!anchor?'provisional' as const:
-     own?'existing' as const:'direct' as const};
-  }
-  return {feature:null,tripId:'',source:'unavailable' as const};
+  const block=available.find(item=>item.tripId===peer.tripId)?.blockId;
+  const anchor=known.current.get(side+'|'+peer.tripId)||
+   (block?known.current.get('block|'+date+'|'+block):undefined);
+  const freshIds=new Set(current.filter(feature=>freshTripPosition(feature,now)).map(selectedTripId));
+  const cached=available.map(candidate=>vehicleObservations.retained(date,candidate.tripId,now))
+   .filter((feature):feature is Feature=>feature!==null&&
+    !freshIds.has(selectedTripId(feature)));
+  const found=selectDutyLive({originalTripId:peer.tripId,candidates:available,
+   features:[...current,...cached],now,anchor});
+  if(!found.feature)return {feature:null,tripId:'',source:'unavailable' as const};
+  const own=unique(features,found.tripId,
+   available.find(item=>item.tripId===found.tripId)?.line??peer.line,now);
+  return {feature:found.feature,tripId:found.tripId,
+   source:found.confidence==='provisional'?'provisional' as const:
+    own?'existing' as const:'direct' as const};
  };
  const first=find('ahead',ahead),second=find('behind',behind);
  const lastKnown=(side:Side,peer:PlannedPeer|null)=>{
