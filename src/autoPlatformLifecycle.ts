@@ -24,15 +24,16 @@ export function confirmedBeyondStop(e:StopEvidence,index:number):boolean{
  */
 export function pickAutoPlatform(args:{
  stops:Stop[];currentIndex:number|null;
- entries:PidPlatformEncounter[];stopMap:Readonly<Record<string,string>>;
+ entries:PidPlatformEncounter[];stopMap:Readonly<Record<string,string>>;mode?:'important'|'all';
  evidence:StopEvidence;remainingToCurrent:number|null;remainingToTarget:(index:number)=>number|null;
  leadSeconds:number;
 }):AutoPlatformTarget|null{
- const {stops,currentIndex,entries,stopMap,evidence,remainingToCurrent,remainingToTarget,leadSeconds}=args;
+ const {stops,currentIndex,entries,stopMap,evidence,remainingToCurrent,remainingToTarget,leadSeconds,mode='important'}=args;
  if(currentIndex===null||currentIndex<0)return null;
  const eligible=new Map<number,AutoPlatformTarget>();
  for(const [sequence,physicalId,kind] of entries){
-  if(kind!=='mixed-confirmed'&&kind!=='mixed-platform'&&kind!=='tram-branch-confirmed'&&kind!=='tram-route-set')continue;
+  if(kind==='shared-platform'&&mode!=='all')continue;
+  if(!['mixed-confirmed','mixed-platform','tram-branch-confirmed','tram-route-set','shared-platform'].includes(kind))continue;
   const index=stops.findIndex(stop=>stop.sequence===sequence&&!!stop.id&&stopMap[stop.id]===physicalId);
   if(index<1)continue; // Cannot preview the first trip stop from a predecessor.
   eligible.set(index,{index,physicalId,kind});
