@@ -16,7 +16,7 @@ const baseDefault=()=>{
 };
 export const phase2Scenarios:{id:Phase2Scenario;title:string;description:string;mode:'real'|'simulation'}[]=[
  {id:'load',title:'1. První načtení',description:'Načte jízdní řád a ověří zápis segmentů do IndexedDB.',mode:'real'},
- {id:'restart',title:'2. Nová relace',description:'Založí nový Static Engine a ověří, že již uložené segmenty nevyžadují další HTTP.',mode:'real'},
+ {id:'restart',title:'2. Nová instance klienta',description:'Bez obnovy stránky vytvoří nový Static Engine a ověří, že již uložené segmenty nevyžadují další HTTP.',mode:'real'},
  {id:'offline',title:'3. Výpadek sítě',description:'V nové instanci úmyslně zablokuje fetch a ověří čtení uloženého jízdního řádu.',mode:'simulation'},
  {id:'version',title:'4. Změna datové verze',description:'Simuluje nesoulad kontrolního součtu nové verze a vyžaduje jeho odmítnutí.',mode:'simulation'},
  {id:'midnight',title:'5. Přechod přes půlnoc',description:'Ověří pražské provozní datum a čas 25:10, bez změny systémových hodin.',mode:'simulation'}
