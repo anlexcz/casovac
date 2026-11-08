@@ -28,6 +28,7 @@ test('audit does not store token, response body or full URL; reports real HTTP s
  assert.equal(report.summary[0].coalesced,1);
  assert.equal(report.summary[0].rateLimited,1);
  assert.equal(report.summary[0].meanDurationMs,176);
- assert.ok(!JSON.stringify(values).includes('SECRET'));
+ assert.ok(!JSON.stringify([...values.values()]).includes('SECRET'));
+ assert.equal(report.events.every(event=>event.scenario==='tracking-15m'),true);
  delete globalThis.window;
 });
