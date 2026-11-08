@@ -38,6 +38,10 @@ def platform_encounters(day_routes, stop_times, trip_meta, routes, stop_map,
     result = defaultdict(list)
     for physical_id, items in visits.items():
         items.sort(key=lambda row: (row[0], row[1], row[2]))
+        # Static stop topology is independent of whether the next road service
+        # happens to be within two minutes. A quiet shared platform is still
+        # relevant and may legitimately show "no nearby services".
+        has_road_modes = any(item[3] in OTHER_ROAD for item in items)
         left = 0
         for arrival, trip_id, seq, mode, previous in items:
             if mode != TRAM:
@@ -55,6 +59,8 @@ def platform_encounters(day_routes, stop_times, trip_meta, routes, stop_map,
                     mixed.add(other_trip)
                 elif other_mode == TRAM and previous and other_previous and previous != other_previous:
                     tram_candidates.add(other_trip)
+            if has_road_modes:
+                result[trip_id].append([seq, physical_id, "mixed-platform", []])
             if mixed:
                 result[trip_id].append([seq, physical_id, "mixed-confirmed", sorted(mixed)])
             if tram_candidates:
