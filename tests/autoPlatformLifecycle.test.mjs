@@ -29,6 +29,13 @@ test('opens verified mixed platform only on the final approach to the preceding 
  assert.equal(pick({remainingToCurrent:35}),null);
  assert.equal(pick({remainingToCurrent:130}),null);
 });
+test('next common platform can be prefetched three stops early without opening early',()=>{
+ assert.equal(pick({currentIndex:0,remainingToCurrent:240}),null);
+ const prepared=pick({currentIndex:0,remainingToCurrent:240,prefetchOnly:true});
+ assert.equal(prepared?.index,2);
+ assert.equal(pick({currentIndex:null,prefetchOnly:true}),null);
+});
+
 test('manual timetable browsing never counts as evidence for an automatic preview',()=>{
  assert.equal(pick({currentIndex:null}),null);
 });
