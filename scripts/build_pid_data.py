@@ -18,6 +18,7 @@ import tempfile
 import urllib.request
 import zipfile
 from zoneinfo import ZoneInfo
+from scripts.build_connection_index import platform_encounters
 
 GTFS_URL = "https://data.pid.cz/PID_GTFS.zip"
 STOPS_URL = "https://data.pid.cz/stops/json/stops.json"
@@ -244,6 +245,12 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             buckets[departure_bucket(stop_id)][stop_id] = events
         for bucket_id, contents in buckets.items():
             write_json(base / "departures" / (bucket_id + ".json"), contents)
+        # Prepared planned encounters on authoritative physical PID platforms.
+        # Tram branch candidates are NOT auto-opening decisions without shape proof.
+        encounters = platform_encounters(
+            day_routes[label], stop_times, trip_meta, routes, stop_map
+        )
+        write_json(base / "platform-encounters.json", encounters)
         for entries in blocks.values():
             entries.sort(key=lambda e: (e[0], e[1]))
         write_json(base / "trips.json", locator)
@@ -252,6 +259,7 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "trips": len(locator), "departures": sum(map(len, departures.values())),
             "routes": len(day_routes[label]), "platforms": len(departures),
             "buckets": len(buckets), "blocks": len(blocks),
+            "platformEncounterTrips": len(encounters),
             "available": bool(locator)
         }
     shape_files = defaultdict(dict)
@@ -291,7 +299,8 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "trip": "[serviceId,headsign,directionId,blockId,shapeId,shortName,[[stopId,arrival,departure,sequence,operationType],...]]",
             "departure": "[departureSeconds,tripId,routeId,stopSequence]",
             "platform": "[groupId,platformCode,lat,lon,zone,mode,wheelchair,gtfsIds,alternateName]",
-            "group": "[nodeId,name,municipality,lat,lon,physicalPlatformIds]"
+            "group": "[nodeId,name,municipality,lat,lon,physicalPlatformIds]",
+            "platformEncounter": "tripId -> [[stopSequence,physicalPlatformId,kind,peerTripIds],...]; mixed-confirmed versus tram-branch-candidate"
         }
     }
     # A release manifest pins each shard's bytes. Clients reject mixed-generation
