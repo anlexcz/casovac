@@ -19,10 +19,6 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
  const rear=plannedReady?plannedHeadways.data.behind:null;
  const frontLive=plannedReady?plannedLiveHeadways.ahead?.seconds??null:null;
  const rearLive=plannedReady?plannedLiveHeadways.behind?.seconds??null:null;
- const frontPlan=!!front&&frontLive===null&&plannedReady;
- const rearPlan=!!rear&&rearLive===null&&plannedReady;
- const frontValue=frontLive??(frontPlan?front?.scheduledGap:null);
- const rearValue=rearLive??(rearPlan?rear?.scheduledGap:null);
  // Mobile keyboards change the visual viewport without necessarily changing
  // 100dvh. Keep the chooser anchored to the actual visible viewport.
  const [chooserViewport,setChooserViewport]=useState<{height:number;top:number}|null>(null);
