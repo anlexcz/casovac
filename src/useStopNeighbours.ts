@@ -210,7 +210,7 @@ export function useStopNeighbours(args:{
   let alive=true;
   const time=gtfsSeconds(stop?.arrival||stop?.departure||'');
   if(time===null){setTransition({key:transitionKey,data:new Map(),ready:true});return;}
-  void findBoardContinuations(readyBoard,date,time).then(data=>{
+  void findBoardContinuations(readyBoard,date,time,pidStatic,selectedStopId).then(data=>{
    if(!alive)return;
    continuationCache.set(transitionKey,data);
    if(continuationCache.size>80)continuationCache.delete(continuationCache.keys().next().value!);
