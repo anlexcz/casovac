@@ -8,6 +8,7 @@ import {formatHeadway} from './lineHeadways';
 import {chooserStop} from './chooserStops';
 import {useAppController,vehicleId} from './useAppController';
 import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopIdentity';
+import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit';
 
 type Props=ReturnType<typeof useAppController>;
 export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
@@ -261,6 +262,23 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
       lookahead:Math.max(1,Math.min(10,Number(e.target.value)||1))
      })}/>
     <p className="hint">Spoje se filtrují podle očekávaného příjezdu, ale řadí výhradně podle JŘ. Používá se přesné ID nástupní hrany. Aktualizace nevyžaduje restart sledování.</p>
+    <div className="settingsSectionHeading">Audit API požadavků · Fáze 0</div>
+    <p className="hint">Pouze lokální záznam skutečných HTTP požadavků, zásahů cache a sdílených požadavků. Bez API klíčů, GPS, konkrétních trip ID nebo úplných URL. Záznam je v paměti této relace prohlížeče (max. 1500 událostí).</p>
+    <label htmlFor="networkAuditScenario">Testovací scénář</label>
+    <select id="networkAuditScenario" defaultValue={getNetworkAuditScenario()}
+     onChange={e=>setNetworkAuditScenario(e.target.value)}>
+     <option value="default">Běžné použití</option>
+     <option value="start">Spuštění sledování</option>
+     <option value="tracking-15m">15 minut sledování</option>
+     <option value="chain">Řetězená linka</option>
+     <option value="chooser">Výběr spoje</option>
+     <option value="stop-board">Okolní odjezdy</option>
+     <option value="background">Pozadí / návrat</option>
+     <option value="api-outage">Výpadek API</option>
+     <option value="other-mode">Jiný druh dopravy</option>
+    </select>
+    <button className="quiet full" type="button" onClick={downloadNetworkAudit}>Export auditu API (JSON)</button>
+    <button className="quiet full" type="button" onClick={clearNetworkAudit}>Vymazat zaznamenané požadavky</button>
     <button className="quiet full" disabled={!token} onClick={forget}>Zapomenout API klíč</button>
     <button className="primary full" onClick={()=>setSettings(false)}>Hotovo</button>
    </div>
