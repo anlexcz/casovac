@@ -364,8 +364,13 @@ export class PidStaticEngine{
  /** Daily precomputed physical-platform encounters; no Golemio calls. */
  async getPlatformEncounters(tripId:string,day:string):Promise<PidPlatformEncounter[]>{
   const manifest=await this.day(day);
-  const rows=await this.request<Record<string,PidPlatformEncounter[]>>(
-   'days/'+day+'/platform-encounters.json',manifest.generatedAt);
+  if(!tripId)return [];
+  const shards=manifest.days[day]?.platformEncounterShards;
+  const path=shards===16?
+   'days/'+day+'/platform-encounters/'+
+    String((await this.hash(tripId))[0]%16).padStart(2,'0')+'.json':
+   'days/'+day+'/platform-encounters.json'; // Compatibility with phase-5B drafts.
+  const rows=await this.request<Record<string,PidPlatformEncounter[]>>(path,manifest.generatedAt);
   return rows[tripId]??[];
  }
  async getBlockTrips(blockId:string,day:string):Promise<PidBlockTrip[]>{
