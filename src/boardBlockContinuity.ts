@@ -16,16 +16,33 @@ const seconds=(time:string):number|null=>{
  return m?Number(m[1])*3600+Number(m[2])*60+Number(m[3]):null;
 };
 type TripData={trip:PidTrip;stops:PidTripStop[];line:string;id:string};
+const prague=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Prague',
+ hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+const scheduledAt=(row:NonNullable<DepartureBoard['departures']>[number],ownSeconds:number)=>{
+ if(typeof row.scheduledSeconds==='number'&&Number.isFinite(row.scheduledSeconds))
+  return row.scheduledSeconds;
+ const iso=row.arrival_timestamp?.scheduled??row.departure_timestamp?.scheduled;
+ if(!iso)return null;
+ const date=new Date(iso);
+ if(!Number.isFinite(date.getTime()))return null;
+ const parts=prague.formatToParts(date);
+ const get=(type:string)=>Number(parts.find(p=>p.type===type)?.value??0);
+ const local=get('hour')*3600+get('minute')*60+get('second');
+ return [local-86400,local,local+86400,local+172800]
+  .sort((x,y)=>Math.abs(x-ownSeconds)-Math.abs(y-ownSeconds))[0];
+};
 export async function findBoardContinuations(
- board:DepartureBoard,date:string,ownSeconds:number,source:Source=pidStatic
+ board:DepartureBoard,date:string,ownSeconds:number,source:Source=pidStatic,
+ selectedStopId=''
 ):Promise<Map<string,BoardContinuation>>{
  const output=new Map<string,BoardContinuation>();
- const physical=new Set(board.physicalStopIds??[]);
+ const physical=new Set(board.physicalStopIds?.length?board.physicalStopIds:
+  selectedStopId?[selectedStopId]:[]);
  if(!physical.size||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date))return output;
  const candidates=[...new Map((board.departures??[])
   .filter(row=>!!row.trip?.id&&!!row.stop?.id&&physical.has(row.stop.id)&&
-   typeof row.scheduledSeconds==='number'&&
-   Math.abs(row.scheduledSeconds-ownSeconds)<=360)
+   scheduledAt(row,ownSeconds)!==null&&
+   Math.abs(scheduledAt(row,ownSeconds)!-ownSeconds)<=360)
   .map(row=>[row.trip!.id!,row])).values()].slice(0,48);
  if(candidates.length<2)return output;
  const found=await Promise.all(candidates.map(async row=>{
