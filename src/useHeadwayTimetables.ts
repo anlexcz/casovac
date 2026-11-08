@@ -1,5 +1,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import {golemioJson} from './golemioClient';
+import {getStaticHeadwayDetail,getStaticHeadwayChain} from './headwayStatic.ts';
+import {safeStaticServiceDate} from './staticTripAdapter.ts';
 import {parseStops} from './tripData';
 import type {Stop} from './tripData';
 import {routeOf,selectedTripId,vehicleId} from './featureUtils';
@@ -39,6 +41,18 @@ const detailUrl=(id:string,date:string)=>{
 async function getDetail(id:string,date:string,token:string):Promise<HeadwayTripDetail|null>{
  const key=date+'|'+id,old=detailCache.get(key);
  if(old&&Date.now()-old.at<TTL)return old.detail;
+ // Only attempt static GTFS when the date is a safe, explicit Prague
+ // service date. Otherwise keep established Golemio as the fallback.
+ if(safeStaticServiceDate(date,true,new Date())){
+  try{
+   const detail=await getStaticHeadwayDetail(id,date);
+   if(detail){
+    detailCache.set(key,{detail,at:Date.now()});
+    if(detailCache.size>240)detailCache.delete(detailCache.keys().next().value!);
+    return detail;
+   }
+  }catch{/* Missing or invalid PID shard: preserve legacy Golemio fallback. */}
+ }
  try{
   const detail=await golemioJson<HeadwayTripDetail>(detailUrl(id,date),token,TTL,'low');
   if(detail?.trip_id!==id)return null;
@@ -96,6 +110,17 @@ export function useHeadwayTimetables(args:{
     if(!alive)return;
     for(const detail of details){
      if(!detail?.block_id)continue;
+     // An exact PID trip already has a block index. Discover any
+     // neighbouring line from local GTFS; do not scan /gtfs/trips?stopId.
+     if('pidStatic' in detail&&detail.pidStatic&&detail.trip_id){
+      try{
+       const chain=await getStaticHeadwayChain(
+        detail.trip_id,detail.route?.route_short_name??'',date);
+       if(!alive)return;
+       for(const line of chain?.lines??[])if(line!==primaryLine)found.add(line);
+      }catch{/* Only the optional discovery failed; continue other peers. */}
+      continue;
+     }
      const stops=parseStops(detail);
      const candidates:HeadwayTripDetail[]=[];
      if(detail.block_id!==detail.trip_id){
@@ -231,6 +256,24 @@ export function useHeadwayTimetables(args:{
     if(!stopIdsOk(rawStops))continue;
     let combined:Stop[]=rawStops;
     let verifiedLink:HeadwayLink|null=null;
+    if('pidStatic' in detail&&detail.pidStatic){
+     // Local PID schedules have exact stop IDs, times and block identity;
+     // no Golemio trip-detail or terminal-list requests are necessary.
+     try{
+      const local=await getStaticHeadwayChain(id,detail.route?.route_short_name??'',date);
+      if(!alive)return;
+      if(local){
+       combined=local.stops;
+       verifiedLink=local.link;
+      }
+     }catch{/* Use the individually verified static trip stops. */}
+     serviceCache.set(date+'|'+id,{stops:combined,at:Date.now()});
+     if(verifiedLink)linkCache.set(date+'|'+id,{link:verifiedLink,at:Date.now()});
+     else linkCache.delete(date+'|'+id);
+     if(serviceCache.size>240)serviceCache.delete(serviceCache.keys().next().value!);
+     if(alive)setRevision(v=>v+1);
+     continue;
+    }
     if(id===selectedId&&activePair&&selectedDetail&&selectedCompanion){
      combined=activePair.stops;
      verifiedLink=linkFromPair(activePair,selectedDetail,selectedCompanion);
