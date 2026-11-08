@@ -58,6 +58,12 @@ Automaticky není třeba znovu zobrazovat panel pro cílovou zastávku C, jestli
 
 Aby panel nevyskočil už hned při odjezdu z A na dlouhém úseku A→B, čas otevření pro cíl C je nyní omezen na posledních `clamp(25 % plánované jízdní doby A→B, 12 s, 30 s)` před očekávaným příjezdem do **B**, zároveň se respektuje nastavený maximální předstih. Je-li už potvrzený pobyt v B, panel se může otevřít hned. Otevřený panel zůstává připnutý do ověřeného odjezdu z cíle C podle dosavadního stavového automatu. Bez úplných dat není dovoleno zaměňovat „zatím neověřeno“ za „všechny spoje už znám“.
 
+## Zobrazení po výpadku LIVE a minimalistické značky zastávek
+
+Barva odjezdu je odvozena ze **stejných potvrzených údajů** jako před aktualizací; samotný požadavek ani jediné chybějící LIVE měření nesmí přebarvit šipku na šedou. Pro stejný `tripId`, stejný plánový čas a stejnou plánovou pozici se poslední potvrzená odchylka, pořadí a vůz uchovají nejvýše **180 sekund od posledního platného získání údajů**. Po úspěšně získané nové odchylce se hodnocení přepočítá, při skutečné změně identity/směru/plánového času se staré údaje nepřenášejí. Po 180 sekundách bez použitelné nové odchylky se zobrazí neutrální **JŘ**. Zastaralé údaje lze poznat z popisku; uchování není dokladem čerstvého LIVE měření. Cache je izolovaná mezi jednotlivými panely konkrétních zastávek.
+
+V seznamu zastávek je **jediná topologická značka: nenápadný plný puntík ●** u potvrzeného příjezdu nové tramvajové linky (`tram-route-set` či `tram-branch-confirmed`). Ostatní sdílené a smíšené nástupní hrany zůstávají bez ikonky, ale logika automatického otevření panelu se **nemění**. Křížek pro zastávku na znamení je záměrně odložený: aktuálně publikovaný PID index bezpečně neobsahuje jednoznačný atribut tohoto stavu pro konkrétní trip a zastávku; nebudeme jej odvozovat z názvu nebo náhodného typu zastávky.
+
 ## Ochrany a omezení
 
 - Golemio se typicky obnovuje po 60 s. Přednačtení používá jeden statický vyhledávací index a limitovaný společný LIVE snapshot. Pokud se nepodaří získat všechny linky/odchylky, je výsledek označen jako **neúplný**, nikoli jako bezpečně bezkonfliktní.
