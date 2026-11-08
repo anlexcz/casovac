@@ -63,6 +63,9 @@ const matchLive=(peer:PlannedPeer,observedId:string,features:Feature[],now:numbe
 export default function HeadwayDetails({planned,loading,live,features,selected,date,now,tripId,peerTripIds,
  ownDutyId,peerDutyIds,
  phases={ahead:'unknown',behind:'unknown'},peerStatus={ahead:'none',behind:'none'}}:Props){
+ // Cache by the *pair*, not by side alone: moving between timetable stops
+ // may briefly select a different peer, then return to the same actual duty.
+ const snapshots=useRef<Map<string,HeadwaySnapshot>>(new Map());
  const remembered=useRef<Record<Side,{
   snapshot:HeadwaySnapshot|null;peerTripId:string;ownDutyId:string;
  }>>({
@@ -133,9 +136,20 @@ export default function HeadwayDetails({planned,loading,live,features,selected,d
     previousOwnDuty:prior.ownDutyId,nextOwnDuty:ownDutyId||'trip:'+tripId,
     previousKey:prior.snapshot.key,nextKey:stableKey
    });
-  const previous=canPromote&&prior.snapshot?{...prior.snapshot,key:stableKey}:
-   prior.snapshot;
+  const previous=snapshots.current.get(stableKey)??(
+   canPromote&&prior.snapshot?{...prior.snapshot,key:stableKey}:null);
   const stable=stableHeadway(previous,stableKey,measured,observationTime,now);
+  if(stable.snapshot)snapshots.current.set(stableKey,stable.snapshot);
+  else snapshots.current.delete(stableKey);
+  // Bound the small historical map; expiry uses the actual source time, not
+  // the time the user visited the reference stop.
+  if(snapshots.current.size>20){
+   for(const [id,item] of snapshots.current){
+    if(now-item.observedAt>180000)snapshots.current.delete(id);
+   }
+   while(snapshots.current.size>20)
+    snapshots.current.delete(snapshots.current.keys().next().value!);
+  }
   remembered.current[which]={
    snapshot:stable.snapshot,peerTripId:peer.tripId,
    ownDutyId:ownDutyId||'trip:'+tripId
