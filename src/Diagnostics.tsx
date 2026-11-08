@@ -8,6 +8,9 @@ import type {RemoteState} from './remoteTracking';
 import type {useRecorder} from './recorder';
 import type {DepartureTelemetry} from './departure';
 import type {useStopNeighbours} from './useStopNeighbours';
+import type {PeerPositionStatus} from './usePlannedPeerPositions.ts';
+import type {DutyPhase} from './trackedDuty.ts';
+import type {PeerLiveResolution} from './peerLiveResolve.ts';
 import {useMemo,useState} from 'react';
 import {useNeighbourDiagnostics,downloadNeighbourDiagnostics} from './neighbourDiagnostics';
 import {auditStopIds,stopAuditReport} from './stopAudit';
@@ -34,10 +37,15 @@ type Props={
  recorder:ReturnType<typeof useRecorder>;
  neighbourGate:ReturnType<typeof useStopNeighbours>['gate'];
  probeNeighbourBoard:()=>Promise<void>;
+ peerPositionStatus:PeerPositionStatus;
+ peerPhases:Record<'ahead'|'behind',DutyPhase>;
+ peerReasons:Record<'ahead'|'behind',PeerLiveResolution['reason']|'none'>;
+ peerLastKnown:Record<'ahead'|'behind',{vehicle:string;observedAt:number}|null>;
 };
 const value=(v:unknown)=>v===undefined||v===null?'—':String(v);
 const path=(obj:unknown,p:string):unknown=>p.split('.').reduce<unknown>((v,k)=>v&&typeof v==='object'?(v as Record<string,unknown>)[k]:undefined,obj);
-export default function Diagnostics({trackedService,coreTracking,active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,chainDiagnostic,lastHandoff,plannedHandoff,handoffContinuity,handoffDeparture,recorder,neighbourGate,probeNeighbourBoard}:Props){
+export default function Diagnostics({trackedService,coreTracking,active,features,chosen,trip,gps,gpsError,gpsWanted,gpsAge,age,lastFetch,error,matchingCount,position,positionState,vehicleDistance,manual,setManual,selectedTrip,setSelectedTrip,startGps,stopGps,nextStopId,departure,remote,remoteProgress,onboard,onboardDecision,terminalWaiting,terminalName,queryMode,terminalCandidates,lastSeen,relatedVehicle,chainDiagnostic,lastHandoff,plannedHandoff,handoffContinuity,handoffDeparture,recorder,neighbourGate,probeNeighbourBoard,
+ peerPositionStatus,peerPhases,peerReasons,peerLastKnown}:Props){
  const stops:Stop[]=trip.stops;
  const neighbourTrace=useNeighbourDiagnostics();
  const neighbourLast=neighbourTrace.events.at(-1)??null;
@@ -74,6 +82,21 @@ export default function Diagnostics({trackedService,coreTracking,active,features
    <div><small>POSLEDNÍ OVĚŘENÁ LINKA</small><strong>{coreTracking.decision.candidate?
     coreTracking.decision.candidate.route+'/'+coreTracking.decision.candidate.order:'—'}</strong></div>
    {coreTracking.error&&<div><small>POSLEDNÍ CHYBA KONTROLY</small><strong>{coreTracking.error}</strong></div>}
+  </div>
+ </section>
+ <section className="panel" aria-label="Diagnostika plánovaných rozestupů">
+  <h2>Plánované rozestupy · block_id / LIVE</h2>
+  <p className="hint">Pevný JŘ určuje, který výkon patří před a za. Skrytí před výjezdem nebo při pobytu na konečné není ztráta LIVE. Zastaralý poslední údaj není považovaný za nové měření.</p>
+  <div className="details">
+   {(['ahead','behind'] as const).map(side=><div key={side}>
+    <small>{side==='ahead'?'SPOJ PŘEDE MNOU':'SPOJ ZA MNOU'}</small>
+    <strong>{'Fáze: '+peerPhases[side]+' · LIVE: '+peerPositionStatus[side]+
+     ' · důvod: '+peerReasons[side]}</strong>
+    <small>{peerLastKnown[side]?
+     'Poslední vůz #'+peerLastKnown[side]!.vehicle+' · měření '+
+      new Date(peerLastKnown[side]!.observedAt).toLocaleTimeString('cs-CZ'):
+     'Poloha zatím nebyla potvrzena'}</small>
+   </div>)}
   </div>
  </section>
  <section className="panel" aria-label="Diagnostika okolních spojů">
