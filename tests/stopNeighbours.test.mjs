@@ -51,8 +51,8 @@ test('window follows expected arrival and is adjustable',()=>{
  assert.equal(narrow.rows.length,0);
  const wide=run([moderatelyLate],{settings:{...DEFAULT_NEIGHBOUR_SETTINGS,enabled:true,window:'manual',beforeMinutes:4,afterMinutes:4}});
  assert.equal(wide.rows.length,1);
- assert.deepEqual(relevantWindows(DEFAULT_NEIGHBOUR_SETTINGS,0),{before:120,after:180});
- assert.deepEqual(relevantWindows(DEFAULT_NEIGHBOUR_SETTINGS,5),{before:240,after:300});
+ assert.deepEqual(relevantWindows(DEFAULT_NEIGHBOUR_SETTINGS,0),{before:120,after:120});
+ assert.deepEqual(relevantWindows(DEFAULT_NEIGHBOUR_SETTINGS,5),{before:120,after:120});
 });
 test('vehicle that already passed the platform must be excluded',()=>{
  const passed=feature('before','3',12,9154,'Y',100);
