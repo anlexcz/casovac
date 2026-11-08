@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {peerDutyCandidates} from '../src/peerDutyContinuity.ts';
 import {staticNeighbourBoard,STATIC_LOOKBACK_SECONDS} from '../src/staticNeighbourBoard.ts';
+import {parseNeighbourBoard} from '../src/stopNeighbourBoard.ts';
+import {DEFAULT_NEIGHBOUR_SETTINGS} from '../src/stopNeighbours.ts';
 
 const day='2026-11-08';
 const stop=(id,name,arrival,departure,sequence)=>({
@@ -70,4 +72,39 @@ test('GTFS board includes a tram 30 minutes behind the schedule',async()=>{
  const board=await staticNeighbourBoard('S',day,base,fixture);
  assert.deepEqual(board.departures.map(x=>x.trip.id),['late','near']);
  assert.equal(board.departures[0].scheduledSeconds,base-1800);
+});
+
+test('a peer scheduled 30 minutes early is displayed if fresh LIVE makes ETA equal to own time',()=>{
+ const now=Date.parse('2026-11-08T14:00:00Z'); // 15:00 Prague
+ const board={departures:[{trip:{id:'late'},route:{short_name:'5',type:0},
+  stop:{id:'S'},stopSequence:4,scheduledSeconds:14*3600+30*60}]};
+ const stop={id:'S',name:'Zastávka',sequence:4,arrival:'15:00:00',departure:'15:00:00',
+  lat:50,lon:14};
+ const feature={properties:{trip:{gtfs:{trip_id:'late',route_short_name:'5'},
+  vehicle_registration_number:'9376',sequence_id:'10'},
+  last_position:{origin_timestamp:new Date(now-1000).toISOString(),
+   state_position:'on_track',next_stop:{sequence:3},
+   delay:{actual:1800}}}};
+ const args={board,stop,ownTripId:'own',ownStops:[stop],ownIndex:0,
+  ownDelay:0,settings:DEFAULT_NEIGHBOUR_SETTINGS,distance:0,
+  features:[feature],now};
+ const res=parseNeighbourBoard(args);
+ assert.equal(res.rows.length,1);
+ assert.equal(res.rows[0].predictedDifference,0);
+ assert.equal(res.rows[0].vehicle,'9376');
+ assert.equal(parseNeighbourBoard({...args,features:[]}).rows.length,0);
+});
+test('a LIVE tram that passed the platform is not an approaching conflict',()=>{
+ const now=Date.parse('2026-11-08T14:00:00Z');
+ const stop={id:'S',name:'Zastávka',sequence:4,arrival:'15:00:00',
+  departure:'15:00:00',lat:50,lon:14};
+ const feature={properties:{trip:{gtfs:{trip_id:'late',route_short_name:'5'},
+  vehicle_registration_number:'9376'},last_position:{
+  origin_timestamp:new Date(now-1000).toISOString(),state_position:'on_track',
+  next_stop:{sequence:5},delay:{actual:1800}}}};
+ const board={departures:[{trip:{id:'late'},route:{short_name:'5',type:0},
+  stop:{id:'S'},scheduledSeconds:14*3600+30*60,stopSequence:4}]};
+ assert.equal(parseNeighbourBoard({board,stop,ownTripId:'own',ownStops:[stop],
+  ownIndex:0,ownDelay:0,settings:DEFAULT_NEIGHBOUR_SETTINGS,distance:0,
+  features:[feature],now}).rows.length,0);
 });
