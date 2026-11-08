@@ -22,14 +22,14 @@ const sources={
  },
  'stops/gtfs-map.json':{U1:'1040/1',U2:'4/2'},
  'stops/platforms.json':{'1040/1':['1040-a','A',50,14,'P','tram','possible',['U1'],'Anděl']},
- 'days/'+day+'/trips.json':{T9:[route,filename],T10:[route,filename]},
- 'days/'+day+'/routes/'+filename:{
+ ['days/'+day+'/trips.json']:{T9:[route,filename],T10:[route,filename]},
+ ['days/'+day+'/routes/'+filename]:{
   T9:['service','Řepy','0','B9','shape','',[
    ['U1',86100,86160,1,'1'],['U2',86820,86820,2,'1']]],
   T10:['service','Řepy','0','B9','shape','',[
    ['U2',87300,87360,1,'1']]]},
- 'days/'+day+'/blocks.json':{B9:[[86100,'T9',route],[87300,'T10',route]]},
- 'shapes/'+filename:{shape:[[50,14],[50.1,14.1]]},
+ ['days/'+day+'/blocks.json']:{B9:[[86100,'T9',route],[87300,'T10',route]]},
+ ['shapes/'+filename]:{shape:[[50,14],[50.1,14.1]]},
 };
 for(const id of ['U1','U2'])sources['days/'+day+'/departures/'+bucket(id)+'.json']??={};
 sources['days/'+day+'/departures/'+bucket('U1')+'.json'].U1=[[86160,'T9','L9',1]];
