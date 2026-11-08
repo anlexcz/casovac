@@ -29,7 +29,7 @@ test('only PID-confirmed sibling IDs count as shared physical boarding edge',asy
 });
 test('unknown or damaged physical metadata never extends the search',async()=>{
  assert.deepEqual(await physicalBoardingIds('UNKNOWN',registry),['UNKNOWN']);
- const broken={...registry,async getPlatforms(){return {'P/1':['group','A',50,14,'','','','',['BUS'],'']};}};
+ const broken={...registry,async getPlatforms(){return {'P/1':['group','A',50,14,'','','',['BUS'],'']};}};
  assert.deepEqual(await physicalBoardingIds('TRAM',broken),['TRAM']);
 });
 test('one failed sibling shard cannot silently substitute a neighbouring stop',async()=>{
