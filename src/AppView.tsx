@@ -1,6 +1,5 @@
 import {useEffect,useState} from 'react';
 import {useNeighbourIdleTimeout} from './useNeighbourIdleTimeout';
-import {isAutoStopActive} from './autoStopSheet';
 import StopNeighbourSheet from './StopNeighbourSheet';
 import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
@@ -12,7 +11,7 @@ import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopI
 import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit.ts';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,plannedHeadways,plannedLiveHeadways,peerFeatures,peerTripIds,peerPositionLoading,planDate,now,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,autoTargetIndex,autoTransfer,pinnedStillActive,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,plannedHeadways,plannedLiveHeadways,peerFeatures,peerTripIds,peerPositionLoading,planDate,now,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
  const refreshAge=lastFetch===null?null:Math.max(0,now-lastFetch);
  const refreshPercent=refreshAge===null?4:Math.max(4,Math.min(100,refreshAge/60000*100));
@@ -44,32 +43,29 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
  const sheetKey=neighbourStopIdentity(tripId,sheetIndex,sheetStop);
  const verifiedNeighbourData=neighbourResultMatchesStop(stopNeighbours.result,
   sheetStop&&stopNeighbours.gate.selectedStopId?{...sheetStop,id:stopNeighbours.gate.selectedStopId}:sheetStop)?stopNeighbours.result:null;
- const hasNearby=(verifiedNeighbourData?.rows.length??0)>0;
- const noConfirmedConflict=!!verifiedNeighbourData&&stopNeighbours.complete&&!hasNearby;
- // The live-data criteria decide WHEN to open, not whether an already
- // opened automatic sheet should stay on screen. Delays and API refreshes
- // must not make it disappear during the same stop.
- const pinnedActive=isAutoStopActive(pinnedAutoNeighbour,tripId,displayedIndex,trip.stops.length);
+ // Open only on precomputed, verified physical boarding edges. An empty
+ // completed board is informative; no near-by departure is NOT a trigger
+ // on an ordinary (unmarked) stop. LIVE losses never unpin an open sheet.
+ const pinnedActive=!!pinnedAutoNeighbour&&pinnedStillActive;
  const eligibleAuto=neighbourSettings.enabled&&neighbourSettings.mode!=='off'&&
-  neighbourIndex===null&&sheetIndex!==null&&sheetStop!==null&&
-  dismissedStop!==sheetKey&&stopNeighbours.complete&&
-  (autoNeighbourIndex===displayedIndex||autoNeighbourReady)&&
-  (noConfirmedConflict||(hasNearby&&
-   (neighbourSettings.mode==='all'?!!verifiedNeighbourData?.sharedOutgoing:!!verifiedNeighbourData?.significant)));
+  neighbourIndex===null&&autoNeighbourReady&&autoTargetIndex!==null&&
+  sheetIndex===autoTargetIndex&&sheetStop!==null&&dismissedStop!==sheetKey&&
+  stopNeighbours.complete;
  const autoOpen=neighbourIndex===null&&dismissedStop!==sheetKey&&
   (pinnedActive||eligibleAuto);
  const sheetOpen=neighbourSettings.enabled&&!diagnostics&&!settings&&
   (neighbourIndex!==null||autoOpen);
  useEffect(()=>{
-  if(!eligibleAuto||sheetIndex===null||neighbourIndex!==null||pinnedActive)return;
+  if(!eligibleAuto||sheetIndex===null||neighbourIndex!==null)return;
+  if(pinnedActive&&!autoTransfer)return;
   setPinnedAutoNeighbour({tripId,index:sheetIndex});
- },[eligibleAuto,sheetIndex,neighbourIndex,tripId,pinnedActive,setPinnedAutoNeighbour]);
+ },[eligibleAuto,sheetIndex,neighbourIndex,tripId,pinnedActive,autoTransfer,setPinnedAutoNeighbour]);
  useEffect(()=>{
-  // When the highlighted stop advances, release the old automatic panel.
-  if(!pinnedAutoNeighbour)return;
-  if(isAutoStopActive(pinnedAutoNeighbour,tripId,displayedIndex,trip.stops.length))return;
+  // Only verified departure beyond the target (or a changed trip) ends it;
+  // a predicted display index, delayed API refresh or lost LIVE cannot.
+  if(!pinnedAutoNeighbour||pinnedStillActive)return;
   setPinnedAutoNeighbour(null);
- },[pinnedAutoNeighbour,tripId,displayedIndex,trip.stops.length,setPinnedAutoNeighbour]);
+ },[pinnedAutoNeighbour,pinnedStillActive,setPinnedAutoNeighbour]);
  const closeNeighbourSheet=()=>{
   setDismissedStop(sheetKey);
   setNeighbourIndex(null);
@@ -216,7 +212,7 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
     <label className="rememberOption"><input type="checkbox" checked={neighbourSettings.enabled}
      onChange={e=>updateNeighbourSettings({enabled:e.target.checked})}/>
      <span>Zobrazovat okolní spoje u zastávek</span></label>
-    <label htmlFor="neighbourLead">Automaticky otevřít před příjezdem (sekundy)</label>
+    <label htmlFor="neighbourLead">Automaticky otevřít před předchozí zastávkou (sekundy)</label>
     <input id="neighbourLead" type="number" min="30" max="180" step="10"
      value={neighbourSettings.autoOpenSeconds}
      onChange={e=>updateNeighbourSettings({autoOpenSeconds:Math.max(30,Math.min(180,Number(e.target.value)||90))})}/>
@@ -237,7 +233,7 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
      onChange={e=>updateNeighbourSettings({mode:e.target.value as typeof neighbourSettings.mode})}>
      <option value="off">Vypnuto, pouze ručně</option>
      <option value="important">Jen významné zastávky</option>
-     <option value="all">Všechny zastávky s pokračujícím společným úsekem</option>
+     <option value="all">Všechny ověřené sdílené nástupní hrany</option>
     </select>
     <label htmlFor="neighbourWindow">Časové okno</label>
     <select id="neighbourWindow" value={neighbourSettings.window}
