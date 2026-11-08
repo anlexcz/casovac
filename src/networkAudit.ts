@@ -1,12 +1,12 @@
 /** Phase 0: opt-in local request diagnostics. No tokens, URLs, locations, or response bodies. */
 export type NetworkEventKind='http'|'cache'|'coalesced'|'rejected';
 export type NetworkEvent={
- at:string;source:string;endpoint:string;kind:NetworkEventKind;
+ at:string;scenario:string;source:string;endpoint:string;kind:NetworkEventKind;
  status:number|null;durationMs:number|null;ttlMs:number|null;
 };
 export type NetworkAuditReport={
  version:1;exportedAt:string;scenario:string;events:NetworkEvent[];
- summary:Array<{endpoint:string;source:string;http:number;cache:number;coalesced:number;rejected:number;errors:number;rateLimited:number;meanDurationMs:number|null}>;
+ summary:Array<{scenario:string;endpoint:string;source:string;http:number;cache:number;coalesced:number;rejected:number;errors:number;rateLimited:number;meanDurationMs:number|null}>;
 };
 const EVENTS='casovac:network-audit-events:v1';
 const SCENARIO='casovac:network-audit-scenario:v1';
@@ -48,7 +48,7 @@ export function recordNetworkEvent(entry:{
  const store=storage();if(!store)return;
  try{
   const record:NetworkEvent={
-   at:new Date().toISOString(),source:entry.source.slice(0,70),
+   at:new Date().toISOString(),scenario:getNetworkAuditScenario(),source:entry.source.slice(0,70),
    endpoint:endpointLabel(entry.url),kind:entry.kind,
    status:entry.status??null,
    durationMs:entry.durationMs===undefined?null:Math.max(0,Math.round(entry.durationMs??0)),
@@ -60,11 +60,11 @@ export function recordNetworkEvent(entry:{
 }
 export function networkAuditReport():NetworkAuditReport{
  const events=safeEvents();
- const grouped=new Map<string,{endpoint:string;source:string;http:number;cache:number;coalesced:number;rejected:number;errors:number;rateLimited:number;totalMs:number;timed:number}>();
+ const grouped=new Map<string,{scenario:string;endpoint:string;source:string;http:number;cache:number;coalesced:number;rejected:number;errors:number;rateLimited:number;totalMs:number;timed:number}>();
  for(const event of events){
-  const key=event.source+'|'+event.endpoint;
+  const key=event.scenario+'|'+event.source+'|'+event.endpoint;
   let row=grouped.get(key);
-  if(!row){row={source:event.source,endpoint:event.endpoint,http:0,cache:0,coalesced:0,rejected:0,errors:0,rateLimited:0,totalMs:0,timed:0};grouped.set(key,row);}
+  if(!row){row={scenario:event.scenario,source:event.source,endpoint:event.endpoint,http:0,cache:0,coalesced:0,rejected:0,errors:0,rateLimited:0,totalMs:0,timed:0};grouped.set(key,row);}
   row[event.kind]++;
   if(event.kind==='http'&&event.status!==null&&event.status>=400)row.errors++;
   if(event.status===429)row.rateLimited++;
