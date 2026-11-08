@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState} from 'react';
-import {auditedFetch} from './networkAudit';
+import {auditedFetch} from './networkAudit.ts';
 
 export type Stop = {id:string;name:string;sequence:number;arrival:string;departure:string;lat:number|null;lon:number|null;platformCode?:string};
 type RecordValue=Record<string,unknown>;
