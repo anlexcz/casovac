@@ -19,7 +19,7 @@ def platform_encounters(day_routes, stop_times, trip_meta, routes, stop_map,
                         tolerance_seconds=120, geometry=None, gtfs_stops=None):
     """Return trip -> [stop_sequence, physical_id, kind, peer_trip_ids] records.
 
-    kind is 'mixed-confirmed' for a near-timed bus/trolley, 'mixed-platform'
+    kind is 'shared-platform' for the optional all-platform mode,\n    'mixed-confirmed' for a near-timed bus/trolley, 'mixed-platform'
     for a physically shared tram+road platform, 'tram-branch-confirmed' for
     independently shape-proven incoming tram routes, or 'tram-route-set' from directional line sets, or 'tram-branch-candidate'
     for unverified timetable-only evidence.
@@ -163,12 +163,17 @@ def platform_encounters(day_routes, stop_times, trip_meta, routes, stop_map,
                 result[trip_id].append([seq, physical_id, "mixed-platform", []])
             meta = trip_meta.get(trip_id, [])
             own_path = (meta[5] if len(meta) > 5 else "", preceding_id, stop_id)
-            if own_path in verified_paths:
+            route_id = meta[0] if len(meta) else ""
+            is_route_set = (route_id, own_path[0], preceding_id, stop_id) in route_set_paths
+            is_shape_proven = own_path in verified_paths
+            if is_shape_proven:
                 result[trip_id].append([seq, physical_id, "tram-branch-confirmed", []])
-            else:
-                route_id = meta[0] if len(meta) else ""
-                if (route_id, own_path[0], preceding_id, stop_id) in route_set_paths:
-                    result[trip_id].append([seq, physical_id, "tram-route-set", []])
+            elif is_route_set:
+                result[trip_id].append([seq, physical_id, "tram-route-set", []])
+            elif not has_road_modes and len(all_lines) > 1:
+                # Used only in optional "all shared platforms" mode.
+                # Same incoming track or an outgoing split is not a JOIN.
+                result[trip_id].append([seq, physical_id, "shared-platform", []])
             if mixed:
                 result[trip_id].append([seq, physical_id, "mixed-confirmed", sorted(mixed)])
             if tram_candidates:
