@@ -58,11 +58,18 @@ export function parseNeighbourBoard(args:{
  const live=new Map(features.map(f=>[selectedTripId(f),f]));
  const window=relevantWindows(settings,distance);
  const seen=new Set<string>();
+ const ownBlockIds=new Set<string>();
+ for(const transition of continuations?.values()??[]){
+  if(transition.incomingTripId===ownTripId||transition.outgoingTripId===ownTripId){
+   ownBlockIds.add(transition.incomingTripId);
+   ownBlockIds.add(transition.outgoingTripId);
+  }
+ }
  const accepted=new Set(board.physicalStopIds?.includes(stop.id)?board.physicalStopIds:[stop.id]);
 
  for(const departure of board.departures??[]){
   const id=departure.trip?.id??'';
-  if(!id||id===ownTripId||seen.has(id)||departure.trip?.is_canceled)continue;
+  if(!id||id===ownTripId||ownBlockIds.has(id)||seen.has(id)||departure.trip?.is_canceled)continue;
   // Physical boarding edge is authoritative: never blend other directions,
   // other platforms or nearby stops just because their names match.
   if(!departure.stop?.id||!accepted.has(departure.stop.id))continue;
