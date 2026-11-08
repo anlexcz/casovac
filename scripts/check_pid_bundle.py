@@ -37,16 +37,28 @@ def verify(root: Path) -> dict:
     files = list(root.rglob("*.json"))
     if not files:
         raise ValueError("Empty PID bundle")
-    checksums = manifest.get("checksums")
+    checksums = manifest.get("checksums")  # legacy, pre-optimized releases
+    checksum_file = manifest.get("checksumsFile")
+    if checksum_file is not None:
+        if checksum_file != "checksums.json" or checksums is not None:
+            raise ValueError("Unsupported PID checksum reference")
+        raw = (root / checksum_file).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != manifest.get("checksumsSha256"):
+            raise ValueError("Invalid checksum index digest")
+        checksums = json.loads(raw)
+        if len(checksums) != manifest.get("checksumsCount"):
+            raise ValueError("Invalid checksum index size")
+        if manifest_file.stat().st_size > 8192:
+            raise ValueError("Optimized manifest is unexpectedly large")
     if checksums is not None:
         actual_paths = {
             file.relative_to(root).as_posix() for file in files
-            if file.name != "manifest.json"
+            if file.name not in ("manifest.json", "checksums.json")
         }
         if set(checksums) != actual_paths:
             raise ValueError("Manifest checksum inventory does not match produced files")
         for file in files:
-            if file.name == "manifest.json":
+            if file.name in ("manifest.json", "checksums.json"):
                 continue
             path = file.relative_to(root).as_posix()
             if hashlib.sha256(file.read_bytes()).hexdigest() != checksums[path]:
