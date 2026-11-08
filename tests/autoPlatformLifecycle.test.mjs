@@ -21,6 +21,9 @@ test('opens verified mixed platform before reaching its preceding stop',()=>{
  assert.deepEqual(pick(),{index:2,physicalId:'P/C',kind:'mixed-platform'});
  assert.equal(pick({remainingToCurrent:130}),null);
 });
+test('manual timetable browsing never counts as evidence for an automatic preview',()=>{
+ assert.equal(pick({currentIndex:null}),null);
+});
 test('arrival at predecessor is sufficient to open even if timetable estimate is stale',()=>{
  assert.equal(pick({evidence:state('at_stop',1,2),remainingToCurrent:999})?.index,2);
 });
