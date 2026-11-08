@@ -9,6 +9,23 @@ export type StopEvidence={
  fresh:boolean;
 };
 export type AutoPlatformTarget={index:number;physicalId:string;kind:string};
+
+/** Preview shortly before reaching the stop *preceding* the shared platform.
+ * In a long A→B section, do not open immediately after leaving A.
+ * In a short section, leave time to read the information before B.
+ */
+export function approachPreviewSeconds(stops:Stop[],previousIndex:number,configuredLead:number):number{
+ const departure=stops[previousIndex-1]?.departure||stops[previousIndex-1]?.arrival||'';
+ const arrival=stops[previousIndex]?.arrival||stops[previousIndex]?.departure||'';
+ const parse=(value:string)=>{
+  const m=/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  return m?Number(m[1])*3600+Number(m[2])*60+Number(m[3]??0):null;
+ };
+ const from=parse(departure),to=parse(arrival);
+ const run=from!==null&&to!==null&&to>from?to-from:null;
+ const dynamic=Math.max(12,Math.min(30,Math.round((run??80)*0.25)));
+ return Math.min(Math.max(0,configuredLead),dynamic);
+}
 export function confirmedAtStop(e:StopEvidence,index:number):boolean{
  return e.fresh&&e.state==='at_stop'&&e.previousIndex===index;
 }
@@ -26,9 +43,9 @@ export function pickAutoPlatform(args:{
  stops:Stop[];currentIndex:number|null;
  entries:PidPlatformEncounter[];stopMap:Readonly<Record<string,string>>;mode?:'important'|'all';
  evidence:StopEvidence;remainingToCurrent:number|null;remainingToTarget:(index:number)=>number|null;
- leadSeconds:number;
+ leadSeconds:number;prefetchOnly?:boolean;
 }):AutoPlatformTarget|null{
- const {stops,currentIndex,entries,stopMap,evidence,remainingToCurrent,remainingToTarget,leadSeconds,mode='important'}=args;
+ const {stops,currentIndex,entries,stopMap,evidence,remainingToCurrent,remainingToTarget,leadSeconds,mode='important',prefetchOnly=false}=args;
  if(currentIndex===null||currentIndex<0)return null;
  const eligible=new Map<number,AutoPlatformTarget>();
  for(const [sequence,physicalId,kind] of entries){
@@ -41,12 +58,19 @@ export function pickAutoPlatform(args:{
  for(const target of [...eligible.values()].sort((a,b)=>a.index-b.index)){
   const previous=target.index-1;
   if(confirmedBeyondStop(evidence,target.index))continue;
+  // Prefetch the nearest relevant target (at most three stops ahead) well
+  // before opening. Novelty requires complete trip sequences, not just LIVE.
+  if(prefetchOnly){
+   if(target.index>=currentIndex&&target.index<=currentIndex+3)return target;
+   continue;
+  }
   if(confirmedAtStop(evidence,previous))return target;
   // With a valid "at_stop" for target we still keep the active target
   // until real departure, but do not create a fresh panel late.
   if(confirmedAtStop(evidence,target.index))continue;
+  const preview=approachPreviewSeconds(stops,previous,leadSeconds);
   if(previous===currentIndex&&remainingToCurrent!==null&&
-   remainingToCurrent<=leadSeconds&&remainingToCurrent>=-90)return target;
+   remainingToCurrent<=preview&&remainingToCurrent>=-15)return target;
   // Display index may already point at target while approaching it;
   // recover safely without assuming arrival from timetable alone.
   if(target.index===currentIndex&&evidence.fresh&&

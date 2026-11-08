@@ -52,6 +52,12 @@ Zastávky, kde se linky jen **rozdělují** po společném příjezdu, nejsou v 
 6. **Ruční kliknutí na jakoukoliv zastávku** včetně obyčejné zastávky musí otevřít stejný panel i bez předem vypočítané klasifikace, při nulovém výsledku i GTFS-only. Ruční zobrazení má přednost před automatickým. Ruční náhled jiné zastávky nesmí být považován za skutečný provozní postup.
 7. Ručně zavřený automatický panel se při téže identitě stop/trip neobnovuje každým LIVE refreshem. Nová cílová zastávka se ale může otevřít.
 
+## Omezení opakovaných upozornění a čas otevření (listopad 2026)
+
+Automaticky není třeba znovu zobrazovat panel pro cílovou zastávku C, jestliže **všechny aktuálně zobrazitelné okolní tripy již s naším tripem projely bezprostředně předchozí společnou zastávku B ve srovnatelném čase**. Nejde o shodu čísla linky: porovnává se individuální GTFS trip a jeho předcházející stop, přičemž rozdílná `stop_id` musí být prokazatelně mapovaná na **stejnou fyzickou hranu**. Předchozí plánové časy se musí vejít do ±120 s, při dostupných obou odchylkách se rozdíl přepočte. Pokud některý trip skutečně přijíždí nově, předchozí stop ID/čas není ověřen nebo není ještě dokončený celý aktuální přehled, tuto heuristiku nepoužijeme k potlačení nového upozornění. Prázdný seznam zůstává informativním nulovým stavem podle dřívější specifikace. **Ruční otevření je bez tohoto filtru.**
+
+Aby panel nevyskočil už hned při odjezdu z A na dlouhém úseku A→B, čas otevření pro cíl C je nyní omezen na posledních `clamp(25 % plánované jízdní doby A→B, 12 s, 30 s)` před očekávaným příjezdem do **B**, zároveň se respektuje nastavený maximální předstih. Je-li už potvrzený pobyt v B, panel se může otevřít hned. Otevřený panel zůstává připnutý do ověřeného odjezdu z cíle C podle dosavadního stavového automatu. Bez úplných dat není dovoleno zaměňovat „zatím neověřeno“ za „všechny spoje už znám“.
+
 ## Ochrany a omezení
 
 - Golemio se typicky obnovuje po 60 s. Přednačtení používá jeden statický vyhledávací index a limitovaný společný LIVE snapshot. Pokud se nepodaří získat všechny linky/odchylky, je výsledek označen jako **neúplný**, nikoli jako bezpečně bezkonfliktní.

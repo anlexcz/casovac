@@ -341,6 +341,14 @@ export function useAppController(){
   remainingToCurrent:autoTravelIndex===null?null:remainingTo(autoTravelIndex),
   remainingToTarget:remainingTo,leadSeconds:neighbourSettings.autoOpenSeconds
  }):null;
+ // Resolve the next target ahead of time for static GTFS/peer-history warmup.
+ // This does not affect the later automatic OPEN threshold.
+ const autoPrefetchTarget=autoPlan.ready?pickAutoPlatform({
+  stops:trip.stops,currentIndex:autoTravelIndex,entries:autoPlan.entries,
+  stopMap:autoPlan.stopMap,evidence,mode:neighbourSettings.mode==='all'?'all':'important',
+  remainingToCurrent:null,remainingToTarget:remainingTo,
+  leadSeconds:neighbourSettings.autoOpenSeconds,prefetchOnly:true
+ }):null;
  const autoNeighbourReady=autoTarget!==null;
  // Adjacent joining stops: change target only once actual arrival at the
  // previous joined platform is confirmed. Otherwise keep the existing panel.
@@ -351,7 +359,7 @@ export function useAppController(){
   !confirmedBeyondStop(evidence,pinnedAutoNeighbour.index);
  const effectivePinnedAutoIndex=pinnedStillActive?pinnedAutoNeighbour!.index:null;
  const effectiveAutoNeighbourIndex=transferAuto?autoTarget!.index:
-  effectivePinnedAutoIndex??autoTarget?.index??displayedIndex;
+  effectivePinnedAutoIndex??autoTarget?.index??autoPrefetchTarget?.index??displayedIndex;
  const stopNeighbours=useStopNeighbours({
   enabled:neighbourSettings.enabled&&!!active,token:token.trim(),now,
   ownFeature:chosen,ownTripId:tripId,stops:trip.stops,rawTrip:trip.raw,knownFeatures:features,staticDate:planDate,currentIndex:displayedIndex,
@@ -426,5 +434,5 @@ export function useAppController(){
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setNeighbourIndex(null);setSelectedTrip(id);setManual(null);}
- return {trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,autoTargetIndex:autoTarget?.index??null,autoPlatformMarkers,autoTransfer:transferAuto,autoEvidence:evidence,pinnedStillActive,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,submitLookup,resetLookup,lookupConfirmed,plannedHeadways,plannedLiveHeadways,peerFeatures:peerPositions.features,peerTripIds:peerPositions.tripIds,peerPositionUpdatedAt:peerPositions.updatedAt,peerPositionLoading:peerPositions.loading,planDate,now,peerPositionStatus:peerPositions.status,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ return {trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,autoTargetIndex:autoTarget?.index??null,autoPlatformMarkers,autoPhysicalStopMap:autoPlan.stopMap,autoTransfer:transferAuto,autoEvidence:evidence,pinnedStillActive,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,submitLookup,resetLookup,lookupConfirmed,plannedHeadways,plannedLiveHeadways,peerFeatures:peerPositions.features,peerTripIds:peerPositions.tripIds,peerPositionUpdatedAt:peerPositions.updatedAt,peerPositionLoading:peerPositions.loading,planDate,now,peerPositionStatus:peerPositions.status,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }

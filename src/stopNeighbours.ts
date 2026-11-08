@@ -16,7 +16,7 @@ export type NeighbourRow={
  tripId:string;line:string;order:string;vehicle:string;
  scheduled:string;scheduledSeconds:number;delay:number|null;
  relative:'before'|'same'|'after';predictedDifference:number;
- previousId:string;nextId:string;
+ previousId:string;nextId:string;previousScheduledSeconds?:number|null;
 };
 export type NeighbourResult={rows:NeighbourRow[];significant:boolean;sharedOutgoing?:boolean;stopId:string;ownSchedule:string;ownDelay:number|null};
 const serviceSeconds=(text:string):number|null=>{
