@@ -131,13 +131,13 @@ export function useStopNeighbours(args:{
   return()=>{active=false;};
  },[enabled,token,unresolvedKey,stop?.name,stop?.id,stop?.arrival,stop?.departure,ownTripId,!!rememberedPlatform]);
  // The public GTFS trip contains names but often no platform IDs. A
- // short, sequential, low-priority warmup resolves only the next FOUR stop
+ // short, sequential, low-priority warmup resolves only the next THREE stop
  // occurrences before the tram reaches them. No speculative full-day scan.
  useEffect(()=>{
   if(!enabled||!token||!ownFeature||!ownTripId||ownTripId==='—'||
    currentIndex===null||!stops.length)return;
   let active=true;
-  const upcoming=stops.slice(currentIndex+1,currentIndex+5)
+  const upcoming=stops.slice(currentIndex+1,currentIndex+4)
    .map((candidate,offset)=>({candidate,index:currentIndex+1+offset}))
    .filter(({candidate})=>!!candidate.name&&!candidate.id);
   const timer=window.setTimeout(()=>{
@@ -267,13 +267,13 @@ export function useStopNeighbours(args:{
  useEffect(()=>{
   if(!enabled||!token||currentIndex===null||!stops.length)return;
   let alive=true;
-  const upcoming=stops.slice(currentIndex,currentIndex+5).filter(s=>!!s.id);
+  const upcoming=stops.slice(currentIndex,currentIndex+4).filter(s=>!!s.id);
   const timer=window.setTimeout(()=>{
    void (async()=>{
     const boards=await Promise.all(upcoming.map(async item=>{
      const cacheKey=boardId(date,item.id);
      const cachedBoard=boardCache.get(cacheKey);
-     if(cachedBoard)return cachedBoard.board;
+     if(cachedBoard&&Date.now()-cachedBoard.at<BOARD_TTL)return cachedBoard.board;
      const secs=gtfsSeconds(item.arrival||item.departure||'');
      if(secs===null)return null;
      try{
