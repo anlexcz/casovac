@@ -3,14 +3,14 @@ import unittest
 from scripts.build_connection_index import platform_encounters
 
 def classify(previous="B",same_line=False,other_platform="P",shapes=None,stops=None,
-             include_other=True):
+             include_other=True, other_arrival=2000):
     lines = {"R3": ["3","","0"], "R17": ["17","","0"], "R21": ["3" if same_line else "21","","0"]}
     day={"R3":["a"],"R17":["b"]}
     if include_other:day["R21"]=["c"]
     timetable = {
         "a":[["A",100,100,1],["P3",200,200,2],["X",300,300,3]],
         "b":[["A",105,105,1],["P17",205,205,2],["Y",305,305,3]],
-        "c":[[previous,100,100,1],["P21",2000,2000,2],["Z",3000,3000,3]]
+        "c":[[previous,100,100,1],["P21",other_arrival,other_arrival,2],["Z",3000,3000,3]]
     }
     meta = {trip:[route,"","","","",{"a":"s3","b":"s17","c":"s21"}[trip],""] for route,tid in day.items() for trip in tid}
     return platform_encounters(day,timetable,meta,lines,
@@ -35,7 +35,7 @@ class LineSetTests(unittest.TestCase):
         self.assertIn([2,"P","shared-platform",[]],data["a"])
         self.assertNotIn([2,"P","tram-route-set",[]],data["a"])
     def test_same_number_different_branch_is_ambiguous_without_shapes(self):
-        data=classify(same_line=True)
+        data=classify(same_line=True, other_arrival=205)
         self.assertNotIn([2,"P","tram-route-set",[]],data["a"])
         self.assertIn([2,"P","tram-branch-candidate",["c"]],data["a"])
     def test_shapes_confirming_shared_track_veto_the_route_set_change(self):
