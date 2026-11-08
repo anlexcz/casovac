@@ -33,6 +33,7 @@ const sources={
  ['days/'+day+'/platform-encounters/'+platformBucket('T9')+'.json']:{T9:[[2,'4/2','tram-route-set',[]]]},
  ['shapes/'+filename]:{shape:[[50,14],[50.1,14.1]]},
 };
+for(let i=0;i<16;i++)sources['days/'+day+'/platform-encounters/'+String(i).padStart(2,'0')+'.json']??={};
 for(const id of ['U1','U2'])sources['days/'+day+'/departures/'+bucket(id)+'.json']??={};
 sources['days/'+day+'/departures/'+bucket('U1')+'.json'].U1=[[86160,'T9','L9',1]];
 sources['days/'+day+'/departures/'+bucket('U2')+'.json'].U2=[[86820,'T9','L9',2],[87360,'T10','L9',1]];
