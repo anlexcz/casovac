@@ -69,6 +69,6 @@ export default function StopNeighbours({
  const after=stable.entries.filter(x=>x.row.relative==='after');
  return <div className="sn-panel" aria-label="Okolní spoje na stejné nástupní hraně">
   {stable.entries.length?<div className="sn-rows">{before.map(service)}{own}{same.map(service)}{after.map(service)}</div>:
-   <p className="sn-status">{error?'Online údaje nejsou dostupné':loading?'Načítám okolní spoje…':'Žádné blízké spoje'}</p>}
+   <p className="sn-status">{error?'Online údaje nejsou dostupné':loading?'Načítám okolní spoje…':'Žádný potvrzený konflikt (bez LIVE nelze vyloučit výrazné zpoždění)'}</p>}
  </div>;
 }

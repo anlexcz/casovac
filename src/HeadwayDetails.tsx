@@ -14,7 +14,7 @@ type Side='ahead'|'behind';
 type Props={
  planned:PlannedHeadways;loading:boolean;live:PlannedLiveHeadways;
  features:Feature[];selected:Feature|null;date:string;now:number;
- tripId:string;
+ tripId:string;peerTripIds:{ahead:string;behind:string};
 };
 function StateIcon({verified}:{verified:boolean}){
  return verified?
@@ -47,12 +47,12 @@ function usePeerStops(peer:PlannedPeer|null,date:string){
  },[key]);
  return state.key===key?state:{key,stops:null,loading:!!key};
 }
-const matchLive=(peer:PlannedPeer,features:Feature[],now:number):Feature|null=>{
- const matching=features.filter(f=>selectedTripId(f)===peer.tripId&&
-  routeOf(f)===peer.line&&freshTripPosition(f,now));
+const matchLive=(peer:PlannedPeer,observedId:string,features:Feature[],now:number):Feature|null=>{
+ const matching=features.filter(f=>selectedTripId(f)===observedId&&
+  (observedId!==peer.tripId||routeOf(f)===peer.line)&&freshTripPosition(f,now));
  return matching.length===1?matching[0]:null;
 };
-export default function HeadwayDetails({planned,loading,live,features,selected,date,now,tripId}:Props){
+export default function HeadwayDetails({planned,loading,live,features,selected,date,now,tripId,peerTripIds}:Props){
  const [side,setSide]=useState<Side|null>(null);
  const root=useRef<HTMLDivElement>(null);
  const buttons=useRef<Record<Side,HTMLButtonElement|null>>({ahead:null,behind:null});
@@ -68,12 +68,15 @@ export default function HeadwayDetails({planned,loading,live,features,selected,d
  const front=planned.status==='ready'?planned.ahead:null;
  const rear=planned.status==='ready'?planned.behind:null;
  const current=side==='ahead'?front:side==='behind'?rear:null;
- const stops=usePeerStops(current,date);
  const currentLive=side==='ahead'?live.ahead:side==='behind'?live.behind:null;
+ const observedTripId=side?peerTripIds[side]:'';
  const isLive=!!current&&currentLive!==null;
- const feature=current&&isLive?matchLive(current,features,now):null;
+ const feature=current&&isLive?matchLive(current,observedTripId||current.tripId,features,now):null;
+ const positionedPeer=current&&feature&&observedTripId&&observedTripId!==current.tripId?
+  {...current,tripId:observedTripId}:current;
+ const stops=usePeerStops(positionedPeer,date);
  const liveStop=isLive&&feature?livePeerStopName(feature,stops.stops):null;
- const plannedStop=current?plannedPeerStopName(stops.stops,date,now):null;
+ const plannedStop=current&&!isLive?plannedPeerStopName(stops.stops,date,now):null;
  const stopName=isLive?(liveStop??(plannedStop?'JŘ: '+plannedStop:null)):plannedStop;
  useEffect(()=>{setSide(null);},[tripId]);
  useEffect(()=>{

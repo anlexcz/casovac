@@ -1,7 +1,8 @@
 import type {Stop} from './tripData.ts';
 import type {NeighbourResult,NeighbourSettings} from './stopNeighbours.ts';
 import type {Feature} from './featureUtils.ts';
-import {selectedTripId,vehicleId,orderOf} from './featureUtils.ts';
+import {selectedTripId,vehicleId,orderOf,path,routeOf,stateOfFeature} from './featureUtils.ts';
+import {observationTimestamp} from './remoteTracking.ts';
 import {relevantWindows} from './stopNeighbours.ts';
 import {joiningCorridor} from './neighbourRouteJoining.ts';
 
@@ -12,6 +13,7 @@ type BoardDeparture={
  arrival_timestamp?:{scheduled?:string|null};
  departure_timestamp?:{scheduled?:string|null};
  delay?:{is_available?:boolean;seconds?:number|null};
+ scheduledSeconds?:number;stopSequence?:number;
 };
 export type DepartureBoard={departures?:BoardDeparture[]};
 const pragueParts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Prague',
@@ -45,8 +47,9 @@ export function parseNeighbourBoard(args:{
  board:DepartureBoard;stop:Stop;ownTripId:string;ownStops:Stop[];
  ownIndex:number;ownDelay:number|null;settings:NeighbourSettings;
  distance:number;features:Feature[];candidateStops?:ReadonlyMap<string,Stop[]>;
+ now?:number;
 }):NeighbourResult{
- const {board,stop,ownTripId,ownStops,ownIndex,ownDelay,settings,distance,features,candidateStops}=args;
+ const {board,stop,ownTripId,ownStops,ownIndex,ownDelay,settings,distance,features,candidateStops,now=Date.now()}=args;
  const ownSchedule=stop.arrival||stop.departure,ownTime=seconds(ownSchedule);
  const result:NeighbourResult={rows:[],significant:false,sharedOutgoing:false,stopId:stop.id,ownSchedule,ownDelay};
  if(ownTime===null||!stop.id)return result;
@@ -65,13 +68,29 @@ export function parseNeighbourBoard(args:{
   if(!shortName)continue;
   const plannedISO=departure.arrival_timestamp?.scheduled??departure.departure_timestamp?.scheduled;
   const local=plannedISO?localSeconds(plannedISO):null;
-  if(local===null)continue;
-  const planned=alignDay(ownTime,local);
-  const liveDelay=departure.delay?.is_available&&typeof departure.delay.seconds==='number'?
-   departure.delay.seconds:null;
+  const planned=typeof departure.scheduledSeconds==='number'&&
+   Number.isFinite(departure.scheduledSeconds)?departure.scheduledSeconds:
+   local===null?null:alignDay(ownTime,local);
+  if(planned===null)continue;
+  const candidate=live.get(id);
+  const observed=candidate?observationTimestamp(candidate):null;
+  const feature=candidate&&routeOf(candidate)===shortName&&observed!==null&&
+   observed<=now+10000&&now-observed<=90000&&
+   ['at_stop','on_track'].includes(stateOfFeature(candidate))?candidate:null;
+  const rawDelay=feature?path(feature,'properties.last_position.delay.actual'):null;
+  const liveDelay=typeof rawDelay==='number'&&Number.isFinite(rawDelay)&&Math.abs(rawDelay)<=7200?
+   rawDelay:departure.delay?.is_available&&typeof departure.delay.seconds==='number'&&
+   Number.isFinite(departure.delay.seconds)?departure.delay.seconds:null;
+  // Unknown LIVE is a planned approximation, NOT a claim that delay is zero.
   const diff=planned+(liveDelay??0)-(ownTime+(ownDelay??0));
   if(diff < -window.before||diff > window.after)continue;
-  const feature=live.get(id);
+  if(feature&&typeof departure.stopSequence==='number'){
+   const nextSeq=path(feature,'properties.last_position.next_stop.sequence');
+   const next=typeof nextSeq==='number'?nextSeq:typeof nextSeq==='string'&&/^\d+$/.test(nextSeq)?
+    Number(nextSeq):null;
+   // Do not show an already-passed platform as an approaching conflict.
+   if(next!==null&&next>departure.stopSequence)continue;
+  }
   const car=feature?vehicleId(feature):'';
   const stops=candidateStops?.get(id);
   const matches=stops?.map((s,i)=>s.id===stop.id?i:-1).filter(i=>i>=0)??[];
@@ -87,8 +106,9 @@ export function parseNeighbourBoard(args:{
   }
   result.rows.push({
    tripId:id,line:shortName,order:feature?String(orderOf(feature)??'?'):'?',
-   vehicle:car==='—'?'':car,scheduled:new Date(plannedISO!).toLocaleTimeString('cs-CZ',
-    {timeZone:'Europe/Prague',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}),
+   vehicle:car==='—'?'':car,scheduled:plannedISO?new Date(plannedISO).toLocaleTimeString('cs-CZ',
+    {timeZone:'Europe/Prague',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}):
+    [Math.floor(planned/3600)%24,Math.floor(planned%3600/60),planned%60].map(v=>String(v).padStart(2,'0')).join(':'),
    scheduledSeconds:planned,delay:liveDelay,
    relative:planned<ownTime?'before':planned>ownTime?'after':'same',
    predictedDifference:diff,previousId:prev,nextId:next
