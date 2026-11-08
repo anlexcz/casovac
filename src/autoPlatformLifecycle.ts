@@ -55,3 +55,20 @@ export function pickAutoPlatform(args:{
  }
  return null;
 }
+
+/** Lightweight stop-list markers; no LIVE query and never a conflict claim. */
+export type PlatformMarker='join'|'mixed'|'shared';
+export function platformMarkers(
+ stops:Stop[],entries:PidPlatformEncounter[],stopMap:Readonly<Record<string,string>>
+):Record<number,PlatformMarker>{
+ const markers:Record<number,PlatformMarker>={};
+ const rank={join:3,mixed:2,shared:1};
+ for(const [sequence,physical,kind] of entries){
+  const index=stops.findIndex(s=>s.sequence===sequence&&!!s.id&&stopMap[s.id]===physical);
+  if(index<0)continue;
+  const next:PlatformMarker=kind==='tram-route-set'||kind==='tram-branch-confirmed'?'join':
+   kind==='mixed-platform'||kind==='mixed-confirmed'?'mixed':'shared';
+  if(!markers[index]||rank[next]>rank[markers[index]])markers[index]=next;
+ }
+ return markers;
+}
