@@ -26,6 +26,7 @@ import {serviceKey} from './trackedService';
 import {useGpsTracking} from './useGpsTracking';
 import {calculateLineHeadways} from './lineHeadways';
 import {useHeadwayTimetables} from './useHeadwayTimetables';
+import {usePlannedHeadways} from './usePlannedHeadways.ts';
 import {useStopNeighbours} from './useStopNeighbours';
 import {DEFAULT_NEIGHBOUR_SETTINGS} from './stopNeighbours';
 import type {NeighbourSettings} from './stopNeighbours';
@@ -150,6 +151,12 @@ export function useAppController(){
  });
  const verifiedCompanion=continuity.ok?
   plannedHandoff?.next??previousPartner:null;
+ // Planned peer selection is independent of live vehiclepositions/delays.
+ // A verified current GTFS stop_id is needed to avoid comparing the wrong
+ // platform or the wrong direction on a repeating loop.
+ const plannedReferenceStopId=String(path(chosen,'properties.last_position.next_stop.id')??'');
+ const plannedHeadways=usePlannedHeadways({enabled:showHeadways&&!!active,
+  tripId,date:staticDate,referenceStopId:plannedReferenceStopId});
  const headwaySource=useHeadwayTimetables({
   enabled:showHeadways&&!!active,selected:chosen,features,currentStops:trip.stops,
   token:token.trim(),now,
@@ -386,5 +393,5 @@ export function useAppController(){
   setRememberToken(false);setToken('');save(TOKEN_KEY,'');save(ACTIVE_KEY,'');setActive(null);setFeatures([]);setSelectedTrip('');setLastHandoff(null);handoffFallbackRef.current=null;setSettings(false);
  }
  function chooseTrip(id:string){setNeighbourIndex(null);setSelectedTrip(id);setManual(null);}
- return {trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
+ return {trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex:effectiveAutoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,plannedHeadways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,destination,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder};
 }
