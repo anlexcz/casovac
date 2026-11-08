@@ -137,7 +137,13 @@ export function useAppController(){
   if(last)saveLastSeenForService(trackedService,last);
  },[tripId,trackedService?.originRoute,trackedService?.sequenceId,active?.[0],active?.[1],lastSeen?.vehicle]);
 
- const trip=useTripData(tripId,token.trim());
+ // A verified tracked duty still needs an exact trip match before we trust its
+ // service date. No guessed date from trip_id suffix or calendar midnight.
+ const staticDate=trackedService?.verified&&trackedService.currentTripId===tripId&&
+  active&&matchesCurrent(trackedService,active[0],active[1])
+  ?trackedService.serviceDate:'';
+ const trip=useTripData(tripId,token.trim(),staticDate,
+  staticDate&&chosen?routeOf(chosen):'');
  const {chainDiagnostic,plannedHandoff,nextTrip,previousTrip,previousPartner,continuity}=useChainTracking({
   active,chosen,lastSeen,features,token,tripId,trip,selectedTrip,recordChain:recorder.chain
  });
