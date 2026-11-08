@@ -106,7 +106,9 @@ def platform_encounters(day_routes, stop_times, trip_meta, routes, stop_map,
                     peer for peer in tram_paths.values()
                     if peer[0] != previous and peer[1]
                 ]
-                if not novel and not any(peer[1] == line for peer in different_predecessors):
+                if not novel:
+                    # Same route number via two GTFS stop patterns is not a
+                    # new line; geometry may confirm it separately below.
                     continue
                 own_geometry = signature(own_item)
                 for other_previous, other_line, other_item in different_predecessors:
