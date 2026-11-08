@@ -8,13 +8,13 @@ import type {Feature,Obj} from './featureUtils';
 import {parseStops} from './tripData';
 import {pidStatic,comparePidTripStops,pidTripStopRows} from './pidStatic.ts';
 import PidPhase2Panel from './PidPhase2Panel.tsx';
+import {findStaticBlockLinks} from './staticBlockPair.ts';
 
 type Probe={
  id:string;title:string;url:string;receivedAt:string;elapsedMs:number;
  ok:boolean;data?:unknown;error?:string;
 };
 const API='https://api.golemio.cz/v2';
-const related:Record<string,string>={'5':'6','6':'5','9':'10','10':'9'};
 const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const stringify=(value:unknown)=>JSON.stringify(value,null,2);
 function blocks(value:unknown){
@@ -91,13 +91,23 @@ export default function RawDebug(){
      tripId:tripId||'',vehicle:choice.vehicle??'',reason:choice.reason,
      ambiguous:choice.ambiguous,matched:own.length
     });
-    const counterpart=related[line];
-    if(counterpart){
+    // Debug ALL GTFS-defined route changes, not a hard-coded 5+6 / 9+10 list.
+    // Probe only distinct neighbouring route IDs on the chosen service day.
+    let counterparts:string[]=[];
+    if(tripId){
+     try{
+      const links=await findStaticBlockLinks(tripId,line,date);
+      counterparts=[...new Set([links.previous?.partner.line,links.next?.partner.line]
+       .filter((value):value is string=>!!value&&value!==line))];
+     }catch{/* Static chain unresolvable: keep normal GTFS diagnostics. */}
+    }
+    for(const counterpart of counterparts){
      const pairedUrl=new URL(API+'/vehiclepositions');
      pairedUrl.searchParams.set('routeShortName',counterpart);
      pairedUrl.searchParams.set('includeNotTracking','true');
      pairedUrl.searchParams.set('limit','1000');
-     append(await read('paired','Vehiclepositions · možná návazná linka '+counterpart,pairedUrl.toString()));
+     append(await read('paired-'+counterpart,
+      'Vehiclepositions · návazná linka '+counterpart+' podle PID GTFS',pairedUrl.toString()));
     }
     if(tripId){
      const detailUrl=new URL(API+'/gtfs/trips/'+encodeURIComponent(tripId));
