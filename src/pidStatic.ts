@@ -27,8 +27,9 @@ export type PidPhysicalPlatform={id:string;groupId:string;platform:string;lat:nu
 export type PidTripStop={id:string;name:string;sequence:number;arrival:string;departure:string;
  lat:number|null;lon:number|null;platformCode:string;physicalId:string|null};
 export class PidStaticError extends Error{
- constructor(public readonly reason:'network'|'invalid'|'unavailable'|'not-found'|'unsupported',message:string){
-  super(message);this.name='PidStaticError';
+ readonly reason:'network'|'invalid'|'unavailable'|'not-found'|'unsupported';
+ constructor(reason:'network'|'invalid'|'unavailable'|'not-found'|'unsupported',message:string){
+  super(message);this.reason=reason;this.name='PidStaticError';
  }
 }
 function object(value:unknown):value is Record<string,unknown>{
