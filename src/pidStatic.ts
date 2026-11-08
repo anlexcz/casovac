@@ -11,7 +11,7 @@ export type PidStopTime=[string,number,number,number,string];
 export type PidTripRow=[string,string,string,string,string,string,PidStopTime[]];
 export type PidBlockRow=[number,string,string];
 /** [stopSequence,physicalPlatformId,kind,peerTripIds] produced by 5B builder. */
-export type PidPlatformEncounter=[number,string,'mixed-confirmed'|'tram-branch-candidate',string[]];
+export type PidPlatformEncounter=[number,string,'mixed-platform'|'mixed-confirmed'|'tram-branch-candidate',string[]];
 export type PidDepartureRow=[number,string,string,number];
 export type PidPlatformRow=[string,string,number,number,string,string,string,string[],string];
 export type PidGroupRow=[string,string,string,number,number,string[]];
