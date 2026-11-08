@@ -15,7 +15,7 @@ function data(){
   t('mine','L12',[base+600,base+720,base+840]),
   t('before','L12',[base+360,base+480,base+600]),
   t('after','L12',[base+900,base+1020,base+1140]),
-  t('opposite','L12',[base+540,base+660,base+780],['A','X','B']),
+  t('opposite','L12',[base+540,base+660,base+780],['B','X','A']),
   t('other','L24',[base+480,base+600,base+720]),
   t('far','L12',[base+3000,base+3120,base+3240])
  ];
