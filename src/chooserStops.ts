@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import {useEffect,useState} from 'react';
-import {auditedFetch} from './networkAudit';
+import {auditedFetch} from './networkAudit.ts';
 
 /** Only static, public PID GTFS data. No per-vehicle Golemio lookup. */
 export type ChooserTarget={
