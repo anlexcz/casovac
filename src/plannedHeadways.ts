@@ -110,8 +110,8 @@ export async function findPlannedHeadways(args:{
        trip.routeId!==own.routeId)return null;
     const stops=await source.getTripStops(d.tripId,date,trip.routeId);
     if(!stops||stops.length!==trip.stopTimes.length)return null;
-    const index=unique(stops,referenceStopId);
-    if(!validStop(stops,index,referenceStopId,d.departureSeconds)||
+    const index=unique(stops,actualReference);
+    if(!validStop(stops,index,actualReference,d.departureSeconds)||
        stops[index].sequence!==d.stopSequence||
        !sameDirection(ownStops,stops,ownIndex,index))return null;
     return d;
