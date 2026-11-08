@@ -26,5 +26,7 @@ jobs:
         run: python scripts/build_pid_data.py --out /tmp/casovac-pid-5b
       - name: Validate bundle limits, checksums, and metadata
         run: python scripts/check_pid_bundle.py /tmp/casovac-pid-5b
+      - name: Diagnose candidate shape matching on live PID
+        run: python scripts/debug_5b_candidates.py /tmp/casovac-pid-5b "$(TZ=Europe/Prague date +%F)"
       - name: Report verified junctions and fail on empty geometry coverage
         run: python scripts/audit_5b_geometry.py /tmp/casovac-pid-5b
