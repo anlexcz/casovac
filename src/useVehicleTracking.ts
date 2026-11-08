@@ -16,6 +16,7 @@ const API='https://api.golemio.cz/v2/vehiclepositions';
 // Own vehicle is the highest-priority stream. Missed refreshes retain the
 // last confirmed response; stale measurements must not be claimed as fresh.
 export const OWN_VEHICLE_POLL_MS=20000;
+export const OWN_VEHICLE_RETAIN_MS=3*OWN_VEHICLE_POLL_MS;
 export type HandoffFallback={target:string;vehicle:string;feature:Feature;until:number};
 type Props={
  active:[string,string]|null;
@@ -35,6 +36,7 @@ export function useVehicleTracking({active,trackedService,token,recorder,gps,set
  const [terminalCandidates,setTerminalCandidates]=useState<unknown[]>([]);
  const [loading,setLoading]=useState(false);
  const previousScanRef=useRef(0);
+ const lastUsefulRef=useRef<{key:string;features:Feature[];at:number}|null>(null);
  const requestRef=useRef(0);
  const gpsRef=useRef<GpsFix|null>(null);
  gpsRef.current=gps;
@@ -56,6 +58,20 @@ export function useVehicleTracking({active,trackedService,token,recorder,gps,set
     if(alive&&generation===requestRef.current){
      const standard=(data as {features:Feature[]}).features;
      let fetched=filterCoreFeatures(standard,trackedService);
+     // A successful HTTP response may omit this particular service for one
+     // cycle. Preserve the previously identified vehicle for three attempts,
+     // without rewriting its original position timestamp.
+     const serviceKey=active![0]+'/'+active![1];
+     const observed=fetched.filter(f=>
+      String(path(f,'properties.trip.gtfs.route_short_name')??'')===active![0]&&
+      normalize(orderOf(f))===normalize(active![1]));
+     if(observed.length){
+      lastUsefulRef.current={key:serviceKey,features:observed,at:Date.now()};
+     }else{
+      const saved=lastUsefulRef.current;
+      if(saved?.key===serviceKey&&Date.now()-saved.at<OWN_VEHICLE_RETAIN_MS)
+       fetched=[...fetched,...saved.features];
+     }
      // Keep the prepared successor visible while Golemio still reports the old line.
      // Never treat this cached object as a fresh observation.
      const fallback=handoffFallbackRef.current;
