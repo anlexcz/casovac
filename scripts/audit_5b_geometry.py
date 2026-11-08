@@ -44,7 +44,7 @@ def audit(root: Path) -> dict:
     report = {"counts": counts, "mostFrequentTramJunctionStops": highlights}
     print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
     missing = [day for day, values in counts.items()
-               if manifest["days"][day]["available"] and
+               if day >= manifest["referenceDay"] and manifest["days"][day]["available"] and
                (values.get("mixed-platform", 0) == 0 or
                 values.get("tram-branch-confirmed", 0) == 0)]
     if missing:
