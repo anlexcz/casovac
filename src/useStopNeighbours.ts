@@ -10,6 +10,9 @@ import {NEIGHBOUR_POLL_MS,NEIGHBOUR_RETAIN_MS,UPCOMING_STOP_COUNT} from './polli
 import type {NeighbourSettings} from './stopNeighbours.ts';
 import {departureBoardUrl,parseNeighbourBoard} from './stopNeighbourBoard.ts';
 import {staticNeighbourBoard} from './staticNeighbourBoard.ts';
+import {pidStatic} from './pidStatic.ts';
+import {findBoardContinuations} from './boardBlockContinuity.ts';
+import type {BoardContinuation} from './boardBlockContinuity.ts';
 import type {DepartureBoard} from './stopNeighbourBoard.ts';
 import {departureBoardNameUrl,resolveOwnPlatform} from './resolveNeighbourPlatform.ts';
 import {recordNeighbourDiagnostic,summarizeNeighbourBoardResponse,summarizeNeighbourBoardCounts,summarizeTripStopSchema} from './neighbourDiagnostics.ts';
@@ -22,6 +25,7 @@ const boardCache=new Map<string,{board:DepartureBoard;at:number}>();
 const tripCache=new Map<string,Stop[]>();
 const platformCache=new Map<string,{id:string;platformCode:string;at:number}>();
 const vehicleCache=new Map<string,{features:Feature[];at:number}>();
+const continuationCache=new Map<string,Map<string,BoardContinuation>>();
 const PLATFORM_TTL=15*60000;
 // Keep the last successful snapshot across three 60-second poll attempts.
 // Freshness for *new queries* remains 60 s; retention is NOT LIVE validity.
@@ -192,6 +196,29 @@ export function useStopNeighbours(args:{
  const cached=boardCache.get(boardId(date,selectedStopId));
  const readyBoard=boardState.key===key&&boardState.board?boardState.board:
   cached&&Date.now()-cached.at<BOARD_RETAIN_MS?cached.board:null;
+ const [transition,setTransition]=useState<{key:string;data:Map<string,BoardContinuation>;ready:boolean}>(
+  {key:'',data:new Map(),ready:false});
+ const transitionKey=[pidStatic.getDataStatus().version,date,selectedStopId,
+  stop?.arrival||stop?.departure||''].join('|');
+ useEffect(()=>{
+  if(!enabled||!readyBoard||!selectedStopId){
+   setTransition({key:transitionKey,data:new Map(),ready:false});return;
+  }
+  const cached=continuationCache.get(transitionKey);
+  if(cached){setTransition({key:transitionKey,data:cached,ready:true});return;}
+  let alive=true;
+  const time=gtfsSeconds(stop?.arrival||stop?.departure||'');
+  if(time===null){setTransition({key:transitionKey,data:new Map(),ready:true});return;}
+  void findBoardContinuations(readyBoard,date,time).then(data=>{
+   if(!alive)return;
+   continuationCache.set(transitionKey,data);
+   if(continuationCache.size>80)continuationCache.delete(continuationCache.keys().next().value!);
+   setTransition({key:transitionKey,data,ready:true});
+  }).catch(()=>{
+   if(alive)setTransition({key:transitionKey,data:new Map(),ready:true});
+  });
+  return()=>{alive=false;};
+ },[enabled,readyBoard,selectedStopId,transitionKey,date]);
  // Static PID departures now cover all verified GTFS IDs of one physical edge.
  // Golemio fallback remains scoped to the exact ID on source failure.
  useEffect(()=>{
@@ -442,17 +469,18 @@ export function useStopNeighbours(args:{
   Number.isFinite(ownStamp)&&now-ownStamp<=90000&&now-ownStamp>=-10000?
   ownDelayRaw:null;
  const complete=!!readyBoard&&live.key===key&&live.complete&&
-  detail.key===key&&detail.complete;
+  detail.key===key&&detail.complete&&transition.key===transitionKey&&transition.ready;
  const result=useMemo(()=>{
   if(!enabled||!effectiveStop||!selectedStopId||index===null||!readyBoard||!complete)return null;
   return parseNeighbourBoard({
    board:readyBoard,stop:effectiveStop,ownTripId,ownStops:stops,ownIndex:index,ownDelay,
    settings,distance:currentIndex===null?0:Math.max(0,index-currentIndex),
    features:live.key===key?[...knownFeatures,...live.features]:knownFeatures,
-   candidateStops:detail.key===key?detail.stops:undefined,now
+   candidateStops:detail.key===key?detail.stops:undefined,
+   continuations:transition.key===transitionKey?transition.data:undefined,now
   });
  },[enabled,effectiveStop,index,selectedStopId,readyBoard,ownTripId,stops,ownDelay,settings,currentIndex,
-  live,knownFeatures,detail,key,now,complete]);
+  live,knownFeatures,detail,transition,transitionKey,key,now,complete]);
  useEffect(()=>{
   if(!result||!readyBoard||!selectedStopId)return;
   recordNeighbourDiagnostic({
