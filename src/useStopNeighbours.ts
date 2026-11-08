@@ -432,7 +432,7 @@ export function useStopNeighbours(args:{
   });
  // Logs only when board or enrichment changes, not every display countdown tick.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[key,readyBoard,live,detail,result]);
+ },[key,readyBoard,live,detail]);
  async function probeDepartureBoard(){
   const context={stopId:selectedStopId,stopName:stop?.name??'',tripId:ownTripId,
    endpoint:'/v2/pid/departureboards · MANUAL TEST'};
