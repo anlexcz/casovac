@@ -7,6 +7,7 @@ import {orderOf,routeOf} from './featureUtils';
 import type {Feature,Obj} from './featureUtils';
 import {parseStops} from './tripData';
 import {pidStatic,comparePidTripStops,pidTripStopRows} from './pidStatic.ts';
+import PidPhase2Panel from './PidPhase2Panel.tsx';
 
 type Probe={
  id:string;title:string;url:string;receivedAt:string;elapsedMs:number;
@@ -204,6 +205,7 @@ export default function RawDebug(){
     onClick={()=>void compareStatic()}>{staticBusy?'Porovnávám…':'Porovnat online detail s offline GTFS'}</button>
    {staticCheck!==null&&<pre className="rawJson">{stringify(staticCheck)}</pre>}
   </section>
+  <PidPhase2Panel tripId={manualTrip.trim()||selected?.tripId||''} date={date}/>
   <section className="panel">
    <div className="rawSectionHead"><h2>Výskyty block_id v odpovědích</h2><strong>{discovered.length}</strong></div>
    {discovered.length?discovered.map((item,i)=><div key={i} className="rawBlockField">
