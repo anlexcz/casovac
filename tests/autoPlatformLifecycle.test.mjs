@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {confirmedAtStop,confirmedBeyondStop,pickAutoPlatform} from '../src/autoPlatformLifecycle.ts';
+import {confirmedAtStop,confirmedBeyondStop,pickAutoPlatform,platformMarkers} from '../src/autoPlatformLifecycle.ts';
 
 const stops=['A','B','C','D'].map((id,i)=>({id,name:id,sequence:i+1,
  arrival:'10:00:00',departure:'10:00:00',lat:null,lon:null}));
@@ -16,6 +16,13 @@ const pick=(overrides={})=>pickAutoPlatform({
  stops,currentIndex:1,entries,stopMap:map,
  evidence:state(),remainingToCurrent:35,remainingToTarget:()=>80,
  leadSeconds:90,...overrides
+});
+test('stop-list markers come only from exact trip sequence and verified physical edge',()=>{
+ const x=platformMarkers(stops,[
+  [3,'P/C','shared-platform',[]],[3,'P/C','tram-route-set',[]],
+  [2,'P/B','mixed-platform',[]],[4,'P/WRONG','tram-route-set',[]]
+ ],map);
+ assert.deepEqual(x,{1:'mixed',2:'join'});
 });
 test('opens verified mixed platform before reaching its preceding stop',()=>{
  assert.deepEqual(pick(),{index:2,physicalId:'P/C',kind:'mixed-platform'});
