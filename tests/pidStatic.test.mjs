@@ -29,6 +29,7 @@ const sources={
   T10:['service','Řepy','0','B9','shape','',[
    ['U2',87300,87360,1,'1']]]},
  ['days/'+day+'/blocks.json']:{B9:[[86100,'T9',route],[87300,'T10',route]]},
+ ['days/'+day+'/platform-encounters.json']:{T9:[[2,'4/2','tram-branch-confirmed',[]]],T10:[]},
  ['shapes/'+filename]:{shape:[[50,14],[50.1,14.1]]},
 };
 for(const id of ['U1','U2'])sources['days/'+day+'/departures/'+bucket(id)+'.json']??={};
@@ -71,6 +72,9 @@ test('lookup trip, departures, blocks, stops and shape without Golemio',async()=
  assert.deepEqual(board.map(x=>x.tripId),['T9','T10']);
  const block=await engine.getBlockTrips('B9',day);
  assert.deepEqual(block.map(x=>x.id),['T9','T10']);
+ const join=await engine.getPlatformEncounters('T9',day);
+ assert.deepEqual(join,[[2,'4/2','tram-branch-confirmed',[]]]);
+ assert.deepEqual(await engine.getPlatformEncounters('missing',day),[]);
  const shape=await engine.getRouteShape('L9','shape');
  assert.equal(shape.length,2);
  const same=await Promise.all([engine.getTrip('T9',day),engine.getTrip('T10',day)]);
