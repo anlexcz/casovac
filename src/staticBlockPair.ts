@@ -39,7 +39,7 @@ export async function findStaticBlockLinks(
 ):Promise<StaticBlockLinks>{
  if(!tripId||!line||!/^\d{4}-\d{2}-\d{2}$/.test(date))return EMPTY;
  const current=await source.getTrip(tripId,date);
- if(!current||current.id!==tripId||!current.blockId)return EMPTY;
+ if(!current||current.id!==tripId||current.date!==date||!current.blockId)return EMPTY;
  const routes=await source.getRoutes();
  if(routes[current.routeId]?.[0]!==line)return EMPTY;
  const block=await source.getBlockTrips(current.blockId,date);
@@ -71,7 +71,7 @@ export async function findStaticBlockLinks(
   // *route change*: never skip it to reach a more distant different line.
   if(!otherLine||otherLine===line)return null;
   const other=await source.getTrip(entry.id,date,entry.routeId);
-  if(!other||other.id!==entry.id||other.blockId!==current.blockId||
+  if(!other||other.id!==entry.id||other.date!==date||other.blockId!==current.blockId||
      other.routeId!==entry.routeId)return null;
   const otherStops=await source.getTripStops(entry.id,date,entry.routeId);
   if(!validStops(otherStops))return null;
