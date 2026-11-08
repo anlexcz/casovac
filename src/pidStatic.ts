@@ -162,8 +162,8 @@ export class PidStaticEngine{
     // Do not silently rescue a corrupt/unsupported live manifest.
     if(networkError instanceof PidStaticError&&networkError.reason==='invalid')throw networkError;
     const stored=await this.persistent.get('manifest').catch(()=>null);
-    if(!stored)throw new PidStaticError('network','PID manifest unavailable, no local copy: '+String(networkError));
-    manifest=this.validateManifest(stored);
+    if(!stored&&!this.lastManifest)throw new PidStaticError('network','PID manifest unavailable, no local copy: '+String(networkError));
+    manifest=this.validateManifest(stored??this.lastManifest);
     // An old publication is not a valid substitute for a different operating day.
     if(!manifest.days[pidServiceDate(new Date())])
      throw new PidStaticError('unavailable','Offline PID manifest does not cover today');
