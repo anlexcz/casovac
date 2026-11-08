@@ -1,5 +1,6 @@
 """Synthetic PID GTFS fixture: no external API required by CI."""
 import json
+import hashlib
 from datetime import date
 from pathlib import Path
 import tempfile
@@ -81,6 +82,19 @@ class PIDBuilderTests(unittest.TestCase):
                     zf, registry, root / "data", date(2026, 11, 8),
                     min_count=1
                 )
+            self.assertEqual(manifest["checksumsFile"], "checksums.json")
+            self.assertNotIn("checksums", manifest)
+            self.assertLess((root / "data/manifest.json").stat().st_size, 8192)
+            raw_index = (root / "data/checksums.json").read_bytes()
+            self.assertEqual(
+                hashlib.sha256(raw_index).hexdigest(), manifest["checksumsSha256"]
+            )
+            index = json.loads(raw_index)
+            self.assertEqual(len(index), manifest["checksumsCount"])
+            self.assertEqual(
+                index["stops/gtfs-map.json"],
+                hashlib.sha256((root / "data/stops/gtfs-map.json").read_bytes()).hexdigest()
+            )
             self.assertFalse(manifest["days"]["2026-11-07"]["available"])
             self.assertEqual(manifest["days"]["2026-11-08"]["trips"], 2)
             day = root / "data/days/2026-11-08"

@@ -19,6 +19,7 @@ export type PidManifest={
  schema:string;generatedAt:string;referenceDay:string;timezone:string;
  days:Record<string,PidDayInfo>;feed:{gtfsUrl:string;stopsUrl:string;startDate:string;endDate:string;stopsGeneratedAt:string|null};
  counts:Record<string,number>;format:Record<string,string>;checksums?:Record<string,string>;
+ checksumsFile?:string;checksumsSha256?:string;checksumsCount?:number;
 };
 export type PidTrip={id:string;date:string;routeId:string;serviceId:string;
  headsign:string;directionId:string;blockId:string;shapeId:string;
@@ -96,6 +97,8 @@ export class PidStaticEngine{
  private readonly base:string;
  private readonly loader:typeof fetch;
  private readonly persistent:PidStore;
+ private checksumPromise:Promise<Record<string,string>>|null=null;
+ private checksumVersion='';
  constructor(base:string=basePath()+'data/pid/v1/',
   loader:typeof fetch=(input,init)=>globalThis.fetch(input,init),
   persistent:PidStore=new IndexedPidStore()){
@@ -109,6 +112,63 @@ export class PidStaticEngine{
    referenceDay:this.lastManifest?.referenceDay??null};
  }
  private lastManifest:PidManifest|null=null;
+ private async sha256(raw:string):Promise<string>{
+  if(!globalThis.crypto?.subtle)throw new PidStaticError('unsupported','Cannot verify PID release without Web Crypto');
+  const digest=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+ }
+ /** The integrity index is requested only when a shard is not cached. */
+ private async getChecksumIndex(manifest:PidManifest):Promise<Record<string,string>>{
+  if(!manifest.checksumsFile||!manifest.checksumsSha256)
+   throw new PidStaticError('invalid','Missing PID checksum index reference');
+  if(this.checksumVersion!==manifest.generatedAt){
+   this.checksumVersion=manifest.generatedAt;this.checksumPromise=null;
+  }
+  if(this.checksumPromise)return this.checksumPromise;
+  const task=(async()=>{
+   const cacheKey=manifest.generatedAt+'|checksum-index';
+   const saved=await this.persistent.get(cacheKey).catch(()=>null);
+   if(object(saved)&&saved.sha256===manifest.checksumsSha256&&object(saved.values))
+    return saved.values as Record<string,string>;
+   let response:Response;
+   try{
+    response=await this.loader(this.base+manifest.checksumsFile+
+     '?v='+encodeURIComponent(manifest.generatedAt),{cache:'default'});
+   }catch(e){throw new PidStaticError('network','PID checksum index unreachable: '+String(e));}
+   if(!response.ok)throw new PidStaticError('network','PID checksum index HTTP '+response.status);
+   let raw:string;
+   try{raw=await response.text();}catch{throw new PidStaticError('invalid','Unreadable PID checksum index');}
+   if(await this.sha256(raw)!==manifest.checksumsSha256)
+    throw new PidStaticError('invalid','PID checksum index release mismatch');
+   let values:unknown;
+   try{values=JSON.parse(raw);}catch{throw new PidStaticError('invalid','Corrupted PID checksum index');}
+   if(!object(values)||(manifest.checksumsCount!==undefined&&
+     Object.keys(values).length!==manifest.checksumsCount))
+    throw new PidStaticError('invalid','Invalid PID checksum index');
+   await this.persistent.put(cacheKey,{sha256:manifest.checksumsSha256,values}).catch(()=>{});
+   return values as Record<string,string>;
+  })();
+  this.checksumPromise=task;
+  try{return await task;}catch(e){this.checksumPromise=null;throw e;}
+ }
+ private async expectedChecksum(path:string,version:string):Promise<string|undefined>{
+  const manifest=this.lastManifest;
+  if(!manifest||manifest.generatedAt!==version)
+   throw new PidStaticError('invalid','PID manifest version changed during shard loading');
+  if(manifest.checksums){
+   const checksum=manifest.checksums[path];
+   if(!checksum)throw new PidStaticError('invalid','PID manifest does not list shard '+path);
+   return checksum;
+  }
+  if(manifest.checksumsFile){
+   const index=await this.getChecksumIndex(manifest);
+   const checksum=index[path];
+   if(typeof checksum!=='string'||!/^[a-f0-9]{64}$/.test(checksum))
+    throw new PidStaticError('invalid','PID checksum index does not list shard '+path);
+   return checksum;
+  }
+  return undefined; // old unpinned fixture manifests
+ }
  private async request<T>(path:string,version:string):Promise<T>{
   const key=version+'|'+path;
   const existing=this.cache.get(key);
@@ -129,15 +189,11 @@ export class PidStaticEngine{
    if(response.status===404)throw new PidStaticError('not-found','Missing PID shard '+path);
    if(!response.ok)throw new PidStaticError('network','PID shard HTTP '+response.status);
    let value:unknown;
-   const expected=this.lastManifest?.generatedAt===version?this.lastManifest?.checksums?.[path]:undefined;
+   const expected=await this.expectedChecksum(path,version);
    try{
-    if(this.lastManifest?.checksums&&this.lastManifest.generatedAt===version&&!expected)
-     throw new PidStaticError('invalid','PID manifest does not list shard '+path);
     if(expected){
      const raw=await response.text();
-     if(!globalThis.crypto?.subtle)throw new PidStaticError('unsupported','Cannot verify PID release without Web Crypto');
-     const digest=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
-     const actual=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+     const actual=await this.sha256(raw);
      if(actual!==expected)throw new PidStaticError('invalid','PID release mismatch at '+path);
      value=JSON.parse(raw);
     }else value=await response.json(); // compatibility with phase-1B outputs
@@ -184,7 +240,9 @@ export class PidStaticEngine{
      throw new PidStaticError('unavailable','Offline PID manifest does not cover today');
     this.manifestSource='persisted';
    }
-   if(this.version&&this.version!==manifest.generatedAt)this.cache.clear();
+   if(this.version&&this.version!==manifest.generatedAt){
+    this.cache.clear();this.checksumPromise=null;this.checksumVersion='';
+   }
    this.version=manifest.generatedAt;
    this.lastManifest=manifest;
    return manifest;
@@ -196,7 +254,13 @@ export class PidStaticEngine{
   if(!object(data)||data.schema!=='casovac-pid-v1'||!isDay(String(data.referenceDay??''))||
      typeof data.generatedAt!=='string'||!object(data.days)||!object(data.counts)||
      data.timezone!=='Europe/Prague'||
-     (data.checksums!==undefined&&!object(data.checksums))){
+     (data.checksums!==undefined&&!object(data.checksums))||
+     (data.checksumsFile!==undefined&&
+      (data.checksumsFile!=='checksums.json'||
+       typeof data.checksumsSha256!=='string'||
+       !/^[a-f0-9]{64}$/.test(data.checksumsSha256)||
+       !Number.isSafeInteger(data.checksumsCount)||
+       data.checksums!==undefined))){
    throw new PidStaticError('invalid','Unsupported/corrupted PID manifest');
   }
   return data as unknown as PidManifest;
@@ -312,6 +376,7 @@ export class PidStaticEngine{
  clearCache():void{
   this.cache.clear();this.pending.clear();this.manifestPromise=null;
   this.version='';this.lastManifest=null;this.manifestSource='none';
+  this.checksumPromise=null;this.checksumVersion='';
  }
  async clearPersistentCache():Promise<void>{
   this.clearCache();
