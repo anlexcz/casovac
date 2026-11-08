@@ -13,6 +13,8 @@ export const DEFAULT_NEIGHBOUR_SETTINGS:NeighbourSettings={
  colourOrder:true,orderToleranceSeconds:30,orderHysteresisSeconds:10
 };
 export type NeighbourRow={
+ transition?:{fromTripId:string;fromLine:string;fromOrder:string;arrivalSeconds:number;
+  fromVehicle:string;fromDelay:number|null;blockId:string};
  tripId:string;line:string;order:string;vehicle:string;
  scheduled:string;scheduledSeconds:number;delay:number|null;
  relative:'before'|'same'|'after';predictedDifference:number;
