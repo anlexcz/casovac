@@ -32,6 +32,14 @@ Poslední zadané `linka/pořadí` se uchovává místně. Pokud je API klíč u
 - **Provozní fáze:** před výjezdem, na konečné a po ukončení výkonu aktivní rozestup skrýt. Plánovou identitu stále uchovávat pro další pokračování. Neznámá fáze není důkazem skončeného výkonu.
 - **Diagnostika:** pro oba sousedy je dostupná fáze, zdroj, důvod odmítnutí a čas posledního měření. Regresní testy jsou v `tests/*BlockContinuity*`, `tests/peerLiveResolve.test.mjs`, `tests/trackedDuty.test.mjs` a `tests/vehicleObservationStore.test.mjs`.
 
+## Stabilní poslední rozestup předchozího/následujícího výkonu (PR #63)
+
+- Výsledek LIVE rozestupu je **samostatně uložené číslo** pro dvojici ověřených plánovaných výkonů (vlastní `serviceKey`, sousední ověřený `block_id`; pro neověřený blok dočasně přesné `trip_id`). Není svázán s `referenceStopId`; posun zastávky ani nové GTFS přepočtení stejného výkonu jej nevymažou.
+- Nový výpočet přepíše číslo pouze při nových, časově platných měřeních **obou** tramvají. Při chybějící odpovědi, stejném `origin_timestamp` nebo dočasné změně zobrazené referenční zastávky se zachovává minulý výsledek beze změny. Rozestup se **neodečítá po sekundách** (není to odpočet zastávky).
+- 0–90 s od skutečného společného měření: LIVE. 90–180 s: **≈ poslední známý rozestup**; neoznačovat jako živě potvrzený. Poté se číslo nepoužívá, dokud nepřijdou nové validní údaje. Historické snapshoty různých dvojic se v paměti uchovávají odděleně a omezeně.
+- Po doloženém přepnutí tripu v **témže GTFS bloku** má sousední výkon stejný klíč. Pokud se skutečně změnil sousední blok nebo vlastní výkon, starý rozestup se na jiný vůz nepřenáší. Bez důkazu blokové návaznosti není dovoleno spojení předpokládat.
+- Neúspěšné přepočtení GTFS plánových sousedů ponechá předchozí známý plán maximálně 180 s pro stejný vlastní trip a provozní den; nový ověřený výsledek (i skutečná absence souseda) má přednost.
+
 ## Oprava obnovování LIVE dat a cache – PR #59 (8. 11. 2026)
 
 - **Odpočet odjezdu je vždy jen aktuální čas versus pevný JŘ.** Dopravní znaménka zůstávají beze změny: **− před odjezdem, + po odjezdu**. Žádná hranice stáří LIVE dat už nesmí odpočet vypnout. LIVE rozhoduje pouze o tom, kterou zastávku máme vybranou.
