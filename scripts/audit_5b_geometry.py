@@ -20,9 +20,10 @@ def audit(root: Path) -> dict:
     for day in manifest["days"]:
         directory = root / "days" / day
         encounters = json.loads((directory / "platform-encounters.json").read_text(encoding="utf-8"))
+        candidates = json.loads((directory / "platform-candidates.json").read_text(encoding="utf-8"))
         kinds = Counter()
         locations = Counter()
-        for trip_id, entries in encounters.items():
+        for trip_id, entries in list(encounters.items())+list(candidates.items()):
             if not trip_id or not isinstance(entries, list):
                 raise ValueError("Malformed encounter list")
             for entry in entries:
