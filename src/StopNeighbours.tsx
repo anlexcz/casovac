@@ -61,8 +61,15 @@ export default function StopNeighbours({
    <span className={'sn-arrow sn-arrow-'+row.relative+' sn-tone-'+tone}
     aria-label={arrowLabel+'; '+toneLabel} title={arrowLabel+'; '+toneLabel}>
     {row.relative==='before'?'↑':row.relative==='after'?'↓':'→'}</span>
-   <span className="sn-badge">{row.line}/{row.order}</span>
-   <span className="sn-vehicle">{row.vehicle?'#'+row.vehicle:'—'}</span>
+   <span className="sn-badge">{row.line}/{row.order}
+    {row.transition&&<small className="sn-chain" title={'Plánově navazuje na '+row.transition.fromLine+
+     (row.transition.fromOrder==='?'?'':'/'+row.transition.fromOrder)+' · stejný GTFS blok'}>
+     ← {row.transition.fromLine}{row.transition.fromOrder!=='?'?'/'+row.transition.fromOrder:''}</small>}
+   </span>
+   <span className="sn-vehicle" title={!row.vehicle&&row.transition?.fromVehicle?
+    'Poslední ověřený vůz na příjezdovém tripu; pokračování není LIVE potvrzeno':undefined}>
+    {row.vehicle?'#'+row.vehicle:row.transition?.fromVehicle?
+     '#'+row.transition.fromVehicle+'* ':'—'}</span>
    <span className={'sn-delay sn-tone-'+tone+(stale?' sn-stale':'')}
     title={stale?'Poslední známá odchylka, probíhá ověření; nejde o čerstvou LIVE polohu':
      tone==='good'?'Odhadované pořadí odpovídá JŘ':
