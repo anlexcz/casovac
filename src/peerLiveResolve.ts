@@ -4,6 +4,7 @@
  */
 import {selectedTripId,routeOf,vehicleId} from './featureUtils.ts';
 import {freshTripPosition} from './plannedPeerPosition.ts';
+import {observationTimestamp} from './remoteTracking.ts';
 import type {Feature} from './featureUtils.ts';
 import type {DutyTrip} from './peerDutyContinuity.ts';
 export type PeerLiveResolution={
@@ -21,8 +22,14 @@ export function selectDutyLive(args:{
   const matches=features.filter(f=>selectedTripId(f)===candidate.tripId&&
    routeOf(f)===candidate.line);
   if(!matches.length)continue;
-  if(matches.length!==1){reason='ambiguous';continue;}
-  const feature=matches[0],car=vehicleId(feature);
+  // A route snapshot and an exact-trip lookup often contain the SAME vehicle.
+  // Duplicated copies are not ambiguous. Prefer the newest actual measurement,
+  // but reject two different cars reporting the same trip/time.
+  const latest=Math.max(...matches.map(f=>observationTimestamp(f)??-Infinity));
+  const current=matches.filter(f=>(observationTimestamp(f)??-Infinity)===latest);
+  const vehicles=[...new Set(current.map(vehicleId))];
+  if(vehicles.length!==1){reason='ambiguous';continue;}
+  const feature=current[0],car=vehicleId(feature);
   if(!freshTripPosition(feature,now)||car==='—'){reason='stale';continue;}
   if(candidate.tripId!==originalTripId&&anchor&&car!==anchor){
    reason='vehicle-mismatch';continue;
