@@ -22,7 +22,7 @@ const unique=(features:Feature[],id:string,line:string,now:number)=>{
 export type PeerPositionStatus={ahead:'existing'|'direct'|'provisional'|'unavailable'|'none';
  behind:'existing'|'direct'|'provisional'|'unavailable'|'none'};
 type Side='ahead'|'behind';
-type CandidateSet={key:string;ahead:DutyTrip[];behind:DutyTrip[]};
+type CandidateSet={key:string;ahead:DutyTrip[];behind:DutyTrip[];verified:boolean};
 export function usePlannedPeerPositions(args:{
  enabled:boolean;planned:PlannedHeadways;features:Feature[];token:string;now:number;
  date:string;
@@ -36,7 +36,7 @@ export function usePlannedPeerPositions(args:{
  // physical peer must not be forgotten at every stop transition.
  const key=ready?[date,ahead?.tripId??'',behind?.tripId??''].join('|'):'';
  const minute=Math.floor(now/60000);
- const [candidates,setCandidates]=useState<CandidateSet>({key:'',ahead:[],behind:[]});
+ const [candidates,setCandidates]=useState<CandidateSet>({key:'',ahead:[],behind:[],verified:false});
  const [remote,setRemote]=useState<{key:string;values:Feature[];updatedAt:number;loading:boolean}>({
   key:'',values:[],updatedAt:0,loading:false
  });
@@ -46,15 +46,15 @@ export function usePlannedPeerPositions(args:{
  const anchorDay=useRef('');
  if(anchorDay.current!==date){known.current.clear();anchorDay.current=date;}
  useEffect(()=>{
-  if(!key){setCandidates({key:'',ahead:[],behind:[]});return;}
+  if(!key){setCandidates({key:'',ahead:[],behind:[],verified:false});return;}
   let alive=true;
   const first=(p:PlannedPeer|null):DutyTrip[]=>
    p?[{tripId:p.tripId,line:p.line,startSeconds:p.departureSeconds}]:[];
-  setCandidates({key,ahead:first(ahead),behind:first(behind)});
+  setCandidates({key,ahead:first(ahead),behind:first(behind),verified:false});
   void Promise.all([ahead?peerDutyCandidates(ahead,date,now):Promise.resolve([]),
    behind?peerDutyCandidates(behind,date,now):Promise.resolve([])
   ]).then(([a,b])=>{
-   if(alive)setCandidates({key,ahead:a.length?a:first(ahead),behind:b.length?b:first(behind)});
+   if(alive)setCandidates({key,ahead:a.length?a:first(ahead),behind:b.length?b:first(behind),verified:true});
   }).catch(()=>{});
   return()=>{alive=false;};
  // Re-evaluate the verified duty only when the chosen peer changes.
@@ -149,8 +149,10 @@ export function usePlannedPeerPositions(args:{
   status:{ahead:first.source,behind:second.source},
   tripIds:{ahead:first.tripId,behind:second.tripId},
   updatedAt:remote.updatedAt,loading:remote.loading,
-  phases:{ahead:dutyPhase({candidates:routes.ahead,date,now,feature:first.feature}),
-   behind:dutyPhase({candidates:routes.behind,date,now,feature:second.feature})},
+  phases:{ahead:candidates.verified&&candidates.key===key?
+   dutyPhase({candidates:routes.ahead,date,now,feature:first.feature}):'unknown',
+   behind:candidates.verified&&candidates.key===key?
+   dutyPhase({candidates:routes.behind,date,now,feature:second.feature}):'unknown'},
   lastKnown:{ahead:lastKnown('ahead',ahead),behind:lastKnown('behind',behind)}
  };
 }
