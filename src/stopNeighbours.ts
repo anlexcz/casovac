@@ -37,9 +37,9 @@ export function relevantWindows(settings:NeighbourSettings,distance:number):{bef
   before:Math.max(0,Math.min(20,settings.beforeMinutes))*60,
   after:Math.max(0,Math.min(20,settings.afterMinutes))*60
  };
- const d=Math.max(0,distance);
- return d<=1?{before:120,after:180}:d<=3?{before:180,after:240}:
-  d<=6?{before:240,after:300}:{before:300,after:360};
+ // The broad search is upstream; the displayed conflict window is symmetric.
+ void distance;
+ return {before:120,after:120};
 }
 export function calculateStopNeighbours(args:{
  ownTripId:string;ownStops:Stop[];ownIndex:number;ownFeature:Feature|null;
