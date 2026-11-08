@@ -40,24 +40,48 @@ const sameDirection=(own:PidTripStop[],peer:PidTripStop[],ownIndex:number,peerIn
 };
 export async function findPlannedHeadways(args:{
  tripId:string;date:string;referenceStopId:string;
- maxGapSeconds?:number;source?:Source;
+ nowMs?:number;maxGapSeconds?:number;source?:Source;
 }):Promise<PlannedHeadways>{
- const {tripId,date,referenceStopId,source=pidStatic,maxGapSeconds=1200}=args;
+ const {tripId,date,referenceStopId,source=pidStatic,maxGapSeconds=1200,
+  nowMs=Date.now()}=args;
  const unavailable=(reason:string):PlannedHeadways=>({
   ...EMPTY_PLANNED_HEADWAYS,referenceStopId,reason
  });
- if(!tripId||!referenceStopId||!strictDay(date))
-  return unavailable('Chybí identita tripu, provozní den nebo přesná hrana.');
+ if(!tripId||!strictDay(date))
+  return unavailable('Chybí identita tripu nebo ověřený provozní den.');
  const own=await source.getTripResolved(tripId,date);
  if(!own||own.id!==tripId||own.date!==date)
   return unavailable('V provozním dni není potvrzen vlastní GTFS trip.');
- const [ownStops,all,routes]=await Promise.all([
-  source.getTripStops(tripId,date,own.routeId),
-  source.getDepartures(referenceStopId,date),source.getRoutes()
+ const [ownStops,routes]=await Promise.all([
+  source.getTripStops(tripId,date,own.routeId),source.getRoutes()
  ]);
  if(!ownStops||ownStops.length!==own.stopTimes.length||!routes[own.routeId]?.[0])
   return unavailable('Vlastní jízdní řád není úplný.');
- const ownIndex=unique(ownStops,referenceStopId);
+ let actualReference=referenceStopId;
+ if(!actualReference){
+  // A persisted verified duty can retain its GTFS trip when the live
+  // vehicle disappears. Choose the next scheduled platform by Prague
+  // service-day time, without asking Golemio or extrapolating any delay.
+  const instant=new Date(nowMs);
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Prague',
+   year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',
+   second:'2-digit',hourCycle:'h23'}).formatToParts(instant);
+  const pick=(type:string)=>parts.find(p=>p.type===type)?.value??'';
+  const today=pick('year')+'-'+pick('month')+'-'+pick('day');
+  const seconds=Number(pick('hour'))*3600+Number(pick('minute'))*60+
+   Number(pick('second'));
+  if(today!==date||!Number.isFinite(seconds))
+   return unavailable('Bez LIVE není provozní den bezpečně ověřen.');
+  const candidates=ownStops.slice(0,-1).map((s,i)=>({s,i,
+   time:secs(s.departure)})).filter(entry=>entry.time!==null&&
+    entry.time>=seconds-120&&entry.time<=seconds+1200);
+  const nearest=candidates.sort((a,b)=>a.time!-b.time!)[0];
+  if(!nearest)
+   return unavailable('Bez LIVE není v blízkosti žádná plánovaná zastávka.');
+  actualReference=nearest.s.id;
+ }
+ const all=await source.getDepartures(actualReference,date);
+ const ownIndex=unique(ownStops,actualReference);
  if(ownIndex<0||ownIndex+1>=ownStops.length)
   return unavailable('Nejednoznačná nebo koncová referenční zastávka.');
  const ownSeconds=secs(ownStops[ownIndex].departure);
@@ -99,7 +123,7 @@ export async function findPlannedHeadways(args:{
    const diff=d.departureSeconds-ownSeconds;
    const peer:PlannedPeer={tripId:d.tripId,line,order:'',
     scheduledGap:Math.abs(diff),departureSeconds:d.departureSeconds,
-    referenceStopId};
+    referenceStopId:actualReference};
    // Equal-gap ambiguous candidates must not be broken by arbitrary API order.
    if(diff<0){
     if(!ahead||peer.scheduledGap<ahead.scheduledGap){ahead=peer;aheadTied=false;}
@@ -112,7 +136,7 @@ export async function findPlannedHeadways(args:{
   }
  }
  return {ahead:aheadTied?null:ahead,behind:behindTied?null:behind,
-  considered,status:'ready',referenceStopId,
+  considered,status:'ready',referenceStopId:actualReference,
   reason:aheadTied||behindTied?'Shodné časy dvou sousedů: strana je nejednoznačná.':
   considered?'Plánované sousedství ověřeno z PID GTFS.':
    'Na ověřeném směrovém úseku není blízký plánovaný spoj.'};
