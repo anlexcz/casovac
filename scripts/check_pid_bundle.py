@@ -28,11 +28,23 @@ def verify(root: Path) -> dict:
         if not (folder / "blocks.json").is_file():
             raise ValueError(f"Missing block locator for {date}")
         if "platformEncounterTrips" in info:
-            encounter_file = folder / "platform-encounters.json"
-            if not encounter_file.is_file():
-                raise ValueError(f"Missing 5B physical platform encounters for {date}")
-            encounters = json.loads(encounter_file.read_text(encoding="utf-8"))
-            if len(encounters) != info["platformEncounterTrips"]:
+            shards = info.get("platformEncounterShards", 0)
+            if shards:
+                if shards != 16:
+                    raise ValueError(f"Invalid 5B bucket count for {date}")
+                count = 0
+                for bucket in range(shards):
+                    name = folder / "platform-encounters" / f"{bucket:02d}.json"
+                    if not name.is_file():
+                        raise ValueError(f"Missing 5B encounter bucket {date}/{bucket}")
+                    encounters = json.loads(name.read_text(encoding="utf-8"))
+                    count += len(encounters)
+            else:
+                name = folder / "platform-encounters.json"
+                if not name.is_file():
+                    raise ValueError(f"Missing 5B encounter index for {date}")
+                count = len(json.loads(name.read_text(encoding="utf-8")))
+            if count != info["platformEncounterTrips"]:
                 raise ValueError(f"Invalid 5B encounter count for {date}")
         if "platformCandidateTrips" in info:
             candidate_file = folder / "platform-candidates.json"
