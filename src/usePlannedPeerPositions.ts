@@ -37,8 +37,9 @@ export function usePlannedPeerPositions(args:{
  // Preserve an observed vehicle for the lifetime of this exact scheduled peer.
  // Never map an unrelated vehicle solely because it has a successor trip ID.
  const known=useRef<Map<string,string>>(new Map());
+ const anchorDay=useRef('');
+ if(anchorDay.current!==date){known.current.clear();anchorDay.current=date;}
  useEffect(()=>{
-  known.current.clear();
   if(!key){setCandidates({key:'',ahead:[],behind:[]});return;}
   let alive=true;
   const first=(p:PlannedPeer|null):DutyTrip[]=>
@@ -63,7 +64,10 @@ export function usePlannedPeerPositions(args:{
  const remember=(side:Side,peer:PlannedPeer|null)=>{
   if(!peer)return;
   const original=unique(allLocal,peer.tripId,peer.line,now);
-  if(original&&vehicleId(original)!=='—')known.current.set(side+'|'+peer.tripId,vehicleId(original));
+  if(original&&vehicleId(original)!=='—'){
+   known.current.set(side+'|'+peer.tripId,vehicleId(original));
+   if(known.current.size>60)known.current.delete(known.current.keys().next().value!);
+  }
  };
  remember('ahead',ahead);remember('behind',behind);
  useEffect(()=>{
