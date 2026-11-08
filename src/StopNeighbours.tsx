@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import type {NeighbourResult,NeighbourSettings} from './stopNeighbours.ts';
 import {formatNeighbourDelay} from './stopNeighbours.ts';
-import {emptyStableNeighbours,reconcileNeighbours} from './stableNeighbours.ts';
+import {emptyStableNeighbours,reconcileNeighbours,NEIGHBOUR_VISUAL_RETAIN_MS} from './stableNeighbours.ts';
 import {orderColour,scheduledSeconds,predictedArrivalClock} from './neighbourOrderColour.ts';
 import type {OrderColour} from './neighbourOrderColour.ts';
 import {neighbourBoardNotice} from './neighbourPanelStatus.ts';
@@ -19,7 +19,12 @@ export default function StopNeighbours({
  colourOrder,tolerance,hysteresis
 }:Props){
  const [stable,setStable]=useState(emptyStableNeighbours);
- const lastOwn=useRef<NeighbourResult|null>(null);
+ const lastOwn=useRef<{data:NeighbourResult;lastLiveAt:number|null}|null>(null);
+ const [clock,setClock]=useState(Date.now());
+ useEffect(()=>{
+  const timer=window.setInterval(()=>setClock(Date.now()),10000);
+  return()=>window.clearInterval(timer);
+ },[]);
  const colours=useRef(new Map<string,OrderColour>());
  const incoming=data?.rows??[];
  useEffect(()=>{
@@ -27,21 +32,29 @@ export default function StopNeighbours({
   // stay visible, including when they pass the platform or cease reporting.
   setStable(old=>reconcileNeighbours(old,incoming,updatedAt,!loading,Date.now()));
  },[data,updatedAt,loading]);
- if(data?.ownSchedule)lastOwn.current=data;
- const ownData=data?.ownSchedule?data:lastOwn.current;
+ if(data?.ownSchedule){
+  if(data.ownDelay!==null)lastOwn.current={data,lastLiveAt:Date.now()};
+  else if(lastOwn.current?.data.ownSchedule!==data.ownSchedule)
+   lastOwn.current={data,lastLiveAt:null};
+ }
+ const ownData=data?.ownSchedule?data:lastOwn.current?.data??null;
  const ownSchedule=ownData?.ownSchedule??'';
  const ownSeconds=scheduledSeconds(ownSchedule);
- const ownDelay=ownData?.ownDelay??null;
+ const ownCache=lastOwn.current;
+ const ownDelay=data?.ownDelay!==null&&data?.ownDelay!==undefined?data.ownDelay:
+  ownCache?.data.ownSchedule===ownSchedule&&ownCache.lastLiveAt!==null&&
+  clock-ownCache.lastLiveAt<NEIGHBOUR_VISUAL_RETAIN_MS?ownCache.data.ownDelay:null;
  const service=(entry:(typeof stable.entries)[number])=>{
   const row=entry.row;
   const difference=ownSeconds!==null&&ownDelay!==null&&row.delay!==null?
    row.scheduledSeconds+row.delay-(ownSeconds+ownDelay):null;
-  const stale=entry.missingCycles>0;
+  const stale=entry.missingCycles>0||entry.lastLiveAt!==null&&clock-entry.lastLiveAt>=60000;
+  const expired=entry.lastLiveAt!==null&&clock-entry.lastLiveAt>=NEIGHBOUR_VISUAL_RETAIN_MS;
   const previous=colours.current.get(row.tripId)??'neutral';
-  const tone=stale?'neutral':colourOrder?
+  const tone=colourOrder&&!expired?
    orderColour(row.relative,difference,tolerance,previous,hysteresis):'neutral';
-  if(!stale)colours.current.set(row.tripId,tone);
-  const estimated=stale?null:predictedArrivalClock(row.scheduledSeconds,row.delay);
+  colours.current.set(row.tripId,tone);
+  const estimated=!expired?predictedArrivalClock(row.scheduledSeconds,row.delay):null;
   const arrowLabel=row.relative==='before'?'Patří před tebe':row.relative==='after'?'Patří za tebe':'Stejný čas dle JŘ';
   const toneLabel=tone==='good'?'odhadované pořadí odpovídá JŘ':tone==='risk'?'hrozí změna pořadí':tone==='uncertain'?'příjezdy jsou velmi blízko':'pořadí nelze ověřit';
   return <div className="sn-row" key={row.tripId}>
@@ -51,11 +64,11 @@ export default function StopNeighbours({
    <span className="sn-badge">{row.line}/{row.order}</span>
    <span className="sn-vehicle">{row.vehicle?'#'+row.vehicle:'—'}</span>
    <span className={'sn-delay sn-tone-'+tone+(stale?' sn-stale':'')}
-    title={stale?'Poslední známá odchylka; spoj zůstává podle JŘ':
+    title={stale?'Poslední známá odchylka, probíhá ověření; nejde o čerstvou LIVE polohu':
      tone==='good'?'Odhadované pořadí odpovídá JŘ':
      tone==='risk'?'Odhadované pořadí se může obrátit':
      tone==='uncertain'?'Příjezdy jsou časově blízko':'Aktuální odchylka'}>
-    {row.delay===null?<span className="sn-plan-tag" title="Odchylka není ověřena, zobrazený čas je podle jízdního řádu">JŘ</span>:<span>{formatNeighbourDelay(row.delay)}</span>}
+    {row.delay===null||expired?<span className="sn-plan-tag" title="Odchylka není ověřena, zobrazený čas je podle jízdního řádu">JŘ</span>:<span>{formatNeighbourDelay(row.delay)}</span>}
     {estimated!==null&&<span className="sn-estimated" title={'Předpokládaný příjezd '+estimated}>({estimated})</span>}
    </span>
    <time className="sn-time" title="Čas podle jízdního řádu">{row.scheduled.slice(0,5)}</time>
@@ -69,7 +82,7 @@ export default function StopNeighbours({
   <time className="sn-time">{ownSchedule.slice(0,5)||'—'}</time>
  </div>;
  const notice=neighbourBoardNotice({ready:!!data,loading,error,rows:stable.entries.length,
-  ownLive:ownDelay!==null,verifiedPeers:stable.entries.filter(e=>e.missingCycles===0&&e.row.delay!==null).length,
+  ownLive:ownDelay!==null,verifiedPeers:stable.entries.filter(e=>e.missingCycles===0&&e.lastLiveAt!==null&&clock-e.lastLiveAt<60000&&e.row.delay!==null).length,
   liveIncomplete});
  const before=stable.entries.filter(x=>x.row.relative==='before');
  const same=stable.entries.filter(x=>x.row.relative==='same');

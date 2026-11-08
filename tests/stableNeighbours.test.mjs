@@ -43,3 +43,42 @@ test('new trips insert by fixed scheduled time, not delay',()=>{
  state=reconcileNeighbours(state,[row('b',34200,-100),row('a',34440,500)],2000,false,2000);
  assert.deepEqual(state.entries.map(e=>e.row.tripId),['b','a']);
 });
+
+test('one missing complete LIVE cycle retains last valid delay and identity',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440,90)],1000,true,1000);
+ state=reconcileNeighbours(state,[],61000,true,61000);
+ assert.equal(state.entries[0].row.delay,90);
+ assert.equal(state.entries[0].row.vehicle,'9362');
+ assert.equal(state.entries[0].missingCycles,1);
+ assert.equal(state.entries[0].lastLiveAt,1000);
+});
+test('new GTFS result with missing LIVE does not erase last valid deviation',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440,150)],1000,true,1000);
+ state=reconcileNeighbours(state,[{...row('a',34440,null),order:'?',vehicle:''}],62000,true,62000);
+ assert.equal(state.entries[0].row.delay,150);
+ assert.equal(state.entries[0].row.order,'22');
+ assert.equal(state.entries[0].row.vehicle,'9362');
+ assert.equal(state.entries[0].lastLiveAt,1000);
+});
+test('materially changed delay is applied immediately and refreshes evidence timestamp',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440,150)],1000,true,1000);
+ state=reconcileNeighbours(state,[row('a',34440,-100)],65000,true,65000);
+ assert.equal(state.entries[0].row.delay,-100);
+ assert.equal(state.entries[0].lastLiveAt,65000);
+});
+test('cached deviation expires after three minutes without renewing it on failed polls',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440,90)],1000,true,1000);
+ state=reconcileNeighbours(state,[],61000,true,61000);
+ state=reconcileNeighbours(state,[row('a',34440,null)],121000,true,121000);
+ assert.equal(state.entries[0].row.delay,90);
+ state=reconcileNeighbours(state,[row('a',34440,null)],181000,true,181000);
+ assert.equal(state.entries[0].row.delay,null);
+ assert.equal(state.entries[0].lastLiveAt,1000);
+});
+test('same trip with a different scheduled stop is not allowed to reuse old LIVE deviation',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('a',34440,90)],1000,true,1000);
+ state=reconcileNeighbours(state,[row('a',34800,null)],30000,true,30000);
+ assert.equal(state.entries[0].row.scheduledSeconds,34800);
+ assert.equal(state.entries[0].row.delay,null);
+ assert.equal(state.entries[0].lastLiveAt,null);
+});

@@ -18,7 +18,7 @@
 .sn-tone-risk{color:#f47779!important}
 .sn-tone-uncertain{color:#f5b45c!important}
 .sn-tone-neutral{color:#aab8c6}
-.sn-stale{opacity:.63;font-style:italic}
+.sn-stale{font-style:normal} /* Retained colour must not blink/fade on a missed refresh. */
 .sn-status{margin:0;padding:10px 6px;font-size:12px;color:#9babb9}
 .sn-updating{font-size:11px;color:#8699a9;padding-left:6px}
 .neighbourSettingsGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
