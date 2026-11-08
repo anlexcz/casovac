@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {countdownSeconds} from '../src/tripData.ts';
-import {OWN_VEHICLE_POLL_MS,OWN_VEHICLE_RETAIN_MS} from '../src/useVehicleTracking.ts';
+import {OWN_VEHICLE_POLL_MS,OWN_VEHICLE_RETAIN_MS,NEIGHBOUR_POLL_MS,NEIGHBOUR_RETAIN_MS,UPCOMING_STOP_COUNT} from '../src/pollingCadence.ts';
 
 const local=(h,m,s)=>new Date(2026,10,8,h,m,s).getTime();
 
@@ -22,4 +22,7 @@ test('wall clock continuously changes timetable countdown without needing a LIVE
 test('own vehicle polling permits three missed 20-second updates for identity retention',()=>{
  assert.equal(OWN_VEHICLE_POLL_MS,20000);
  assert.equal(OWN_VEHICLE_RETAIN_MS,60000);
+ assert.equal(NEIGHBOUR_POLL_MS,60000);
+ assert.equal(NEIGHBOUR_RETAIN_MS,180000);
+ assert.equal(UPCOMING_STOP_COUNT,3);
 });
