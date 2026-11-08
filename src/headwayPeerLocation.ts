@@ -57,6 +57,49 @@ export function plannedPeerLocation(stops:PidTripStop[]|null,date:string,
  return {title:'Poloha podle JŘ není jednoznačná',
   detail:'Nedostatečné časové údaje nebo neobvyklé návaznosti'};
 }
+/** Compact timetable location: show only one named platform, never a corridor.
+ * During a journey segment, it is the last scheduled departure platform.
+ * Time is evaluated against the peer's service day, not our own delay.
+ */
+export function plannedPeerStopName(stops:PidTripStop[]|null,date:string,now:number):string|null{
+ if(!stops?.length)return null;
+ const current=serviceSeconds(date,now);
+ if(current===null)return null;
+ const times=stops.map(stop=>({
+  name:stop.name,arrival:timeSeconds(stop.arrival),
+  departure:timeSeconds(stop.departure)
+ }));
+ if(times.some(stop=>stop.arrival===null||stop.departure===null||
+  stop.arrival>stop.departure)||times.some((stop,index)=>index>0&&
+   stop.arrival!<times[index-1].departure!))return null;
+ if(current<times[0].arrival!)return times[0].name;
+ let last=times[0].name;
+ for(const stop of times){
+  if(current<stop.arrival!)return last;
+  if(current<=stop.departure!)return stop.name;
+  last=stop.name;
+ }
+ return last;
+}
+/** A LIVE location needs an independently confirmed stop from the exact trip.
+ * A vehicle on track reports the last passed stop, not the next destination.
+ */
+export function livePeerStopName(feature:Feature,stops:PidTripStop[]|null):string|null{
+ if(!stops?.length)return null;
+ const state=stateOfFeature(feature);
+ if(state!=='at_stop'&&state!=='on_track')return null;
+ const rawSeq=path(feature,'properties.last_position.last_stop.sequence');
+ const rawId=path(feature,'properties.last_position.last_stop.id');
+ const last=bySequence(stops,rawSeq)??byId(stops,rawId);
+ if(last)return last.name;
+ // At a stop, Golemio may only identify the current stop as next_stop.
+ if(state==='at_stop'){
+  const next=bySequence(stops,path(feature,'properties.last_position.next_stop.sequence'))??
+   byId(stops,path(feature,'properties.last_position.next_stop.id'));
+  return next?.name??null;
+ }
+ return null;
+}
 const bySequence=(stops:PidTripStop[],raw:unknown):PidTripStop|null=>{
  const sequence=typeof raw==='number'?raw:typeof raw==='string'&&/^\d+$/.test(raw)?Number(raw):NaN;
  if(!Number.isFinite(sequence))return null;
