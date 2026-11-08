@@ -10,6 +10,22 @@ export type StaticTripContent={
  headsign:string;route:string;raw:unknown;source:string;
 };
 const validDate=(day:string)=>/^\d{4}-\d{2}-\d{2}$/.test(day);
+/** Until an authoritative GTFS service-date is supplied by the live trip,
+ * do not guess yesterday/today around midnight. A verified duty confirms
+ * route+order, NOT necessarily the calendar service date.
+ */
+export function safeStaticServiceDate(serviceDate:string,verified:boolean,now:Date):string{
+ if(!verified||!validDate(serviceDate))return '';
+ const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Prague',
+  year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(now);
+ const part=(type:string)=>parts.find(p=>p.type===type)?.value??'';
+ const date=part('year')+'-'+part('month')+'-'+part('day');
+ const hour=Number(part('hour'));
+ // Service-day ambiguity is significant after midnight; keep Golemio until
+ // a later phase can validate the real GTFS service date from live metadata.
+ return serviceDate===date&&hour>=4?serviceDate:'';
+}
+
 export function adaptStaticTrip(trip:PidTrip,stops:PidTripStop[],
  shape:PidShapePoint[],routeShortName:string):StaticTripContent{
  if(!stops.length||stops.some(s=>!s.id||!s.name||!Number.isInteger(s.sequence)||

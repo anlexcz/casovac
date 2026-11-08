@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState,useMemo} from 'react';
 import {selectTrip,isBeforeTrip,stateOf,terminalTrip} from './tripSelection';
 import {useTripData,countdownSeconds} from './tripData';
+import {safeStaticServiceDate} from './staticTripAdapter.ts';
 import {useChainTracking} from './useChainTracking';
 import {useOrderLookup} from './useOrderLookup';
 import {departureForHandoff} from './chainHandoff';
@@ -141,7 +142,7 @@ export function useAppController(){
  // service date. No guessed date from trip_id suffix or calendar midnight.
  const staticDate=trackedService?.verified&&trackedService.currentTripId===tripId&&
   active&&matchesCurrent(trackedService,active[0],active[1])
-  ?trackedService.serviceDate:'';
+  ?safeStaticServiceDate(trackedService.serviceDate,true,new Date(now)):'';
  const trip=useTripData(tripId,token.trim(),staticDate,
   staticDate&&chosen?routeOf(chosen):'');
  const {chainDiagnostic,plannedHandoff,nextTrip,previousTrip,previousPartner,continuity}=useChainTracking({
