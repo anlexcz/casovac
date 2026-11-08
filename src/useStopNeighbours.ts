@@ -14,8 +14,8 @@ import {departureBoardNameUrl,resolveOwnPlatform} from './resolveNeighbourPlatfo
 import {recordNeighbourDiagnostic,summarizeNeighbourBoardResponse,summarizeNeighbourBoardCounts,summarizeTripStopSchema} from './neighbourDiagnostics.ts';
 
 type BoardState={key:string;board:DepartureBoard|null;at:number;error:string;loading:boolean};
-type FeatureState={key:string;features:Feature[]};
-type DetailState={key:string;stops:Map<string,Stop[]>};
+type FeatureState={key:string;features:Feature[];complete:boolean;failed:boolean};
+type DetailState={key:string;stops:Map<string,Stop[]>;complete:boolean};
 const EMPTY:BoardState={key:'',board:null,at:0,error:'',loading:false};
 const boardCache=new Map<string,{board:DepartureBoard;at:number}>();
 const tripCache=new Map<string,Stop[]>();
@@ -173,8 +173,8 @@ export function useStopNeighbours(args:{
  },[enabled,token,ownTripId,date,currentIndex,stops,!!ownFeature]);
  const poll=Math.floor(now/60000);
  const [boardState,setBoardState]=useState<BoardState>(EMPTY);
- const [live,setLive]=useState<FeatureState>({key:'',features:[]});
- const [detail,setDetail]=useState<DetailState>({key:'',stops:new Map()});
+ const [live,setLive]=useState<FeatureState>({key:'',features:[],complete:false,failed:false});
+ const [detail,setDetail]=useState<DetailState>({key:'',stops:new Map(),complete:false});
  const cached=boardCache.get(boardId(date,selectedStopId));
  const readyBoard=boardState.key===key?boardState.board:
   cached&&Date.now()-cached.at<BOARD_TTL+30000?cached.board:null;
@@ -305,7 +305,8 @@ export function useStopNeighbours(args:{
  },[readyBoard,selectedStopId]);
  const routeKey=routes.join('|');
  useEffect(()=>{
-  if(!enabled||!token||!readyBoard||!routes.length)return;
+  if(!enabled||!token||!readyBoard)return;
+  if(!routes.length){setLive({key,features:knownFeatures,complete:true,failed:false});return;}
   let active=true;
   const ownLine=ownFeature?routeOf(ownFeature):'';
   const initial=new Map(knownFeatures.map(f=>[selectedTripId(f),f]));
@@ -320,12 +321,13 @@ export function useStopNeighbours(args:{
     }
    }else toFetch.push(line);
   }
-  setLive({key,features:[...initial.values()]});
+  setLive({key,features:[...initial.values()],complete:!toFetch.length,failed:false});
   if(!toFetch.length)return;
   // Requests are bounded to three concurrent routes and published as a
   // single complete snapshot. Late individual responses only warm the
   // cache, never reshuffle the visible list part-way through the batch.
   void (async()=>{
+   let failed=false;
    for(let start=0;start<toFetch.length;start+=3){
     const batch=toFetch.slice(start,start+3);
     const values=await Promise.all(batch.map(async line=>{
@@ -355,40 +357,48 @@ export function useStopNeighbours(args:{
      if(id&&id!=='—')initial.set(id,feature);
     }
    }
-   if(active)setLive({key,features:[...initial.values()]});
+   if(active)setLive({key,features:[...initial.values()],complete:true,failed});
   })();
   return()=>{active=false;};
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[enabled,token,key,routeKey,Math.floor(now/60000)]);
 
- // Exact previous-stop comparison is only needed for the automatic
- // "new incoming line" trigger. It is deliberately NOT a prerequisite
- // for showing all routes in the manually opened timetable.
+ // Do not publish partial route enrichment: calculate from one completed
+ // snapshot and prepare exact-trip geometry for both nearby scheduled rows
+ // and delayed LIVE candidates.
  useEffect(()=>{
-  if(!enabled||!token||!readyBoard||!effectiveStop)return;
-  let active=true;
-  const initial=parseNeighbourBoard({board:readyBoard,stop:effectiveStop,ownTripId,
-   ownStops:stops,ownIndex:index!,ownDelay:null,settings,distance:0,features:[]});
-  const candidates=initial.rows.slice(0,10).map(row=>({
-   id:row.tripId,line:row.line
-  }));
-  const found=new Map<string,Stop[]>();
-  setDetail({key,stops:new Map()});
+  if(!enabled||!token||!readyBoard||!effectiveStop||index===null||
+   live.key!==key||!live.complete)return;
+  let alive=true;
+  const ownSeconds=gtfsSeconds(effectiveStop.arrival||effectiveStop.departure||'')??0;
+  const liveIds=new Set(live.features.map(selectedTripId));
+  const departures=[...(readyBoard.departures??[])].filter(d=>
+   d.stop?.id===selectedStopId&&d.route?.type===0&&
+   !!d.trip?.id&&d.trip?.id!==ownTripId);
+  const byDistance=(a:typeof departures[number],b:typeof departures[number])=>
+   Math.abs((a.scheduledSeconds??ownSeconds)-ownSeconds)-
+   Math.abs((b.scheduledSeconds??ownSeconds)-ownSeconds);
+  const scheduled=departures.filter(d=>
+   Math.abs((d.scheduledSeconds??ownSeconds)-ownSeconds)<=300).sort(byDistance);
+  const observed=departures.filter(d=>liveIds.has(d.trip?.id??'')).sort(byDistance);
+  const candidateRows=[...new Map([...observed,...scheduled]
+   .map(d=>[d.trip!.id!,d])).values()].slice(0,40);
+  const candidates=candidateRows.map(d=>({id:d.trip!.id!,line:d.route!.short_name!}));
+  setDetail({key,stops:new Map(),complete:false});
   void (async()=>{
+   const found=new Map<string,Stop[]>();
    for(let start=0;start<candidates.length;start+=4){
     const batch=candidates.slice(start,start+4);
     const values=await Promise.all(batch.map(candidate=>
      tripStops(candidate.id,date,token,selectedStopId,candidate.line).catch(()=>[])));
-    if(!active)return;
-    batch.forEach((candidate,i)=>{
-     if(values[i].length)found.set(candidate.id,values[i]);
-    });
-    setDetail({key,stops:new Map(found)});
+    if(!alive)return;
+    batch.forEach((candidate,i)=>{if(values[i].length)found.set(candidate.id,values[i]);});
    }
+   if(alive)setDetail({key,stops:found,complete:true});
   })();
-  return()=>{active=false;};
+  return()=>{alive=false;};
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[enabled,token,key,readyBoard,date]);
+ },[enabled,token,key,readyBoard,date,live.key,live.complete,live.features]);
 
  const ownDelayRaw=path(ownFeature,'properties.last_position.delay.actual');
  const ownObserved=path(ownFeature,'properties.last_position.origin_timestamp');
@@ -396,8 +406,10 @@ export function useStopNeighbours(args:{
  const ownDelay=typeof ownDelayRaw==='number'&&Number.isFinite(ownDelayRaw)&&
   Number.isFinite(ownStamp)&&now-ownStamp<=90000&&now-ownStamp>=-10000?
   ownDelayRaw:null;
+ const complete=!!readyBoard&&live.key===key&&live.complete&&
+  detail.key===key&&detail.complete;
  const result=useMemo(()=>{
-  if(!enabled||!effectiveStop||!selectedStopId||index===null||!readyBoard)return null;
+  if(!enabled||!effectiveStop||!selectedStopId||index===null||!readyBoard||!complete)return null;
   return parseNeighbourBoard({
    board:readyBoard,stop:effectiveStop,ownTripId,ownStops:stops,ownIndex:index,ownDelay,
    settings,distance:currentIndex===null?0:Math.max(0,index-currentIndex),
@@ -405,7 +417,7 @@ export function useStopNeighbours(args:{
    candidateStops:detail.key===key?detail.stops:undefined,now
   });
  },[enabled,effectiveStop,index,selectedStopId,readyBoard,ownTripId,stops,ownDelay,settings,currentIndex,
-  live,knownFeatures,detail,key,now]);
+  live,knownFeatures,detail,key,now,complete]);
  useEffect(()=>{
   if(!result||!readyBoard||!selectedStopId)return;
   recordNeighbourDiagnostic({
@@ -449,6 +461,8 @@ export function useStopNeighbours(args:{
   }
  }
  const activeState=boardState.key===key?boardState:null;
- return {result,gate,probeDepartureBoard,loading:!!activeState?.loading&&!readyBoard,
-  error:activeState?.error??'',updatedAt:activeState?.at??cached?.at??0};
+ return {result,gate,probeDepartureBoard,complete,
+  loading:!!activeState?.loading&&!readyBoard||!!readyBoard&&!complete,
+  error:activeState?.error??(live.failed?'Část živých poloh není dostupná.':''),
+  updatedAt:activeState?.at??cached?.at??0};
 }
