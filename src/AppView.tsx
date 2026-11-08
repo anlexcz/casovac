@@ -49,8 +49,7 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
  const pinnedActive=!!pinnedAutoNeighbour&&pinnedStillActive;
  const eligibleAuto=neighbourSettings.enabled&&neighbourSettings.mode!=='off'&&
   neighbourIndex===null&&autoNeighbourReady&&autoTargetIndex!==null&&
-  sheetIndex===autoTargetIndex&&sheetStop!==null&&dismissedStop!==sheetKey&&
-  stopNeighbours.complete;
+  sheetIndex===autoTargetIndex&&sheetStop!==null&&dismissedStop!==sheetKey;
  const autoOpen=neighbourIndex===null&&dismissedStop!==sheetKey&&
   (pinnedActive||eligibleAuto);
  const sheetOpen=neighbourSettings.enabled&&!diagnostics&&!settings&&
@@ -175,7 +174,7 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
    data={verifiedNeighbourData} updatedAt={verifiedNeighbourData?stopNeighbours.updatedAt:0}
    colourOrder={neighbourSettings.colourOrder} tolerance={neighbourSettings.orderToleranceSeconds}
    hysteresis={neighbourSettings.orderHysteresisSeconds}
-   loading={stopNeighbours.loading} error={stopNeighbours.error}
+   loading={stopNeighbours.loading||autoOpen&&!verifiedNeighbourData} error={stopNeighbours.error}
    ownLine={visualLine} ownOrder={visualOrder}
    ownVehicle={chosen?vehicleId(chosen):lastSeen?.vehicle??''}
    remainingSeconds={manualSheet?manualIdle.remaining:null}
