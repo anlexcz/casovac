@@ -1,0 +1,23 @@
+.phase2Panel{border-color:#4d5967}
+.phase2Panel h2{font-size:19px}
+.phase2Panel code{overflow-wrap:anywhere;color:#dce5ef}
+.phase2Facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}
+.phase2Facts>div{min-width:0;border:1px solid #363f49;background:#151b22;border-radius:10px;padding:12px}
+.phase2Facts small{display:block;margin-bottom:8px}
+.phase2Facts strong{font-size:14px;overflow-wrap:anywhere;display:block;font-variant-numeric:tabular-nums}
+.phase2Actions{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 18px}
+.phase2Actions button{flex:1 1 165px}
+.phase2Scenarios{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0}
+.phase2Scenario{display:flex;flex-direction:column;gap:10px;border:1px solid #35404a;background:#151b21;border-radius:12px;padding:14px;min-width:0}
+.phase2ScenarioHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.phase2ScenarioHead strong{font-size:15px;display:block}
+.phase2ScenarioHead small{display:block;margin-top:6px;color:#8e9da9;font-size:10px;letter-spacing:.04em}
+.phase2ScenarioHead .status{flex:0 0 auto}
+.phase2Scenario p{font-size:13px;color:#b6c4d1;margin:0;line-height:1.5}
+.phase2Scenario>button{margin-top:auto}
+.phase2Result{background:#0e151c;border-radius:8px;padding:10px}
+.phase2Result p{color:#dce7ef;margin-bottom:7px;overflow-wrap:anywhere}
+.phase2Result small{font-size:11px;letter-spacing:0;color:#95a7b9}
+.phase2Panel .phase2Error{color:#ffaaa8;overflow-wrap:anywhere}
+@media(max-width:720px){.phase2Facts{grid-template-columns:repeat(2,minmax(0,1fr))}.phase2Scenarios{grid-template-columns:1fr}}
+@media(max-width:390px){.phase2Facts{grid-template-columns:1fr}}
