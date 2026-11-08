@@ -7,7 +7,7 @@ import {formatHeadway} from './lineHeadways';
 import HeadwayDetails from './HeadwayDetails.tsx';
 import {chooserStop} from './chooserStops';
 import {useAppController,vehicleId} from './useAppController';
-import {OWN_VEHICLE_POLL_MS,OWN_VEHICLE_RETAIN_MS} from './useVehicleTracking';
+import {OWN_VEHICLE_POLL_MS,OWN_VEHICLE_RETAIN_MS} from './pollingCadence.ts';
 import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopIdentity';
 import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit.ts';
 
