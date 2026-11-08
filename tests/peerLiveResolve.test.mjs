@@ -34,3 +34,17 @@ test('matching the wrong line cannot substitute for an exact successor trip',()=
   features:[feature('6-trip','5','9272')],now});
  assert.equal(v.feature,null);
 });
+
+test('duplicate copies of the same vehicle from line snapshot and exact API are one LIVE observation',()=>{
+ const row=feature('6-trip','6','9272');
+ const found=selectDutyLive({originalTripId:'5-trip',candidates,
+  features:[row,{...row,properties:{...row.properties}}],now});
+ assert.equal(found.tripId,'6-trip');
+ assert.equal(found.confidence,'provisional');
+});
+test('newer source timestamp replaces a still-valid older route snapshot',()=>{
+ const found=selectDutyLive({originalTripId:'5-trip',candidates,
+  features:[feature('6-trip','6','9272',50),feature('6-trip','6','9272',5)],now});
+ assert.equal(found.feature.properties.last_position.origin_timestamp,
+  new Date(now-5000).toISOString());
+});
