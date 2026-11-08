@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {confirmedAtStop,confirmedBeyondStop,pickAutoPlatform,platformMarkers} from '../src/autoPlatformLifecycle.ts';
+import {confirmedAtStop,confirmedBeyondStop,pickAutoPlatform,platformMarkers,approachPreviewSeconds} from '../src/autoPlatformLifecycle.ts';
 
 const stops=['A','B','C','D'].map((id,i)=>({id,name:id,sequence:i+1,
  arrival:'10:00:00',departure:'10:00:00',lat:null,lon:null}));
@@ -14,7 +14,7 @@ const state=(state='on_track',previousIndex=null,nextIndex=1,fresh=true)=>({
 });
 const pick=(overrides={})=>pickAutoPlatform({
  stops,currentIndex:1,entries,stopMap:map,
- evidence:state(),remainingToCurrent:35,remainingToTarget:()=>80,
+ evidence:state(),remainingToCurrent:15,remainingToTarget:()=>80,
  leadSeconds:90,...overrides
 });
 test('stop-list markers come only from exact trip sequence and verified physical edge',()=>{
@@ -24,8 +24,9 @@ test('stop-list markers come only from exact trip sequence and verified physical
  ],map);
  assert.deepEqual(x,{1:'mixed',2:'join'});
 });
-test('opens verified mixed platform before reaching its preceding stop',()=>{
+test('opens verified mixed platform only on the final approach to the preceding stop',()=>{
  assert.deepEqual(pick(),{index:2,physicalId:'P/C',kind:'mixed-platform'});
+ assert.equal(pick({remainingToCurrent:35}),null);
  assert.equal(pick({remainingToCurrent:130}),null);
 });
 test('manual timetable browsing never counts as evidence for an automatic preview',()=>{
@@ -73,6 +74,25 @@ test('adjacent connection transfers at confirmed arrival; not a timetable-only c
 test('repeated occurrence keeps sequence and does not blend two identical names',()=>{
  const loop=[...stops,{...stops[2],sequence:5}];
  const res=pick({stops:loop,entries:[[5,'P/C','mixed-platform',[]]],
-  currentIndex:3,remainingToCurrent:30,evidence:state('on_track',2,3)});
+  currentIndex:3,remainingToCurrent:15,evidence:state('on_track',2,3)});
  assert.equal(res?.index,4);
+});
+
+test('preview timing accounts for A-to-B scheduled running time, not 90 s after leaving A',()=>{
+ const staged=[
+  {...stops[0],departure:'10:00:00'},
+  {...stops[1],arrival:'10:02:00',departure:'10:02:10'},
+  {...stops[2],arrival:'10:03:00'}
+ ];
+ assert.equal(approachPreviewSeconds(staged,1,90),30);
+ assert.equal(pick({stops:staged,remainingToCurrent:70}),null);
+ assert.equal(pick({stops:staged,remainingToCurrent:28})?.index,2);
+});
+test('short interstop runs have at least a brief preview while honouring user ceiling',()=>{
+ const short=[
+  {...stops[0],departure:'10:00:00'},
+  {...stops[1],arrival:'10:00:40'}
+ ];
+ assert.equal(approachPreviewSeconds(short,1,90),12);
+ assert.equal(approachPreviewSeconds(short,1,10),10);
 });
