@@ -7,6 +7,9 @@ import {golemioJson} from './golemioClient.ts';
 import {routeOf,selectedTripId,vehicleId} from './featureUtils.ts';
 import {tripPositionUrl,exactTripPosition,freshTripPosition} from './plannedPeerPosition.ts';
 import {peerDutyCandidates} from './peerDutyContinuity.ts';
+import {vehicleObservations} from './vehicleObservationStore.ts';
+import {dutyPhase} from './trackedDuty.ts';
+import type {DutyPhase} from './trackedDuty.ts';
 import type {DutyTrip} from './peerDutyContinuity.ts';
 import type {Feature} from './featureUtils.ts';
 import type {PlannedHeadways,PlannedPeer} from './plannedHeadways.ts';
@@ -16,19 +19,22 @@ const unique=(features:Feature[],id:string,line:string,now:number)=>{
   freshTripPosition(f,now));
  return found.length===1?found[0]:null;
 };
-export type PeerPositionStatus={ahead:'existing'|'direct'|'unavailable'|'none';
- behind:'existing'|'direct'|'unavailable'|'none'};
+export type PeerPositionStatus={ahead:'existing'|'direct'|'provisional'|'unavailable'|'none';
+ behind:'existing'|'direct'|'provisional'|'unavailable'|'none'};
 type Side='ahead'|'behind';
 type CandidateSet={key:string;ahead:DutyTrip[];behind:DutyTrip[]};
 export function usePlannedPeerPositions(args:{
  enabled:boolean;planned:PlannedHeadways;features:Feature[];token:string;now:number;
  date:string;
 }):{features:Feature[];status:PeerPositionStatus;tripIds:Record<Side,string>;
- updatedAt:number;loading:boolean}{
+ updatedAt:number;loading:boolean;phases:Record<Side,DutyPhase>;
+ lastKnown:Record<Side,{vehicle:string;observedAt:number}|null>}{
  const {enabled,planned,features,token,now,date}=args;
  const ready=enabled&&planned.status==='ready'&&!!token.trim()&&!!date;
  const ahead=ready?planned.ahead:null,behind=ready?planned.behind:null;
- const key=ready?[date,planned.referenceStopId,ahead?.tripId??'',behind?.tripId??''].join('|'):'';
+ // Key on the scheduled duty, not the changing reference stop. The same
+ // physical peer must not be forgotten at every stop transition.
+ const key=ready?[date,ahead?.tripId??'',behind?.tripId??''].join('|'):'';
  const minute=Math.floor(now/60000);
  const [candidates,setCandidates]=useState<CandidateSet>({key:'',ahead:[],behind:[]});
  const [remote,setRemote]=useState<{key:string;values:Feature[];updatedAt:number;loading:boolean}>({
@@ -61,6 +67,9 @@ export function usePlannedPeerPositions(args:{
  const candidateIds=[...new Set([...routes.ahead,...routes.behind].map(p=>p.tripId))];
  const candidatesKey=candidateIds.join('|');
  const allLocal=remote.key===key?[...features,...remote.values]:features;
+ // One shared observation store for all panels. Original origin timestamps
+ // remain untouched; HTTP success without a trip never deletes its sample.
+ vehicleObservations.observeMany(date,allLocal,now);
  const remember=(side:Side,peer:PlannedPeer|null)=>{
   if(!peer)return;
   const original=unique(allLocal,peer.tripId,peer.line,now);
@@ -91,8 +100,16 @@ export function usePlannedPeerPositions(args:{
    }catch{return null;}
   })).then(values=>{
    if(!alive)return;
-   setRemote({key,values:values.filter((v):v is Feature=>v!==null),
-    updatedAt:Date.now(),loading:false});
+   // Merge per trip; one failed request must not remove other measured trips.
+   // The shared store rejects older origin timestamps and preserves missing
+   // observations for 180s without pretending they are LIVE after 90s.
+   const received=Date.now();
+   vehicleObservations.observeMany(date,values.filter((v):v is Feature=>v!==null),received);
+   setRemote(old=>({key,values:[...new Map([
+    ...(old.key===key?old.values:[]),
+    ...values.filter((v):v is Feature=>v!==null)
+   ].map(v=>[selectedTripId(v),v])).values()],
+    updatedAt:received,loading:false}));
   });
   return()=>{alive=false;};
  // One immediate fetch on selection and then at most once per minute.
@@ -104,20 +121,36 @@ export function usePlannedPeerPositions(args:{
   const available=routes[side];
   const anchor=known.current.get(side+'|'+peer.tripId);
   for(const candidate of [...available].reverse()){
-   const exact=unique(current,candidate.tripId,candidate.line,now);
+   const exact=unique([...current,...(vehicleObservations.retained(date,candidate.tripId,now)?
+    [vehicleObservations.retained(date,candidate.tripId,now)!]:[])],
+    candidate.tripId,candidate.line,now);
    if(!exact||vehicleId(exact)==='—')continue;
-   if(candidate.tripId!==peer.tripId&&(!anchor||vehicleId(exact)!==anchor))continue;
+   if(candidate.tripId!==peer.tripId&&anchor&&vehicleId(exact)!==anchor)continue;
    const own=unique(features,candidate.tripId,candidate.line,now);
    return {feature:exact,tripId:candidate.tripId,
-    source:own?'existing' as const:'direct' as const};
+    source:candidate.tripId!==peer.tripId&&!anchor?'provisional' as const:
+     own?'existing' as const:'direct' as const};
   }
   return {feature:null,tripId:'',source:'unavailable' as const};
  };
  const first=find('ahead',ahead),second=find('behind',behind);
+ const lastKnown=(side:Side,peer:PlannedPeer|null)=>{
+  if(!peer)return null;
+  const ids=routes[side].map(c=>c.tripId);
+  for(const id of [...ids].reverse()){
+   const item=vehicleObservations.get(date,id);
+   if(item&&vehicleObservations.quality(date,id,now)!=='expired')
+    return {vehicle:item.vehicle,observedAt:item.observedAt};
+  }
+  return null;
+ };
  return {
   features:[...new Set([first.feature,second.feature].filter((v):v is Feature=>v!==null))],
   status:{ahead:first.source,behind:second.source},
   tripIds:{ahead:first.tripId,behind:second.tripId},
-  updatedAt:remote.updatedAt,loading:remote.loading
+  updatedAt:remote.updatedAt,loading:remote.loading,
+  phases:{ahead:dutyPhase({candidates:routes.ahead,date,now,feature:first.feature}),
+   behind:dutyPhase({candidates:routes.behind,date,now,feature:second.feature})},
+  lastKnown:{ahead:lastKnown('ahead',ahead),behind:lastKnown('behind',behind)}
  };
 }
