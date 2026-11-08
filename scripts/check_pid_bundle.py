@@ -27,6 +27,13 @@ def verify(root: Path) -> dict:
             raise ValueError(f"Missing trip locator for {date}")
         if not (folder / "blocks.json").is_file():
             raise ValueError(f"Missing block locator for {date}")
+        if "platformEncounterTrips" in info:
+            encounter_file = folder / "platform-encounters.json"
+            if not encounter_file.is_file():
+                raise ValueError(f"Missing 5B physical platform encounters for {date}")
+            encounters = json.loads(encounter_file.read_text(encoding="utf-8"))
+            if len(encounters) != info["platformEncounterTrips"]:
+                raise ValueError(f"Invalid 5B encounter count for {date}")
         if info["available"] and not list((folder / "routes").glob("*.json")):
             raise ValueError(f"Missing route shards for {date}")
         for bucket in range(64):
