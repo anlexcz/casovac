@@ -1,5 +1,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {golemioJson} from './golemioClient';
+import {findStaticBlockPair} from './staticBlockPair.ts';
+import {safeStaticServiceDate} from './staticTripAdapter.ts';
 import {findVerifiedBlockPair} from './blockPair';
 import type {BlockPair,OnlineTripDetail} from './blockPair';
 import type {ChainSnapshot,ChainTrip} from './chainDiagnostics';
@@ -51,6 +53,20 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
   const get=(id:string)=>golemioJson<OnlineTripDetail>(detailUrl(id,date),token,10*60000,'low');
   void (async()=>{
    try{
+    // Static-first only outside the ambiguous post-midnight service window.
+    // Missing/incomplete/ambiguous static blocks retain the old Golemio path.
+    if(safeStaticServiceDate(date,true,new Date())){
+     try{
+      const staticPair=await findStaticBlockPair(tripId,line,date);
+      if(!live)return;
+      if(staticPair){
+       saved.current={tripId,date,line,order:snapshot?.target.split('/')[1]??'',
+        vehicle:snapshot?.vehicle??'',pair:staticPair};
+       setState({key:identity,pair:staticPair,loading:false,reason:staticPair.reason});
+       return;
+      }
+     }catch{/* Static data unavailable or inconsistent; use online discovery. */}
+    }
     const current=await get(tripId);
     if(!live)return;
     if(!current?.block_id){
