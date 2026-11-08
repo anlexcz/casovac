@@ -16,10 +16,30 @@ Poslední zadané `linka/pořadí` se uchovává místně. Pokud je API klíč u
 
 - Živá vozidla z Golemio vehiclepositions každých 20 sekund.
 - Pořadí primárně přes `trip.sequence_id`.
-- Zastávky a časy z Golemio GTFS Lookup podle aktuálního `trip_id` (nikoli stažený ZIP soubor).
+- Zastávky, časy a geometrie se u ověřeného tripu primárně načítají z lokálně publikovaného PID GTFS (`public/data/pid/v1/`); pokud nelze bezpečně potvrdit datum, identitu nebo úplnost dat, zachová se původní Golemio GTFS fallback.
 - GPS porovnává telefon s polohou vozidla a očekávanou zastávkou. Dvě po sobě jdoucí měření s rozestupem 3 sekund, dostatečná přesnost a poloha kompatibilní s Golemiem jsou potřebné k potvrzení zastávky.
 - Manuální korekce zastávky je k dispozici na hlavní obrazovce i v diagnostice.
 - Odpočet je pouze vůči **plánovanému času odjezdu**, při překročení času pokračuje záporně. Nejde o výpočet skutečného oprávnění k odjezdu.
+
+## Časovač 2.0 – stav migrace dat (8. listopadu 2026)
+
+Původní jádro Časovače zůstává v provozu. V PR #34–47 přibyla samostatná PID GTFS vrstva a postupné přepojení jednotlivých modulů. **Nejde zatím o plně offline aplikaci.**
+
+| Oblast | Zdroj / stav |
+| --- | --- |
+| Hlavní jízdní řád a geometrie | PID GTFS first, Golemio fallback u ověřených tripů |
+| Řetězení | Univerzální PID `block_id` a chronologicky sousední tripy, jinak Golemio fallback |
+| Jízdní řády pro rozestupy | PID GTFS first; skutečná poloha a odchylka z Golemia |
+| Statické detaily okolních odjezdů | PID GTFS first po ověření `trip_id`, dne, linky a přesného `stop_id` |
+| Živé polohy a aktuální odjezdy | Golemio `vehiclepositions` a `departureboards` |
+| Opakovaně používaná GTFS data | Verze manifestu, SHA-256, perzistentní IndexedDB cache |
+| Plně offline otevření stránky | Zatím ne: vyžaduje Service Worker (budoucí fáze 7) |
+
+Plánovaná pokračování jsou samostatná: **fáze 4** musí zachovat známé plánované sousedy i při nedostupném živém zpoždění; **fáze 5** musí získat vlastní plánované odjezdy ze statických GTFS a oddělit je od živých konfliktů; **fáze 6** musí sjednotit a měřit živé Golemio snapshoty. Přepojení zdroje ve fázi 3 neznamená automatické dokončení těchto funkcí.
+
+Nejbližší potřebná kontrola: audit skutečného počtu HTTP dotazů po migraci oproti historické baseline (která nebyla zachycena), stav fallbacků, mobilní test, noční provoz a přesné nástupní hrany. Bez měření nelze tvrdit konkrétní celkovou procentní úsporu API požadavků.
+
+Roadmapa a průběžné protokoly jsou vedeny ve složce **Časovač** na Google Disku; poslední implementační změna: [PR #47](https://github.com/anlexcz/casovac/pull/47).
 
 ## Soukromí
 
