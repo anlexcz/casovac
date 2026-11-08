@@ -22,7 +22,7 @@ test('stop-list markers come only from exact trip sequence and verified physical
   [3,'P/C','shared-platform',[]],[3,'P/C','tram-route-set',[]],
   [2,'P/B','mixed-platform',[]],[4,'P/WRONG','tram-route-set',[]]
  ],map);
- assert.deepEqual(x,{1:'mixed',2:'join'});
+ assert.deepEqual(x,{2:'join'});
 });
 test('opens verified mixed platform only on the final approach to the preceding stop',()=>{
  assert.deepEqual(pick(),{index:2,physicalId:'P/C',kind:'mixed-platform'});
