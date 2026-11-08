@@ -34,15 +34,16 @@ def _project(polyline, point):
         if error <= STOP_SNAP_METRES:
             result.append((passed+t*length, error))
         passed += length
-    # Consecutive segments can both yield a projection at their common vertex.
-    unique = []
+    # A stop within 35 m of a curving polyline produces several projections
+    # on neighbouring segments. Treat that as ONE visit to the stop. Do not
+    # merge a true revisit to the same platform hundreds of metres later.
+    clusters = []
     for along, err in sorted(result):
-        if unique and abs(along-unique[-1][0]) <= 5:
-            if err < unique[-1][1]:
-                unique[-1] = (along, err)
+        if clusters and along-clusters[-1][-1][0] <= 80:
+            clusters[-1].append((along, err))
         else:
-            unique.append((along, err))
-    return unique
+            clusters.append([(along, err)])
+    return [min(cluster, key=lambda item: item[1]) for cluster in clusters]
 
 
 def _at(polyline, target):
