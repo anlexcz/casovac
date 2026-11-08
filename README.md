@@ -21,25 +21,42 @@ Poslední zadané `linka/pořadí` se uchovává místně. Pokud je API klíč u
 - Manuální korekce zastávky je k dispozici na hlavní obrazovce i v diagnostice.
 - Odpočet je pouze vůči **plánovanému času odjezdu**, při překročení času pokračuje záporně. Nejde o výpočet skutečného oprávnění k odjezdu.
 
-## Časovač 2.0 – stav migrace dat (8. listopadu 2026)
+## Časovač 2.0 – stav migrace dat a rozestupů (8. listopadu 2026)
 
-Původní jádro Časovače zůstává v provozu. V PR #34–47 přibyla samostatná PID GTFS vrstva a postupné přepojení jednotlivých modulů. **Nejde zatím o plně offline aplikaci.**
+Jízdní řád je zdroj pravdy pro identitu předchozího a následujícího spoje. Plánovaní sousedé se nejprve vyhledávají z publikovaných **PID GTFS dat** (nikoli z Google Sheets ani z poloh kolem tramvaje). Pokud je ověřené přímé řetězení, zohlední se `block_id`; samotné sdílení kolejí nebo stejného bloku jiného vozidla nestačí. Je nutný společný směrový úsek a přesná zastávka.
 
-| Oblast | Zdroj / stav |
+### Rozestupy: jedna plánovaná dvojice, dva cílené živé výsledky
+
+1. Ověřit vlastní GTFS `trip_id`, provozní den a konkrétní `stop_id` referenční zastávky.
+2. Z lokálního PID indexu odjezdů najít **nejbližšího plánovaného předchůdce** a **nejbližšího plánovaného následníka** na potvrzeném společném směrovém úseku. U jiných linek je nutná nezávisle ověřená návaznost v GTFS `block_id` na společné přechodové konečné. Výsledkem jsou nanejvýš dvě přesná GTFS `trip_id`.
+3. Živé údaje těchto dvou tripů hledat přednostně v již načteném snapshotu vlastní linky. Pokud v něm konkrétní trip není, dotázat se přímo `GET /v2/vehiclepositions/{gtfsTripId}?includeNotTracking=true`. **Nevyhledávají se další okolní vozy ani jiné celé linky kvůli rozestupům.**
+4. Každou odpověď ověřit proti přesnému `trip_id` a číslu linky, stáří telemetrie, provoznímu stavu a fyzickému vozu. Bez jednoznačné identity nebo zpoždění se skutečný rozestup **nevypočítává**; zůstane plánovaný údaj se štítkem „plán“.
+5. Skutečný odstup na společné zastávce: **před = plánovaný odstup + naše zpoždění − zpoždění předchůdce**; **za = plánovaný odstup + zpoždění následníka − naše zpoždění**. Plánované pořadí se kvůli zpoždění nikdy nepřehazuje. Záporný vypočtený rozestup se zobrazuje jako `00:00`.
+
+Příklad: trip před námi jede plánovaně 4 minuty před námi; má +60 s, my +30 s. Skutečný odstup je `04:00 + 00:30 − 01:00 = 03:30`.
+
+**Nezaměňovat:** `block_id` popisuje oběh *jednoho* vozidla a **samo o sobě** neurčuje předchůdce ani následníka na trati. PID GTFS rozhoduje o pořadí, Golemio pouze doplňuje živou realitu.
+
+| Oblast | Autoritativní zdroj / stav |
 | --- | --- |
-| Hlavní jízdní řád a geometrie | PID GTFS first, Golemio fallback u ověřených tripů |
-| Řetězení | Univerzální PID `block_id` a chronologicky sousední tripy, jinak Golemio fallback |
-| Jízdní řády pro rozestupy | PID GTFS first; skutečná poloha a odchylka z Golemia |
-| Statické detaily okolních odjezdů | PID GTFS first po ověření `trip_id`, dne, linky a přesného `stop_id` |
-| Živé polohy a aktuální odjezdy | Golemio `vehiclepositions` a `departureboards` |
-| Opakovaně používaná GTFS data | Verze manifestu, SHA-256, perzistentní IndexedDB cache |
-| Plně offline otevření stránky | Zatím ne: vyžaduje Service Worker (budoucí fáze 7) |
+| Hlavní jízdní řád a geometrie | PID GTFS, při nedostupnosti ověřený Golemio fallback |
+| Řetězení výkonů | Ověřené chronologické návaznosti PID `block_id` |
+| Výběr před/za | PID GTFS index odjezdů na přesném společném úseku; bez živé GPS |
+| Živé rozestupy | Existující aktuální snapshot nebo samostatný Golemio endpoint podle **přesného trip ID** |
+| Statické detaily okolních odjezdů | PID GTFS po ověření tripu, data a nástupní hrany |
+| Aktuální odjezdy a polohy vlastního vozu | Golemio `departureboards` a `vehiclepositions` |
+| Lokální cache PID dat | Verzovaný manifest, SHA-256 a IndexedDB |
+| Plně offline aplikace | Zatím ne; Service Worker je budoucí fáze |
 
-Plánovaná pokračování jsou samostatná: **fáze 4** musí zachovat známé plánované sousedy i při nedostupném živém zpoždění; **fáze 5** musí získat vlastní plánované odjezdy ze statických GTFS a oddělit je od živých konfliktů; **fáze 6** musí sjednotit a měřit živé Golemio snapshoty. Přepojení zdroje ve fázi 3 neznamená automatické dokončení těchto funkcí.
+### Ověření, diagnostika a hranice platnosti
 
-Nejbližší potřebná kontrola: audit skutečného počtu HTTP dotazů po migraci oproti historické baseline (která nebyla zachycena), stav fallbacků, mobilní test, noční provoz a přesné nástupní hrany. Bez měření nelze tvrdit konkrétní celkovou procentní úsporu API požadavků.
+- Jednotkové a regresní testy se spouštějí `npm test`, produkční sestavení `npm run build`. GitHub Actions **Verify Časovač** provádí obojí před sloučením.
+- V **Diagnostice rozestupů** se zobrazuje vybraný plánovaný `trip_id`, výsledek výpočtu a zdroj živé telemetrie („společný snapshot linky“, „přímý dotaz podle trip ID“, „nenalezeno“).
+- Nedostupný přímý dotaz (404, omezení API), chybějící `delay` či nejednoznačná identita nevedou k výběru náhradního náhodného vozidla.
+- Úspora dotazů se musí ověřit reálným měřením přes síťovou diagnostiku; dvě jednotlivá volání na různé linky mohou být levnější na přenos, ale nejde automaticky o přesně o dvě volání celkem (ostatní funkce stále používají Golemio).
+- Změny jsou ověřeny automatickými testy. **Na mobilu je nutné zvlášť ověřit skutečné odpovědi Golemia, přechody 9+10 / 5+6 i jiné řetězení, výluky a provoz kolem půlnoci.**
 
-Roadmapa a průběžné protokoly jsou vedeny ve složce **Časovač** na Google Disku; poslední implementační změna: [PR #47](https://github.com/anlexcz/casovac/pull/47).
+**Další práce:** okolní odjezdy a konflikty (fáze 5), konsolidace a měření ostatních živých snapshotů (fáze 6) a offline režim (fáze 7).
 
 ## Soukromí
 
