@@ -30,7 +30,7 @@ export async function peerDutyCandidates(peer:PlannedPeer,date:string,now:number
  if(indices.length!==1||routes[first.routeId]?.[0]!==peer.line)return [
   {tripId:peer.tripId,line:peer.line,startSeconds:peer.departureSeconds}];
  const idx=indices[0],seconds=serviceSeconds(date,now);
- let previous=first,previousStops=await source.getTripStops(first.id,date,first.routeId);
+ let previousStops=await source.getTripStops(first.id,date,first.routeId);
  const verified:DutyTrip[]=[{tripId:first.id,line:peer.line,startSeconds:sorted[idx].startSeconds}];
  if(!previousStops?.length||seconds===null)return verified;
  // Do not take a later trip past a missing/ambiguous intermediate handoff.
@@ -46,7 +46,7 @@ export async function peerDutyCandidates(peer:PlannedPeer,date:string,now:number
   const line=routes[entry.routeId]?.[0]??'';
   if(!line)break;
   verified.push({tripId:entry.id,line,startSeconds:entry.startSeconds});
-  previous=next;previousStops=nextStops;
+  previousStops=nextStops;
  }
  // Current trip and the immediately adjacent one: never scan an entire all-day block.
  const started=verified.filter(v=>v.startSeconds<=seconds+120);
