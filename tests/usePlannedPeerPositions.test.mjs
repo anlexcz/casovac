@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {exactTripPosition,freshTripPosition,tripPositionUrl} from '../src/usePlannedPeerPositions.ts';
+import {exactTripPosition,freshTripPosition,tripPositionUrl} from '../src/plannedPeerPosition.ts';
 
 const now=Date.now();
 const peer={tripId:'9_123_261108',line:'9',order:'',scheduledGap:180,
