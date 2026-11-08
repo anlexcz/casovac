@@ -18,7 +18,10 @@ import tempfile
 import urllib.request
 import zipfile
 from zoneinfo import ZoneInfo
-from scripts.build_connection_index import platform_encounters
+if __package__:
+    from .build_connection_index import platform_encounters
+else:
+    from build_connection_index import platform_encounters
 
 GTFS_URL = "https://data.pid.cz/PID_GTFS.zip"
 STOPS_URL = "https://data.pid.cz/stops/json/stops.json"
