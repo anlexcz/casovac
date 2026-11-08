@@ -164,10 +164,11 @@ export function useAppController(){
   tripId:planTripId,date:planDate,referenceStopId:plannedReferenceStopId,nowMs:now});
  const peerPositions=usePlannedPeerPositions({
   enabled:showHeadways&&!!active,planned:plannedHeadways.data,
-  features,token:token.trim(),now
+  features,token:token.trim(),now,date:planDate
  });
  const plannedLiveHeadways=resolvePlannedLiveHeadways({
-  planned:plannedHeadways.data,selected:chosen,features:peerPositions.features,now
+  planned:plannedHeadways.data,selected:chosen,features:peerPositions.features,now,
+  tripIds:peerPositions.tripIds
  });
  const age=lastFetch===null?null:Math.max(0,Math.floor((now-lastFetch)/1000));
  const gpsAge=gps?Math.max(0,Math.floor((now-gps.timestamp)/1000)):null;
