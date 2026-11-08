@@ -15,14 +15,14 @@ async function loadVehicles(token:string,line?:string):Promise<Feature[]>{
  if(line)url.searchParams.set('routeShortName',line);
  url.searchParams.set('includeNotTracking','true');
  url.searchParams.set('limit',line?'1000':'3000');
- // The shared coordinator caches the same URL and coalesces concurrent
- // requests. Cross-route searches refresh at most once every 45 seconds.
+ // Search only after explicit confirmation. The coordinator shares any
+ // matching in-flight requests, without polling while the chooser is open.
  const body:unknown=await golemioJson<unknown>(url.toString(),token,line?30000:120000,line?'high':'low');
  if(!body||typeof body!=='object'||!Array.isArray((body as Obj).features))
   throw Error('Neplatná odpověď Golemia');
  return (body as {features:Feature[]}).features;
 }
-export function useOrderLookup(query:string,editing:boolean,token:string,now:number){
+export function useOrderLookup(query:string,editing:boolean,token:string,now:number,submission=0){
  const search=parseChooserQuery(query);
  const lookupLine=search.kind==='route'||search.kind==='order'?search.line:'';
  const lookupOrder=search.kind==='order'?[search.line,search.order] as [string,string]:null;
@@ -46,10 +46,10 @@ export function useOrderLookup(query:string,editing:boolean,token:string,now:num
      error:e instanceof Error?e.message:String(e),loading:false,ready:true}));
    }
   };
-  const first=window.setTimeout(()=>void refresh(),220);
-  const interval=window.setInterval(()=>void refresh(),45000);
-  return()=>{alive=false;window.clearTimeout(first);window.clearInterval(interval);};
- },[editing,lookupLine,secret]);
+  // Only one search per Enter/confirmation. No typing-time or periodic queries.
+  void refresh();
+  return()=>{alive=false;};
+ },[editing,lookupLine,secret,submission]);
 
  useEffect(()=>{
   if(!editing||!crossRoute||!secret)return;
@@ -68,9 +68,9 @@ export function useOrderLookup(query:string,editing:boolean,token:string,now:num
   };
   // The global fleet snapshot is expensive. Start only once per chooser
   // session, after the user stops typing. Do not re-fetch every 45 seconds.
-  const first=window.setTimeout(()=>void refresh(),850);
-  return()=>{alive=false;window.clearTimeout(first);};
- },[editing,crossRoute,secret]);
+  void refresh();
+  return()=>{alive=false;};
+ },[editing,crossRoute,secret,submission]);
 
  const route=routeSnapshot.key===lookupLine&&!!lookupLine?routeSnapshot:EMPTY;
  const all=globalSnapshot.key===secret&&crossRoute?globalSnapshot:EMPTY;
