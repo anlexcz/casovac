@@ -101,6 +101,10 @@ class PIDBuilderTests(unittest.TestCase):
             day = root / "data/days/2026-11-08"
             encounters = json.loads((day / "platform-encounters.json").read_text())
             self.assertEqual(len(encounters), manifest["days"]["2026-11-08"]["platformEncounterTrips"])
+            candidates = json.loads((day / "platform-candidates.json").read_text())
+            self.assertEqual(len(candidates), manifest["days"]["2026-11-08"]["platformCandidateTrips"])
+            self.assertFalse(any(entry[2] == "tram-branch-candidate" for rows in encounters.values() for entry in rows))
+            self.assertFalse(any(entry[2] != "tram-branch-candidate" for rows in candidates.values() for entry in rows))
             blocks = json.loads((day / "blocks.json").read_text())
             self.assertEqual([entry[1] for entry in blocks["b9"]], ["t9", "t10"])
             bucket = departure_bucket("U1")
