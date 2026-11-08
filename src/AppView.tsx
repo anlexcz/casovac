@@ -8,7 +8,7 @@ import {formatHeadway} from './lineHeadways';
 import {chooserStop} from './chooserStops';
 import {useAppController,vehicleId} from './useAppController';
 import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopIdentity';
-import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit';
+import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit.ts';
 
 type Props=ReturnType<typeof useAppController>;
 export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,headways,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
