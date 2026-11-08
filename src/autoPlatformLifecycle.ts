@@ -18,7 +18,7 @@ export function confirmedBeyondStop(e:StopEvidence,index:number):boolean{
   e.state==='at_stop'&&e.previousIndex!==null&&e.previousIndex>index
  );
 }
-/** Select the nearest verified mixed platform that is approachable before its predecessor.
+/** Select the nearest shape-verified tram junction or shared road platform that is approachable before its predecessor.
  * "tram-branch-candidate" alone must NOT trigger an automatic panel until
  * the incoming shape has been proven to use a different physical branch.
  */
@@ -32,7 +32,7 @@ export function pickAutoPlatform(args:{
  if(currentIndex===null||currentIndex<0)return null;
  const eligible=new Map<number,AutoPlatformTarget>();
  for(const [sequence,physicalId,kind] of entries){
-  if(kind!=='mixed-confirmed'&&kind!=='mixed-platform')continue;
+  if(kind!=='mixed-confirmed'&&kind!=='mixed-platform'&&kind!=='tram-branch-confirmed')continue;
   const index=stops.findIndex(stop=>stop.sequence===sequence&&!!stop.id&&stopMap[stop.id]===physicalId);
   if(index<1)continue; // Cannot preview the first trip stop from a predecessor.
   eligible.set(index,{index,physicalId,kind});
