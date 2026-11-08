@@ -3,6 +3,8 @@ import type {Feature} from './featureUtils.ts';
 import {path,selectedTripId,routeOf} from './featureUtils.ts';
 import type {Stop} from './tripData.ts';
 import {parseStops} from './tripData.ts';
+import {resolveNeighbourStops} from './neighbourStatic.ts';
+import {safeStaticServiceDate} from './staticTripAdapter.ts';
 import {golemioJson} from './golemioClient.ts';
 import type {NeighbourSettings} from './stopNeighbours.ts';
 import {departureBoardUrl,parseNeighbourBoard} from './stopNeighbourBoard.ts';
@@ -23,15 +25,38 @@ const VEHICLE_TTL=60000;
 const dateLocal=(now:number)=>new Intl.DateTimeFormat('sv-SE',{
  timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'
 }).format(new Date(now));
-async function tripStops(tripId:string,date:string,token:string):Promise<Stop[]>{
- const key=date+'|'+tripId,existing=tripCache.get(key);
+async function tripStops(
+ tripId:string,date:string,token:string,boardStopId:string,routeShortName:string
+):Promise<Stop[]>{
+ // Cache is scoped to the exact BOARD platform and line as well as trip/day:
+ // a fallback schedule must never be reused for a different boarding edge.
+ const key=[date,tripId,boardStopId,routeShortName].join('|');
+ const existing=tripCache.get(key);
  if(existing)return existing;
- const url=new URL('https://api.golemio.cz/v2/gtfs/trips/'+encodeURIComponent(tripId));
- url.searchParams.set('date',date);
- url.searchParams.set('includeStops','true');
- url.searchParams.set('includeStopTimes','true');
- const raw=await golemioJson<unknown>(url.toString(),token,6*3600000,'low');
- const stops=parseStops(raw);
+ const started=Date.now();
+ const result=await resolveNeighbourStops({
+  tripId,date,boardStopId,routeShortName,
+  staticAllowed:!!safeStaticServiceDate(date,true,new Date()),
+  fallback:async()=>{
+   const url=new URL('https://api.golemio.cz/v2/gtfs/trips/'+encodeURIComponent(tripId));
+   url.searchParams.set('date',date);
+   url.searchParams.set('includeStops','true');
+   url.searchParams.set('includeStopTimes','true');
+   const raw=await golemioJson<unknown>(url.toString(),token,6*3600000,'low');
+   return parseStops(raw);
+  }
+ });
+ const stops=result.stops;
+ recordNeighbourDiagnostic({
+  at:Date.now(),kind:'warmup',stopId:boardStopId,stopName:'',
+  tripId,endpoint:result.source==='PID GTFS'?'PID Static Engine':'/v2/gtfs/trips/{id}',
+  elapsedMs:Date.now()-started,
+  counts:{tripStops:stops.length,staticSource:result.source==='PID GTFS'?1:0,
+   onlineFallback:result.source==='Golemio'?1:0},
+  note:result.source==='PID GTFS'?
+   'Statický detail okolního tripu ověřen podle dne, linky a nástupní hrany.':
+   'Statický detail není dostupný či nesouhlasí, použit původní online detail.'
+ });
  if(stops.length){
   tripCache.set(key,stops);
   if(tripCache.size>240)tripCache.delete(tripCache.keys().next().value!);
@@ -318,15 +343,20 @@ export function useStopNeighbours(args:{
   let active=true;
   const initial=parseNeighbourBoard({board:readyBoard,stop:effectiveStop,ownTripId,
    ownStops:stops,ownIndex:index!,ownDelay:null,settings,distance:0,features:[]});
-  const ids=initial.rows.slice(0,10).map(row=>row.tripId);
+  const candidates=initial.rows.slice(0,10).map(row=>({
+   id:row.tripId,line:row.line
+  }));
   const found=new Map<string,Stop[]>();
   setDetail({key,stops:new Map()});
   void (async()=>{
-   for(let start=0;start<ids.length;start+=4){
-    const batch=ids.slice(start,start+4);
-    const values=await Promise.all(batch.map(id=>tripStops(id,date,token).catch(()=>[])));
+   for(let start=0;start<candidates.length;start+=4){
+    const batch=candidates.slice(start,start+4);
+    const values=await Promise.all(batch.map(candidate=>
+     tripStops(candidate.id,date,token,selectedStopId,candidate.line).catch(()=>[])));
     if(!active)return;
-    batch.forEach((id,i)=>{if(values[i].length)found.set(id,values[i]);});
+    batch.forEach((candidate,i)=>{
+     if(values[i].length)found.set(candidate.id,values[i]);
+    });
     setDetail({key,stops:new Map(found)});
    }
   })();
