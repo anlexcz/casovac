@@ -34,6 +34,13 @@ def verify(root: Path) -> dict:
             encounters = json.loads(encounter_file.read_text(encoding="utf-8"))
             if len(encounters) != info["platformEncounterTrips"]:
                 raise ValueError(f"Invalid 5B encounter count for {date}")
+        if "platformCandidateTrips" in info:
+            candidate_file = folder / "platform-candidates.json"
+            if not candidate_file.is_file():
+                raise ValueError(f"Missing 5B candidate shard for {date}")
+            candidates = json.loads(candidate_file.read_text(encoding="utf-8"))
+            if len(candidates) != info["platformCandidateTrips"]:
+                raise ValueError(f"Invalid 5B candidate count for {date}")
         if info["available"] and not list((folder / "routes").glob("*.json")):
             raise ValueError(f"Missing route shards for {date}")
         for bucket in range(64):
