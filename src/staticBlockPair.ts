@@ -91,7 +91,7 @@ export async function findStaticBlockLinks(
    role,blockId:current.blockId,
    firstId:role==='first'?tripId:other.id,
    secondId:role==='first'?other.id:tripId,
-   reason:'Shodné block_id, sousední tripy a ověřená přechodová zastávka v PID GTFS.'
+   reason:'Sousední tripy se shodným block_id a ověřená přechodová zastávka z lokálního PID GTFS.'
   };
  };
  const [previous,next]=await Promise.all([
