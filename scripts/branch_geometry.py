@@ -98,3 +98,17 @@ def different_incoming_branches(first, second):
     return (far_distance >= UPSTREAM_MIN_SEPARATION and
             near_distance <= NEAR_MAX_SEPARATION and
             far_distance-near_distance >= 45.0)
+
+
+def same_incoming_corridor(first, second):
+    """Conservative veto: both verified approach samples use the same corridor.
+
+    Only close near *and* far samples prove a shared approach. A missing
+    or ambiguous shape never vetoes GTFS stop-sequence line-set evidence.
+    """
+    if first is None or second is None:
+        return False
+    near_a, far_a = first
+    near_b, far_b = second
+    return (hypot(near_a[0]-near_b[0], near_a[1]-near_b[1]) <= 22.0 and
+            hypot(far_a[0]-far_b[0], far_a[1]-far_b[1]) <= 22.0)
