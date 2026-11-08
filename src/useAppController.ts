@@ -341,6 +341,14 @@ export function useAppController(){
   remainingToCurrent:autoTravelIndex===null?null:remainingTo(autoTravelIndex),
   remainingToTarget:remainingTo,leadSeconds:neighbourSettings.autoOpenSeconds
  }):null;
+ // Resolve the next target ahead of time for static GTFS/peer-history warmup.
+ // This does not affect the later automatic OPEN threshold.
+ const autoPrefetchTarget=autoPlan.ready?pickAutoPlatform({
+  stops:trip.stops,currentIndex:autoTravelIndex,entries:autoPlan.entries,
+  stopMap:autoPlan.stopMap,evidence,mode:neighbourSettings.mode==='all'?'all':'important',
+  remainingToCurrent:null,remainingToTarget:remainingTo,
+  leadSeconds:neighbourSettings.autoOpenSeconds,prefetchOnly:true
+ }):null;
  const autoNeighbourReady=autoTarget!==null;
  // Adjacent joining stops: change target only once actual arrival at the
  // previous joined platform is confirmed. Otherwise keep the existing panel.
@@ -351,7 +359,7 @@ export function useAppController(){
   !confirmedBeyondStop(evidence,pinnedAutoNeighbour.index);
  const effectivePinnedAutoIndex=pinnedStillActive?pinnedAutoNeighbour!.index:null;
  const effectiveAutoNeighbourIndex=transferAuto?autoTarget!.index:
-  effectivePinnedAutoIndex??autoTarget?.index??displayedIndex;
+  effectivePinnedAutoIndex??autoTarget?.index??autoPrefetchTarget?.index??displayedIndex;
  const stopNeighbours=useStopNeighbours({
   enabled:neighbourSettings.enabled&&!!active,token:token.trim(),now,
   ownFeature:chosen,ownTripId:tripId,stops:trip.stops,rawTrip:trip.raw,knownFeatures:features,staticDate:planDate,currentIndex:displayedIndex,
