@@ -33,6 +33,7 @@ async function tripStops(
  const key=[date,tripId,boardStopId,routeShortName].join('|');
  const existing=tripCache.get(key);
  if(existing)return existing;
+ const started=Date.now();
  const result=await resolveNeighbourStops({
   tripId,date,boardStopId,routeShortName,
   staticAllowed:!!safeStaticServiceDate(date,true,new Date()),
@@ -46,6 +47,16 @@ async function tripStops(
   }
  });
  const stops=result.stops;
+ recordNeighbourDiagnostic({
+  at:Date.now(),kind:'warmup',stopId:boardStopId,stopName:'',
+  tripId,endpoint:result.source==='PID GTFS'?'PID Static Engine':'/v2/gtfs/trips/{id}',
+  elapsedMs:Date.now()-started,
+  counts:{tripStops:stops.length,staticSource:result.source==='PID GTFS'?1:0,
+   onlineFallback:result.source==='Golemio'?1:0},
+  note:result.source==='PID GTFS'?
+   'Statický detail okolního tripu ověřen podle dne, linky a nástupní hrany.':
+   'Statický detail není dostupný či nesouhlasí, použit původní online detail.'
+ });
  if(stops.length){
   tripCache.set(key,stops);
   if(tripCache.size>240)tripCache.delete(tripCache.keys().next().value!);
