@@ -254,7 +254,21 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             day_routes[label], stop_times, trip_meta, routes, stop_map,
             geometry=geometry, gtfs_stops=stops
         )
-        write_json(base / "platform-encounters.json", encounters)
+        # Keep runtime metadata compact and safely below the 5 MiB/browser
+        # per-item limit. Unverified candidate peers are for diagnostics only;
+        # they must not be sent to the automatic panel as a production trigger.
+        auto_encounters = {
+            tid: [entry for entry in items if entry[2] != "tram-branch-candidate"]
+            for tid, items in encounters.items()
+        }
+        auto_encounters = {tid: items for tid, items in auto_encounters.items() if items}
+        candidate_encounters = {
+            tid: [entry for entry in items if entry[2] == "tram-branch-candidate"]
+            for tid, items in encounters.items()
+        }
+        candidate_encounters = {tid: items for tid, items in candidate_encounters.items() if items}
+        write_json(base / "platform-encounters.json", auto_encounters)
+        write_json(base / "platform-candidates.json", candidate_encounters)
         for entries in blocks.values():
             entries.sort(key=lambda e: (e[0], e[1]))
         write_json(base / "trips.json", locator)
@@ -263,7 +277,8 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "trips": len(locator), "departures": sum(map(len, departures.values())),
             "routes": len(day_routes[label]), "platforms": len(departures),
             "buckets": len(buckets), "blocks": len(blocks),
-            "platformEncounterTrips": len(encounters),
+            "platformEncounterTrips": len(auto_encounters),
+            "platformCandidateTrips": len(candidate_encounters),
             "available": bool(locator)
         }
     shape_files = defaultdict(dict)
@@ -304,7 +319,8 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "departure": "[departureSeconds,tripId,routeId,stopSequence]",
             "platform": "[groupId,platformCode,lat,lon,zone,mode,wheelchair,gtfsIds,alternateName]",
             "group": "[nodeId,name,municipality,lat,lon,physicalPlatformIds]",
-            "platformEncounter": "tripId -> [[stopSequence,physicalPlatformId,kind,peerTripIds],...]; mixed-platform, mixed-confirmed, shape-verified tram-branch-confirmed or unverified candidate"
+            "platformEncounter": "tripId -> [[stopSequence,physicalPlatformId,kind,peerTripIds],...]; runtime: mixed-platform, mixed-confirmed, shape-proven tram-branch-confirmed",
+            "platformCandidate": "tripId -> unverified tram-branch-candidate rows, separate diagnostic shard never used for auto opening"
         }
     }
     # A release manifest pins each shard's bytes. Clients reject mixed-generation
