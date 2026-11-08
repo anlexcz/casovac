@@ -40,15 +40,18 @@ export function verifiedPeerDelay(feature:Feature|null,now:number):number|null{
 }
 export function resolvePlannedLiveHeadways(args:{
  planned:PlannedHeadways;selected:Feature|null;features:Feature[];now:number;
+ tripIds?:{ahead:string;behind:string};
 }):PlannedLiveHeadways{
- const {planned,selected,features,now}=args;
+ const {planned,selected,features,now,tripIds}=args;
  if(planned.status!=='ready'||!selected||!fresh(selected,now))return EMPTY;
  const ownDelay=delay(selected);
  if(ownDelay===null)return EMPTY;
  const resolve=(peer:PlannedPeer|null,side:'ahead'|'behind'):PlannedLivePeer|null=>{
   if(!peer)return null;
+  const observedTrip=tripIds?.[side]||peer.tripId;
   const matches=features.filter(feature=>
-   selectedTripId(feature)===peer.tripId&&routeOf(feature)===peer.line);
+   selectedTripId(feature)===observedTrip&&
+   (observedTrip!==peer.tripId||routeOf(feature)===peer.line));
   if(matches.length!==1)return null;
   const feature=matches[0];
   if(!fresh(feature,now)||vehicleId(feature)==='—'||
