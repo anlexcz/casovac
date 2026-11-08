@@ -32,7 +32,7 @@ export function pickAutoPlatform(args:{
  if(currentIndex===null||currentIndex<0)return null;
  const eligible=new Map<number,AutoPlatformTarget>();
  for(const [sequence,physicalId,kind] of entries){
-  if(kind!=='mixed-confirmed'&&kind!=='mixed-platform'&&kind!=='tram-branch-confirmed')continue;
+  if(kind!=='mixed-confirmed'&&kind!=='mixed-platform'&&kind!=='tram-branch-confirmed'&&kind!=='tram-route-set')continue;
   const index=stops.findIndex(stop=>stop.sequence===sequence&&!!stop.id&&stopMap[stop.id]===physicalId);
   if(index<1)continue; // Cannot preview the first trip stop from a predecessor.
   eligible.set(index,{index,physicalId,kind});
