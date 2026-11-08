@@ -31,6 +31,14 @@ test('shape-confirmed tram confluence opens even without a nearby scheduled peer
  const target=pick({entries:[[3,'P/C','tram-branch-confirmed',[]]]});
  assert.deepEqual(target,{index:2,physicalId:'P/C',kind:'tram-branch-confirmed'});
 });
+test('directional line set is important while ordinary shared-line stop needs all mode',()=>{
+ const joining=pick({entries:[[3,'P/C','tram-route-set',[]]]});
+ assert.equal(joining?.kind,'tram-route-set');
+ const ordinary=[[3,'P/C','shared-platform',[]]];
+ assert.equal(pick({entries:ordinary}),null);
+ assert.equal(pick({entries:ordinary,mode:'important'}),null);
+ assert.equal(pick({entries:ordinary,mode:'all'})?.index,2);
+});
 test('a branch candidate alone never triggers automatic opening before geometry verification',()=>{
  assert.equal(pick({entries:entries.slice(1),currentIndex:2,remainingToCurrent:20}),null);
 });
