@@ -14,12 +14,14 @@ import {displayDutyPhase} from './trackedDuty.ts';
 import type {DutyPhase} from './trackedDuty.ts';
 import {stableHeadway} from './stableHeadway.ts';
 import type {HeadwaySnapshot} from './stableHeadway.ts';
+import {headwaySnapshotKey,mayPromoteHeadwaySnapshot} from './headwaySnapshotIdentity.ts';
 
 type Side='ahead'|'behind';
 type Props={
  planned:PlannedHeadways;loading:boolean;live:PlannedLiveHeadways;
  features:Feature[];selected:Feature|null;date:string;now:number;
  tripId:string;peerTripIds:{ahead:string;behind:string};
+ ownDutyId:string;peerDutyIds:Record<Side,string>;
  phases?:Record<Side,DutyPhase>;peerStatus?:Record<Side,string>;
 };
 function StateIcon({verified}:{verified:boolean}){
@@ -59,8 +61,17 @@ const matchLive=(peer:PlannedPeer,observedId:string,features:Feature[],now:numbe
  return matching.length===1?matching[0]:null;
 };
 export default function HeadwayDetails({planned,loading,live,features,selected,date,now,tripId,peerTripIds,
+ ownDutyId,peerDutyIds,
  phases={ahead:'unknown',behind:'unknown'},peerStatus={ahead:'none',behind:'none'}}:Props){
- const remembered=useRef<Record<Side,HeadwaySnapshot|null>>({ahead:null,behind:null});
+ // Cache by the *pair*, not by side alone: moving between timetable stops
+ // may briefly select a different peer, then return to the same actual duty.
+ const snapshots=useRef<Map<string,HeadwaySnapshot>>(new Map());
+ const remembered=useRef<Record<Side,{
+  snapshot:HeadwaySnapshot|null;peerTripId:string;ownDutyId:string;
+ }>>({
+  ahead:{snapshot:null,peerTripId:'',ownDutyId:''},
+  behind:{snapshot:null,peerTripId:'',ownDutyId:''}
+ });
  const [side,setSide]=useState<Side|null>(null);
  const root=useRef<HTMLDivElement>(null);
  const buttons=useRef<Record<Side,HTMLButtonElement|null>>({ahead:null,behind:null});
@@ -110,9 +121,39 @@ export default function HeadwayDetails({planned,loading,live,features,selected,d
   const timeA=selected?observationTimestamp(selected):null;
   const timeB=observed?observationTimestamp(observed):null;
   const observationTime=timeA!==null&&timeB!==null?Math.min(timeA,timeB):null;
-  const stable=stableHeadway(remembered.current[which],
-   [date,tripId,peer.tripId,peer.referenceStopId].join('|'),measured,observationTime,now);
-  remembered.current[which]=stable.snapshot;
+  // A change of displayed stop or route trip never invalidates an already
+  // measured gap between the same scheduled duties. A different neighbour
+  // (including a different block) gets a separate cache identity.
+  const stableKey=headwaySnapshotKey({
+   date,ownDutyId:ownDutyId||'trip:'+tripId,
+   peerDutyId:peerDutyIds[which]||'trip:'+peer.tripId,side:which
+  });
+  const prior=remembered.current[which];
+  const canPromote=!!prior.snapshot&&
+   (peerDutyIds[which]??'').startsWith('block:')&&
+   mayPromoteHeadwaySnapshot({
+    previousPeerTrip:prior.peerTripId,nextPeerTrip:peer.tripId,
+    previousOwnDuty:prior.ownDutyId,nextOwnDuty:ownDutyId||'trip:'+tripId,
+    previousKey:prior.snapshot.key,nextKey:stableKey
+   });
+  const previous=snapshots.current.get(stableKey)??(
+   canPromote&&prior.snapshot?{...prior.snapshot,key:stableKey}:null);
+  const stable=stableHeadway(previous,stableKey,measured,observationTime,now);
+  if(stable.snapshot)snapshots.current.set(stableKey,stable.snapshot);
+  else snapshots.current.delete(stableKey);
+  // Bound the small historical map; expiry uses the actual source time, not
+  // the time the user visited the reference stop.
+  if(snapshots.current.size>20){
+   for(const [id,item] of snapshots.current){
+    if(now-item.observedAt>180000)snapshots.current.delete(id);
+   }
+   while(snapshots.current.size>20)
+    snapshots.current.delete(snapshots.current.keys().next().value!);
+  }
+  remembered.current[which]={
+   snapshot:stable.snapshot,peerTripId:peer.tripId,
+   ownDutyId:ownDutyId||'trip:'+tripId
+  };
   const verified=stable.quality==='live';
   const seconds=stable.seconds??estimatedPeerGap({
    planned:peer,side:which,selected,now

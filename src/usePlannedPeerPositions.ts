@@ -31,7 +31,8 @@ export function usePlannedPeerPositions(args:{
 }):{features:Feature[];status:PeerPositionStatus;tripIds:Record<Side,string>;
  updatedAt:number;loading:boolean;phases:Record<Side,DutyPhase>;
  reasons:Record<Side,PeerLiveResolution['reason']|'none'>;
- lastKnown:Record<Side,{vehicle:string;observedAt:number}|null>}{
+ lastKnown:Record<Side,{vehicle:string;observedAt:number}|null>;
+ dutyIds:Record<Side,string>}{ 
  const {enabled,planned,features,token,now,date}=args;
  const ready=enabled&&planned.status==='ready'&&!!token.trim()&&!!date;
  const ahead=ready?planned.ahead:null,behind=ready?planned.behind:null;
@@ -165,6 +166,10 @@ export function usePlannedPeerPositions(args:{
    dutyPhase({candidates:routes.ahead,date,now,feature:first.feature}):'unknown',
    behind:candidates.verified&&candidates.key===key?
    dutyPhase({candidates:routes.behind,date,now,feature:second.feature}):'unknown'},
-  lastKnown:{ahead:lastKnown('ahead',ahead),behind:lastKnown('behind',behind)}
+  lastKnown:{ahead:lastKnown('ahead',ahead),behind:lastKnown('behind',behind)},
+  dutyIds:{ahead:candidates.verified&&candidates.key===key&&routes.ahead[0]?.blockId?
+   'block:'+routes.ahead[0].blockId:'trip:'+(ahead?.tripId??''),
+   behind:candidates.verified&&candidates.key===key&&routes.behind[0]?.blockId?
+    'block:'+routes.behind[0].blockId:'trip:'+(behind?.tripId??'')}
  };
 }
