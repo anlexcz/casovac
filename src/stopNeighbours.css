@@ -30,3 +30,21 @@
 .sn-rows>.sn-row:not(.sn-own){animation:sn-appear 220ms ease-out both}
 @keyframes sn-appear{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.sn-rows>.sn-row:not(.sn-own){animation:none}}
+
+/* Shared orderColour for the FIRST glance (arrow) and delay. */
+.sn-arrow.sn-tone-good{color:#4dd094!important}
+.sn-arrow.sn-tone-risk{color:#f47779!important}
+.sn-arrow.sn-tone-uncertain{color:#f5b45c!important}
+.sn-arrow.sn-tone-neutral{color:#aab8c6!important}
+.sn-plan-tag{display:inline-flex;align-items:center;justify-content:center;vertical-align:baseline;
+ font-size:10px;font-weight:650;letter-spacing:.1px;color:#aab8c6;
+ border:1px solid #536170;border-radius:4px;padding:1px 3px;line-height:1.25;white-space:nowrap}
+.sn-status{display:flex;gap:10px;align-items:flex-start;padding:12px 9px;
+ color:#d4dee6;font-size:13px;line-height:1.35}
+.sn-status-icon{flex:0 0 23px;width:23px;height:23px;display:grid;place-items:center;
+ border:1px solid #5d6b79;border-radius:50%;color:#aab8c6;font-weight:700}
+.sn-status strong{font-size:13px;font-weight:650;display:block}
+.sn-status small{font-size:11px;color:#a1b1be;display:block;margin-top:4px}
+.sn-status-none .sn-status-icon{color:#4dd094;border-color:#477c67}
+.sn-status-error .sn-status-icon{color:#f47779;border-color:#915657}
+.sn-coverage{margin:5px 4px 2px;padding:5px 1px;color:#a6b4c0;font-size:11px;line-height:1.45}
