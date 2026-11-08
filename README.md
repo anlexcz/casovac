@@ -48,6 +48,21 @@ Příklad: trip před námi jede plánovaně 4 minuty před námi; má +60 s, my
 | Lokální cache PID dat | Verzovaný manifest, SHA-256 a IndexedDB |
 | Plně offline aplikace | Zatím ne; Service Worker je budoucí fáze |
 
+### Zobrazení rozestupů a detail sousedního spoje (PR #53)
+
+Horní panel po výběru pořadí zobrazuje **pouze** rozestup ↑ (před námi) a ↓ (za námi), bez čísel linka/pořadí. Každý dostupný rozestup je tlačítko, které otevře malý panel pod horními údaji. Opakované klepnutí, klávesa Escape či klepnutí mimo jej zavře. Detail se může aktualizovat při příchodu LIVE, aniž by se zavřel.
+
+**Dva stavy, žádný třetí:**
+
+- **Kruh s diagonální čárou:** nemáme úplně ověřené LIVE obou spojů. Čas vychází z plánovaného rozestupu PID GTFS, který se může upravit o **vlastní čerstvé a důvěryhodné zpoždění**. Pro spoj před námi přičíst naše zpoždění, pro spoj za námi odečíst naše zpoždění; chybějící vlastní odchylka znamená čistý plán, nikoli nulu jako skutečnou odchylku. Číslo pořadí a evidenční číslo souseda se **neukazují**.
+- **Ikona signálu:** jsou k dispozici ověřená živá data přesně vybraného sousedního `trip_id` i naše čerstvá odchylka. Čas se počítá z obou zpoždění; v detailu lze ukázat linku, pořadí, evidenční číslo a živé zpoždění.
+
+V obou stavech detail ukazuje **zastávku/polohu**. Pro plánovaná data se `src/headwayPeerLocation.ts` dotazuje statického PID GTFS `getTripResolved` a `getTripStops` přes `src/HeadwayDetails.tsx`. Podle **pražského lokálního času** a GTFS provozního dne (včetně `24:xx`) rozlišuje: před začátkem jízdy, stojí podle JŘ v zastávce, podle JŘ mezi dvěma sousedními zastávkami a po konci jízdy. **Jde o plánovanou polohu; zpoždění našeho vozu ji neposouvá.**
+
+Pro LIVE se stav rozlišuje podle `last_position.state_position`: `at_stop` = zastávka podle `last_stop.sequence`, `on_track` = jízda k `next_stop.sequence`, název se hledá **v ověřených zastávkách konkrétního tripu**. Neověřená nebo chybějící sekvence se **nevydává za živou zastávku**; případná náhradní plánovaná poloha je výslovně označená jako plán. Když PID GTFS nedovolí polohu zjistit, detail přizná nedostupnost.
+
+**Důležité:** žádný nový široký Golemio dotaz pro podrobnosti. LIVE detail používá stejný přesně identifikovaný snapshot dvou sousedů jako výpočet rozestupů. Na telefonu je nutné prakticky ověřit pozici popoveru, chování při změně tripu, přechody řetězení, noční service day a stárnutí LIVE zpráv. Automatické testy nenahrazují terénní akceptaci.
+
 ### Ověření, diagnostika a hranice platnosti
 
 - Jednotkové a regresní testy se spouštějí `npm test`, produkční sestavení `npm run build`. GitHub Actions **Verify Časovač** provádí obojí před sloučením.
