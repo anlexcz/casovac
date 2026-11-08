@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {golemioJson} from './golemioClient';
-import {findStaticBlockPair} from './staticBlockPair.ts';
+import {findStaticBlockLinks} from './staticBlockPair.ts';
 import {safeStaticServiceDate} from './staticTripAdapter.ts';
 import {findVerifiedBlockPair} from './blockPair';
 import type {BlockPair,OnlineTripDetail} from './blockPair';
@@ -8,7 +8,7 @@ import type {ChainSnapshot,ChainTrip} from './chainDiagnostics';
 import {parseStops} from './tripData';
 
 type Input={tripId:string;line:string;token:string;date:string;snapshot:ChainSnapshot|null;enabled:boolean};
-type State={key:string;pair:BlockPair|null;loading:boolean;reason:string};
+type State={key:string;pair:BlockPair|null;previousPair:BlockPair|null;loading:boolean;reason:string};
 const detailUrl=(id:string,date:string)=>{
  const url=new URL('https://api.golemio.cz/v2/gtfs/trips/'+encodeURIComponent(id));
  url.searchParams.set('date',date);
@@ -31,7 +31,7 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
    snapshot?.related.map(t=>t.tripId+':'+t.vehicle).join('|'),tripId,line]);
  const identity=enabled&&tripId&&token&&line?
   tripId+'|'+date+'|'+candidates.map(t=>t.tripId).join('|'):'';
- const [state,setState]=useState<State>({key:'',pair:null,loading:false,reason:''});
+ const [state,setState]=useState<State>({key:'',pair:null,previousPair:null,loading:false,reason:''});
  const saved=useRef<{tripId:string;date:string;line:string;order:string;vehicle:string;pair:BlockPair}|null>(null);
  const retained=():BlockPair|null=>{
   const old=saved.current;
@@ -46,10 +46,10 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
   return null;
  };
  useEffect(()=>{
-  if(!identity){setState({key:'',pair:null,loading:false,reason:''});return;}
+  if(!identity){setState({key:'',pair:null,previousPair:null,loading:false,reason:''});return;}
   let live=true;
-  setState({key:identity,pair:retained(),
-   loading:true,reason:'Ověřuji block_id obou tripů.'});
+  setState({key:identity,pair:retained(),previousPair:null,
+   loading:true,reason:'Ověřuji block_id navazujících tripů.'});
   const get=(id:string)=>golemioJson<OnlineTripDetail>(detailUrl(id,date),token,10*60000,'low');
   void (async()=>{
    try{
@@ -57,12 +57,14 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
     // Missing/incomplete/ambiguous static blocks retain the old Golemio path.
     if(safeStaticServiceDate(date,true,new Date())){
      try{
-      const staticPair=await findStaticBlockPair(tripId,line,date);
+      const links=await findStaticBlockLinks(tripId,line,date);
       if(!live)return;
+      const staticPair=links.next??links.previous;
       if(staticPair){
        saved.current={tripId,date,line,order:snapshot?.target.split('/')[1]??'',
         vehicle:snapshot?.vehicle??'',pair:staticPair};
-       setState({key:identity,pair:staticPair,loading:false,reason:staticPair.reason});
+       setState({key:identity,pair:staticPair,previousPair:links.previous,
+        loading:false,reason:staticPair.reason});
        return;
       }
      }catch{/* Static data unavailable or inconsistent; use online discovery. */}
@@ -70,7 +72,7 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
     const current=await get(tripId);
     if(!live)return;
     if(!current?.block_id){
-     setState({key:identity,pair:null,loading:false,reason:'Aktuální trip nemá block_id.'});return;
+     setState({key:identity,pair:null,previousPair:null,loading:false,reason:'Aktuální trip nemá block_id.'});return;
     }
     let matches:Array<{trip:ChainTrip;detail:OnlineTripDetail}>=[];
     // The live vehicle snapshot narrows this to a handful of candidate trip IDs.
@@ -138,15 +140,15 @@ export function useOnlineBlockPair({tripId,line,token,date,snapshot,enabled}:Inp
     const pair=findVerifiedBlockPair({tripId,line,start:null,detail:current},matches);
     if(pair)saved.current={tripId,date,line,order:snapshot?.target.split('/')[1]??'',
      vehicle:snapshot?.vehicle??'',pair};
-    setState({key:identity,pair:pair??retained(),loading:false,reason:pair?pair.reason:
+    setState({key:identity,pair:pair??retained(),previousPair:pair?.role==='second'?pair:null,loading:false,reason:pair?pair.reason:
      'V online datech zatím nebyl ověřen druhý trip stejného bloku.'});
    }catch(e){
-    if(live)setState({key:identity,pair:retained(),loading:false,reason:e instanceof Error?e.message:String(e)});
+    if(live)setState({key:identity,pair:retained(),previousPair:null,loading:false,reason:e instanceof Error?e.message:String(e)});
    }
   })();
   return()=>{live=false;};
  },[identity,tripId,line,token,date]);
  return state.key===identity?state:{key:identity,
   pair:saved.current?.tripId===tripId&&saved.current?.date===date?saved.current.pair:null,
-  loading:!!identity,reason:'Čekám na ověření GTFS.'};
+  previousPair:null,loading:!!identity,reason:'Čekám na ověření GTFS.'};
 }
