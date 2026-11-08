@@ -5,13 +5,14 @@ import StopNeighbourSheet from './StopNeighbourSheet';
 import Diagnostics from './Diagnostics';
 import StopBoard from './StopBoard';
 import {formatHeadway} from './lineHeadways';
+import HeadwayDetails from './HeadwayDetails.tsx';
 import {chooserStop} from './chooserStops';
 import {useAppController,vehicleId} from './useAppController';
 import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopIdentity';
 import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit.ts';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,plannedHeadways,plannedLiveHeadways,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,plannedHeadways,plannedLiveHeadways,peerFeatures,planDate,now,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
  const plannedReady=plannedHeadways.data.status==='ready';
  const front=plannedReady?plannedHeadways.data.ahead:null;
@@ -140,23 +141,11 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
         <svg viewBox="0 0 24 24" aria-hidden="true" className="identityIcon"><rect x="5" y="3.5" width="14" height="15" rx="3" fill="none" stroke="currentColor" strokeWidth="1.9"/><path d="M5 11h14M8 7.5h2m4 0h2M8 18.5l-2 3m10-3 2 3M9 21h6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/></svg>
         <span>#{chosen?vehicleId(chosen):lastSeen?.vehicle??'—'}</span>
        </div>
-       {showHeadways&&
-        <div className="compactHeadways" aria-label="Časové rozestupy plánovaně sousedních spojů" role="status">
-         <span title={frontPlan?'Pouze plánovaný odstup PID GTFS · '+front?.tripId:
-          frontLive!==null?'Skutečný odstup ověřeného plánovaného předchůdce':
-          plannedReady?'Plánovaný předchůdce nenalezen':'Předchozí spoj zatím není ověřen'} className="headwayValue">
-          <span aria-hidden="true">↑</span><span>{formatHeadway(frontValue??null)}</span>
-          {frontPlan&&<span className="headwayBadge">plán</span>}
-          {front&&<span className="headwayBadge">{front.line}/{(plannedReady?plannedLiveHeadways.ahead?.order:front.order)||'?'}</span>}
-         </span>
-         <span title={rearPlan?'Pouze plánovaný odstup PID GTFS · '+rear?.tripId:
-          rearLive!==null?'Skutečný odstup ověřeného plánovaného následníka':
-          plannedReady?'Plánovaný následník nenalezen':'Následující spoj zatím není ověřen'} className="headwayValue">
-          <span aria-hidden="true">↓</span><span>{formatHeadway(rearValue??null)}</span>
-          {rearPlan&&<span className="headwayBadge">plán</span>}
-          {rear&&<span className="headwayBadge">{rear.line}/{(plannedReady?plannedLiveHeadways.behind?.order:rear.order)||'?'}</span>}
-         </span>
-        </div>}
+       {showHeadways&&<HeadwayDetails planned={plannedHeadways.data}
+        loading={plannedHeadways.loading} live={plannedLiveHeadways}
+        features={peerFeatures} selected={chosen??null}
+        date={planDate} now={now} tripId={tripId}/>}
+
       </div>
       <button className={'vehicleStatus '+statusColor} type="button" onClick={()=>setDiagnostics(true)}
        aria-label={statusDescription+'; otevřít diagnostiku'} title={statusDescription}>
@@ -197,7 +186,7 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
     <h3>Výběr sousedních spojů</h3>
     <p className="hint">Rozhoduje plánovaný jízdní řád a společný úsek. Diagnostika zobrazuje pouze kandidáty s dostupnou čerstvou telemetrií.</p>
     <p className="hint">PID plán: {plannedHeadways.loading?'Načítám':plannedHeadways.data.reason} · před: {front?.tripId??'—'} · za: {rear?.tripId??'—'}</p>
-    <p className="hint">Skutečný odstup: před {frontLive===null?'nedostupný':formatHeadway(frontLive)} · za {rearLive===null?'nedostupný':formatHeadway(rearLive)}. Badge „plán“ značí plánovaný, nikoli naměřený odstup.</p>
+    <p className="hint">Skutečný odstup: před {frontLive===null?'nedostupný':formatHeadway(frontLive)} · za {rearLive===null?'nedostupný':formatHeadway(rearLive)}. Přeškrtnuté kolečko značí neověřený odhad podle PID GTFS a tvého potvrzeného zpoždění; signál znamená ověřené LIVE souseda.</p>
     <p className="hint">Zdroj LIVE před: {peerPositionStatus.ahead==='existing'?'společný snapshot linky':peerPositionStatus.ahead==='direct'?'přímý dotaz podle trip ID':peerPositionStatus.ahead==='none'?'bez plánovaného souseda':'nenalezeno'} · za: {peerPositionStatus.behind==='existing'?'společný snapshot linky':peerPositionStatus.behind==='direct'?'přímý dotaz podle trip ID':peerPositionStatus.behind==='none'?'bez plánovaného souseda':'nenalezeno'}.</p>
     <p className="hint">Výběr před/za: pouze PID GTFS na společné trase, včetně ověřených návazností block_id. LIVE se přiřazuje výhradně přes přesné trip ID, bez procházení ostatních vozidel.</p>
    </section>}
