@@ -7,6 +7,7 @@ import {formatHeadway} from './lineHeadways';
 import HeadwayDetails from './HeadwayDetails.tsx';
 import {chooserStop} from './chooserStops';
 import {useAppController,vehicleId} from './useAppController';
+import {OWN_VEHICLE_POLL_MS,OWN_VEHICLE_RETAIN_MS} from './useVehicleTracking';
 import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopIdentity';
 import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit.ts';
 
@@ -14,9 +15,9 @@ type Props=ReturnType<typeof useAppController>;
 export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,autoTargetIndex,autoPlatformMarkers,autoTransfer,pinnedStillActive,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,plannedHeadways,plannedLiveHeadways,peerFeatures,peerTripIds,peerPositionLoading,planDate,now,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
  const refreshAge=lastFetch===null?null:Math.max(0,now-lastFetch);
- const refreshPercent=refreshAge===null?4:Math.max(4,Math.min(100,refreshAge/60000*100));
- const refreshState=error||refreshAge!==null&&refreshAge>100000?'error':
-  loading||peerPositionLoading?'loading':refreshAge!==null&&refreshAge>75000?'stale':'ok';
+ const refreshPercent=refreshAge===null?4:Math.max(4,Math.min(100,refreshAge/OWN_VEHICLE_POLL_MS*100));
+ const refreshState=error||refreshAge!==null&&refreshAge>OWN_VEHICLE_RETAIN_MS?'error':
+  loading||peerPositionLoading?'loading':refreshAge!==null&&refreshAge>OWN_VEHICLE_POLL_MS*2?'stale':'ok';
  const plannedReady=plannedHeadways.data.status==='ready';
  const front=plannedReady?plannedHeadways.data.ahead:null;
  const rear=plannedReady?plannedHeadways.data.behind:null;
