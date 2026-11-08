@@ -76,6 +76,11 @@ class IncomingShapeTests(unittest.TestCase):
         finally:
             SHAPES["south"] = previous
 
+    def test_several_adjacent_shape_segments_near_one_stop_are_one_visit(self):
+        shape = [[50.0, 13.997], [50.0, 13.9985],
+                 [50.00004, 13.999], [50.0, 13.9995], [50.0, 14.0]]
+        self.assertIsNotNone(incoming_points(shape, WEST, TARGET))
+
     def test_ambiguous_repeated_passage_rejected(self):
         loop = [[p[1],p[2]] for p in SHAPES["west"][:3]]
         self.assertIsNone(incoming_points(loop+loop, WEST, TARGET))
