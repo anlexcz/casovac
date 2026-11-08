@@ -16,7 +16,7 @@ export type PidDepartureRow=[number,string,string,number];
 export type PidPlatformRow=[string,string,number,number,string,string,string,string[],string];
 export type PidGroupRow=[string,string,string,number,number,string[]];
 export type PidShapePoint=[number,number];
-export type PidDayInfo={trips:number;departures:number;routes:number;platforms:number;buckets:number;blocks:number;available:boolean};
+export type PidDayInfo={trips:number;departures:number;routes:number;platforms:number;buckets:number;blocks:number;available:boolean;platformEncounterTrips?:number;platformEncounterShards?:number;platformCandidateTrips?:number};
 export type PidManifest={
  schema:string;generatedAt:string;referenceDay:string;timezone:string;
  days:Record<string,PidDayInfo>;feed:{gtfsUrl:string;stopsUrl:string;startDate:string;endDate:string;stopsGeneratedAt:string|null};
