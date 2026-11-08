@@ -23,6 +23,21 @@ function delay(feature:Feature):number|null{
  }
  return null;
 }
+/** If the peer has no verifiable LIVE delay, only our confirmed current delay
+ * adjusts the timetable gap. This remains an estimate, never a LIVE value.
+ */
+export function estimatedPeerGap(args:{
+ planned:PlannedPeer|null;side:'ahead'|'behind';selected:Feature|null;now:number;
+}):number|null{
+ const {planned,side,selected,now}=args;
+ if(!planned)return null;
+ const own=selected&&fresh(selected,now)?delay(selected):null;
+ return Math.max(0,Math.round(planned.scheduledGap+
+  (own===null?0:side==='ahead'?own:-own)));
+}
+export function verifiedPeerDelay(feature:Feature|null,now:number):number|null{
+ return feature&&fresh(feature,now)?delay(feature):null;
+}
 export function resolvePlannedLiveHeadways(args:{
  planned:PlannedHeadways;selected:Feature|null;features:Feature[];now:number;
 }):PlannedLiveHeadways{
