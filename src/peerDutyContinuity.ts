@@ -11,7 +11,7 @@ import type {Stop} from './tripData.ts';
 
 type Source=Pick<PidStaticEngine,'getTripResolved'|'getBlockTrips'|'getTripStops'|'getRoutes'>;
 export type DutyTrip={tripId:string;line:string;startSeconds:number;
- endSeconds?:number;terminalStopId?:string};
+ endSeconds?:number;terminalStopId?:string;blockId?:string};
 const mapped=(stops:PidTripStop[]):Stop[]=>
  stops.map(s=>({id:s.id,name:s.name,sequence:s.sequence,
   arrival:s.arrival,departure:s.departure,lat:s.lat,lon:s.lon,
@@ -40,7 +40,7 @@ export async function peerDutyCandidates(peer:PlannedPeer,date:string,now:number
  const verified:DutyTrip[]=[{tripId:first.id,line:peer.line,
   startSeconds:sorted[idx].startSeconds,
   endSeconds:previousStops?.length?endTime(previousStops):undefined,
-  terminalStopId:previousStops?.at(-1)?.id}];
+  terminalStopId:previousStops?.at(-1)?.id,blockId:first.blockId}];
  if(!previousStops?.length||seconds===null)return verified;
  // Do not take a later trip past a missing/ambiguous intermediate handoff.
  for(let i=idx+1;i<sorted.length;i++){
@@ -55,7 +55,8 @@ export async function peerDutyCandidates(peer:PlannedPeer,date:string,now:number
   const line=routes[entry.routeId]?.[0]??'';
   if(!line)break;
   verified.push({tripId:entry.id,line,startSeconds:entry.startSeconds,
-   endSeconds:endTime(nextStops),terminalStopId:nextStops.at(-1)?.id});
+   endSeconds:endTime(nextStops),terminalStopId:nextStops.at(-1)?.id,
+   blockId:first.blockId});
   previousStops=nextStops;
  }
  // Current trip and the immediately adjacent one: never scan an entire all-day block.
