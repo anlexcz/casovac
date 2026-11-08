@@ -19,7 +19,14 @@ def audit(root: Path) -> dict:
     highlights = {}
     for day in manifest["days"]:
         directory = root / "days" / day
-        encounters = json.loads((directory / "platform-encounters.json").read_text(encoding="utf-8"))
+        encounters = {}
+        shards = manifest["days"][day].get("platformEncounterShards", 0)
+        if shards:
+            for bucket in range(shards):
+                path = directory / "platform-encounters" / f"{bucket:02d}.json"
+                encounters.update(json.loads(path.read_text(encoding="utf-8")))
+        else:
+            encounters = json.loads((directory / "platform-encounters.json").read_text(encoding="utf-8"))
         candidates = json.loads((directory / "platform-candidates.json").read_text(encoding="utf-8"))
         kinds = Counter()
         locations = Counter()
