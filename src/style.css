@@ -317,32 +317,35 @@
 .headwayStatusIcon{display:block;width:13px;height:13px;flex-shrink:0}
 .headwayStatusPlan{color:#9aa5b2}
 .headwayStatusLive{color:#65c5ba}
-.headwayPopover{position:absolute;right:0;top:calc(100% + 9px);
- width:min(340px,calc(100vw - 34px));z-index:4;
- padding:14px;background:#222831;color:#edf1f5;border:1px solid #46515c;
- border-radius:12px;box-shadow:0 18px 48px #000a;
- font-variant-numeric:tabular-nums;text-align:left}
-.headwayPopoverHeader{display:flex;justify-content:space-between;align-items:center;
- gap:10px;font-size:11px;letter-spacing:.6px;color:#a8b5c1;font-weight:700}
-.headwayClose{border:none;background:transparent;padding:0 4px;
- font-size:24px;line-height:1;color:#b4c1cd}
-.headwayClose:focus-visible{outline:2px solid #78c8c3}
+.headwayPopover{
+ position:fixed;right:auto;width:min(270px,calc(100vw - 24px));
+ z-index:20;padding:10px 12px 11px;
+ max-height:calc(100dvh - 24px);overflow-y:auto;
+ background:#222831;color:#edf1f5;border:1px solid #46515c;
+ border-radius:11px;box-shadow:0 12px 34px #0009;
+ font-variant-numeric:tabular-nums;text-align:left;
+}
 .headwayPopoverTop{display:flex;align-items:center;justify-content:space-between;
- gap:8px;margin:9px 0 11px}
-.headwayPopoverTop>strong{font-size:26px;line-height:1.2}
-.headwayPopoverSource{display:inline-flex;align-items:center;gap:5px;
- font-size:11px;color:#b8c6d0;white-space:nowrap}
-.headwayPopoverRow{display:flex;justify-content:space-between;gap:12px;
- padding:6px 0;border-top:1px solid #3a444e;font-size:13px}
-.headwayPopoverRow>span{color:#b4bec9}
-.headwayPopoverRow>strong{font-size:13px;text-align:right}
-.headwayPopoverLocation{display:flex;flex-direction:column;gap:5px;
- padding:11px 0;border-top:1px solid #3a444e}
-.headwayPopoverLocation>span{font-size:10px;font-weight:700;letter-spacing:.5px;color:#a9b9c6}
-.headwayPopoverLocation>strong{font-size:15px;line-height:1.3}
-.headwayPopoverLocation>small{font-size:12px;color:#b7c4cf;letter-spacing:0;font-weight:400;line-height:1.4}
-.headwayPopoverNote{margin:0;border-top:1px solid #3a444e;padding-top:9px;
- color:#acb8c4;font-size:11px;line-height:1.5}
+ gap:10px;margin:0 0 6px;min-height:30px}
+.headwayPopoverTime{display:inline-flex;align-items:baseline;gap:6px;min-width:0}
+.headwayPopoverTime>strong{font-size:23px;line-height:1.15;font-weight:750}
+.headwayPopoverActions{display:inline-flex;align-items:center;gap:11px}
+.headwayPopoverActions .headwayStatusIcon{width:14px;height:14px}
+.headwayClose{border:0;background:transparent;padding:1px 3px;
+ font-size:21px;line-height:1;color:#aab7c3}
+.headwayClose:focus-visible{outline:2px solid #78c8c3}
+.headwayPopoverIdentity{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;
+ color:#b7c3ce;font-size:12px;line-height:1.35}
+.headwayPopoverIdentity strong{color:#edf1f5;font-size:14px;font-weight:750}
+.headwayPopoverLocation{display:flex;align-items:flex-start;gap:8px;
+ margin-top:9px;padding-top:9px;border-top:1px solid #38434d}
+.headwayPin{width:14px;height:14px;flex:0 0 14px;margin-top:2px;color:#91a4b4}
+.headwayPopoverLocationText{display:flex;flex-direction:column;gap:3px;min-width:0}
+.headwayPopoverLocationText>strong{font-size:13px;line-height:1.3;font-weight:700;
+ overflow-wrap:anywhere}
+.headwayPopoverLocationText>small{font-size:11px;color:#b2c0cb;
+ letter-spacing:0;font-weight:400;line-height:1.35;overflow-wrap:anywhere}
+.headwayLocationHint{color:#96a7b5}
 .srOnly{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
  overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:490px){
