@@ -6,6 +6,7 @@ No single shard may exceed the browser IndexedDB per-item budget (5 MiB).
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -36,6 +37,20 @@ def verify(root: Path) -> dict:
     files = list(root.rglob("*.json"))
     if not files:
         raise ValueError("Empty PID bundle")
+    checksums = manifest.get("checksums")
+    if checksums is not None:
+        actual_paths = {
+            file.relative_to(root).as_posix() for file in files
+            if file.name != "manifest.json"
+        }
+        if set(checksums) != actual_paths:
+            raise ValueError("Manifest checksum inventory does not match produced files")
+        for file in files:
+            if file.name == "manifest.json":
+                continue
+            path = file.relative_to(root).as_posix()
+            if hashlib.sha256(file.read_bytes()).hexdigest() != checksums[path]:
+                raise ValueError("Invalid checksum for " + path)
     largest_size, largest_name = max(
         ((file.stat().st_size, file.relative_to(root).as_posix()) for file in files),
         key=lambda item: item[0]
