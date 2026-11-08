@@ -13,6 +13,9 @@ import type {GpsFix} from './position';
 import type {useRecorder} from './recorder';
 
 const API='https://api.golemio.cz/v2/vehiclepositions';
+// Own vehicle is the highest-priority stream. Missed refreshes retain the
+// last confirmed response; stale measurements must not be claimed as fresh.
+export const OWN_VEHICLE_POLL_MS=20000;
 export type HandoffFallback={target:string;vehicle:string;feature:Feature;until:number};
 type Props={
  active:[string,string]|null;
@@ -140,7 +143,7 @@ export function useVehicleTracking({active,trackedService,token,recorder,gps,set
    }catch(e){if(alive&&!controller.signal.aborted){const message=e instanceof Error?e.message:String(e);setError(message);recordErrorRef.current(active![0],active![1],'fetch_error',message);}}
    finally{busy=false;if(alive)setLoading(false);}
   }
-  void refresh();const timer=setInterval(()=>void refresh(),60000);
+  void refresh();const timer=setInterval(()=>void refresh(),OWN_VEHICLE_POLL_MS);
   return()=>{alive=false;clearInterval(timer);controller.abort();};
  },[active?.[0],active?.[1],token,trackedService?.verified,trackedService?.originRoute,trackedService?.sequenceId]);
  return {features,setFeatures,lastFetch,setLastFetch,queryMode,relatedVehicle,terminalCandidates,loading};
