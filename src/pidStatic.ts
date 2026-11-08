@@ -181,33 +181,36 @@ export class PidStaticEngine{
  async getTrip(id:string,day:string,routeId?:string):Promise<PidTrip|null>{
   const manifest=await this.day(day);
   if(!id)throw new PidStaticError('invalid','Missing trip ID');
-  const filename=routeId?await this.routeFilename(routeId):
-   (await this.request<Record<string,string>>('days/'+day+'/trips.json',manifest.generatedAt))[id];
-  if(!filename)return null;
-  const routePath='days/'+day+'/routes/'+filename;
-  const items=await this.request<Record<string,PidTripRow>>(routePath,manifest.generatedAt);
+  let resolvedRoute=routeId??'';
+  let filename:string;
+  if(routeId){
+   filename=await this.routeFilename(routeId);
+  }else{
+   const locator=await this.request<Record<string,[string,string]|string>>(
+    'days/'+day+'/trips.json',manifest.generatedAt);
+   const match=locator[id];
+   if(!match)return null;
+   if(Array.isArray(match)){resolvedRoute=match[0];filename=match[1];}
+   else filename=match; // compatibility with the first phase-1A output
+  }
+  const items=await this.request<Record<string,PidTripRow>>(
+   'days/'+day+'/routes/'+filename,manifest.generatedAt);
   const row=items[id];
   if(!row)return null;
-  // Explicit routeId should never silently return a trip from another route.
-  const route=routeId??Object.keys(await this.getRoutes()).find(r=>false)??'';
-  // Route IDs are not embedded in the row, so trust only the keyed shard.
-  return {id,date:day,routeId:route,serviceId:row[0],headsign:row[1],directionId:row[2],
+  if(row.length!==7||!Array.isArray(row[6]))throw new PidStaticError('invalid','Corrupted PID trip row '+id);
+  return {id,date:day,routeId:resolvedRoute,serviceId:row[0],headsign:row[1],directionId:row[2],
    blockId:row[3],shapeId:row[4],shortName:row[5],stopTimes:row[6]};
  }
+ /** Explicitly verifies trip-to-route membership in the daily locator. */
  async getTripResolved(id:string,day:string,routeId?:string):Promise<PidTrip|null>{
   const manifest=await this.day(day);
-  const locator=await this.request<Record<string,string>>('days/'+day+'/trips.json',manifest.generatedAt);
-  const filename=locator[id];
-  if(!filename)return null;
-  if(routeId&&filename!==await this.routeFilename(routeId))return null;
-  const trip=await this.getTrip(id,day,routeId);
-  if(!trip)return null;
-  if(!routeId){
-   const routes=await this.getRoutes();
-   for(const candidate of Object.keys(routes)){
-    if(await this.routeFilename(candidate)===filename)return {...trip,routeId:candidate};
-   }
-  }
+  const locator=await this.request<Record<string,[string,string]|string>>(
+   'days/'+day+'/trips.json',manifest.generatedAt);
+  const match=locator[id];
+  if(!match)return null;
+  const actualRoute=Array.isArray(match)?match[0]:'';
+  if(routeId&&actualRoute&&routeId!==actualRoute)return null;
+  const trip=await this.getTrip(id,day,actualRoute||routeId);
   return trip;
  }
  async getTripStops(id:string,day:string,routeId?:string):Promise<PidTripStop[]|null>{
