@@ -140,7 +140,7 @@ export function useVehicleTracking({active,trackedService,token,recorder,gps,set
    }catch(e){if(alive&&!controller.signal.aborted){const message=e instanceof Error?e.message:String(e);setError(message);recordErrorRef.current(active![0],active![1],'fetch_error',message);}}
    finally{busy=false;if(alive)setLoading(false);}
   }
-  void refresh();const timer=setInterval(()=>void refresh(),20000);
+  void refresh();const timer=setInterval(()=>void refresh(),60000);
   return()=>{alive=false;clearInterval(timer);controller.abort();};
  },[active?.[0],active?.[1],token,trackedService?.verified,trackedService?.originRoute,trackedService?.sequenceId]);
  return {features,setFeatures,lastFetch,setLastFetch,queryMode,relatedVehicle,terminalCandidates,loading};
