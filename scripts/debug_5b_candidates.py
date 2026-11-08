@@ -8,7 +8,7 @@ from branch_geometry import incoming_points, different_incoming_branches
 
 def analyze(root, day, limit=1500):
     directory=root/"days"/day
-    entries=json.loads((directory/"platform-encounters.json").read_text())
+    entries=json.loads((directory/"platform-candidates.json").read_text())
     trip_index=json.loads((directory/"trips.json").read_text())
     stops=json.loads((root/"stops/gtfs.json").read_text())
     stop_map=json.loads((root/"stops/gtfs-map.json").read_text())
