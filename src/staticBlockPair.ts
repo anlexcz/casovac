@@ -26,53 +26,82 @@ const partner=(tripId:string,line:string,source:string):ChainTrip=>({
  lastStop:null,nextStop:null,rawTrip:null,source
 });
 
-/** Returns null for absent or ambiguous links; leave the caller's Golemio
- * discovery path intact in those cases. Service date must already be vetted.
+/**
+ * The full operating block can contain arbitrarily many route changes.
+ * Only neighbouring trips in chronological order may form a handoff.
+ * Never jump over an intermediate trip just because it shares a terminal.
+ */
+export type StaticBlockLinks={previous:BlockPair|null;next:BlockPair|null};
+const EMPTY:StaticBlockLinks={previous:null,next:null};
+export async function findStaticBlockLinks(
+ tripId:string,line:string,date:string,
+ source:StaticBlockSource=pidStatic
+):Promise<StaticBlockLinks>{
+ if(!tripId||!line||!/^\d{4}-\d{2}-\d{2}$/.test(date))return EMPTY;
+ const current=await source.getTrip(tripId,date);
+ if(!current||current.id!==tripId||!current.blockId)return EMPTY;
+ const routes=await source.getRoutes();
+ if(routes[current.routeId]?.[0]!==line)return EMPTY;
+ const block=await source.getBlockTrips(current.blockId,date);
+ // Do not impose a maximum number of trips: long all-day blocks are valid.
+ if(block.length<2)return EMPTY;
+ const ordered=[...block].sort((a,b)=>a.startSeconds-b.startSeconds||a.id.localeCompare(b.id));
+ const matches=ordered.map((entry,index)=>entry.id===tripId&&entry.routeId===current.routeId?index:-1)
+  .filter(index=>index>=0);
+ if(matches.length!==1)return EMPTY; // mismatched or duplicated block identity
+ const index=matches[0];
+ const currentItem=ordered[index];
+ // Tied timestamps make chronological adjacency uncertain.
+ if((index>0&&ordered[index-1].startSeconds===currentItem.startSeconds)||
+    (index<ordered.length-1&&ordered[index+1].startSeconds===currentItem.startSeconds))
+  return EMPTY;
+ const currentStops=await source.getTripStops(tripId,date,current.routeId);
+ if(!validStops(currentStops))return EMPTY;
+ const original=stopsForBoundary(currentStops);
+ const check=async(entryIndex:number,role:'first'|'second'):Promise<BlockPair|null>=>{
+  const entry=ordered[entryIndex];
+  if(!entry||entry.startSeconds===currentItem.startSeconds)return null;
+  const otherLine=routes[entry.routeId]?.[0]??'';
+  // A same-line trip is still the immediate block neighbour, but not a
+  // *route change*: never skip it to reach a more distant different line.
+  if(!otherLine||otherLine===line)return null;
+  const other=await source.getTrip(entry.id,date,entry.routeId);
+  if(!other||other.id!==entry.id||other.blockId!==current.blockId||
+     other.routeId!==entry.routeId)return null;
+  const otherStops=await source.getTripStops(entry.id,date,entry.routeId);
+  if(!validStops(otherStops))return null;
+  const compared=stopsForBoundary(otherStops);
+  const first=role==='first'?original:compared;
+  const second=role==='first'?compared:original;
+  if(!validBlockBoundary(first,second))return null;
+  // Ensure GTFS stop_times agree with the indexed first-departure order.
+  if(!other.stopTimes.length||!current.stopTimes.length||
+     !Number.isFinite(current.stopTimes[0][2])||
+     !Number.isFinite(other.stopTimes[0][2]))return null;
+  const firstTime=role==='first'?current.stopTimes[0][2]:other.stopTimes[0][2];
+  const secondTime=role==='first'?other.stopTimes[0][2]:current.stopTimes[0][2];
+  if(secondTime<firstTime)return null;
+  return {
+   partner:partner(other.id,otherLine,'PID GTFS block_id'),
+   role,blockId:current.blockId,
+   firstId:role==='first'?tripId:other.id,
+   secondId:role==='first'?other.id:tripId,
+   reason:'Shodné block_id, sousední tripy a ověřená přechodová zastávka v PID GTFS.'
+  };
+ };
+ const [previous,next]=await Promise.all([
+  index>0?check(index-1,'second'):Promise.resolve(null),
+  index<ordered.length-1?check(index+1,'first'):Promise.resolve(null)
+ ]);
+ return {previous,next};
+}
+/** Backward-compatible two-trip API: prefer upcoming link, otherwise previous.
+ * Call findStaticBlockLinks() when both sides are needed.
  */
 export async function findStaticBlockPair(
  tripId:string,line:string,date:string,
  source:StaticBlockSource=pidStatic
 ):Promise<BlockPair|null>{
- if(!tripId||!line||!/^\d{4}-\d{2}-\d{2}$/.test(date))return null;
- const current=await source.getTrip(tripId,date);
- if(!current||current.id!==tripId||!current.blockId)return null;
- const routes=await source.getRoutes();
- if(routes[current.routeId]?.[0]!==line)return null;
- const blocks=await source.getBlockTrips(current.blockId,date);
- if(!blocks.some(item=>item.id===tripId&&item.routeId===current.routeId))return null;
- if(blocks.length<2||blocks.length>16)return null;
- const currentStops=await source.getTripStops(tripId,date,current.routeId);
- if(!validStops(currentStops))return null;
- const original=stopsForBoundary(currentStops);
- const matches:BlockPair[]=[];
- for(const entry of blocks){
-  if(entry.id===tripId)continue;
-  const otherLine=routes[entry.routeId]?.[0]??'';
-  if(!otherLine||otherLine===line)continue;
-  const other=await source.getTrip(entry.id,date,entry.routeId);
-  if(!other||other.id!==entry.id||other.blockId!==current.blockId)continue;
-  const otherStops=await source.getTripStops(entry.id,date,entry.routeId);
-  if(!validStops(otherStops))continue;
-  const compared=stopsForBoundary(otherStops);
-  const currentFirst=validBlockBoundary(original,compared);
-  const otherFirst=validBlockBoundary(compared,original);
-  if(currentFirst===otherFirst)continue;
-  // GTFS block boundaries must have chronological first departures.
-  const currentStart=current.stopTimes[0]?.[1];
-  const otherStart=other.stopTimes[0]?.[1];
-  if(!Number.isFinite(currentStart)||!Number.isFinite(otherStart)||
-    (currentFirst&&currentStart>otherStart)||
-    (otherFirst&&otherStart>currentStart))continue;
-  const firstId=currentFirst?tripId:other.id;
-  const secondId=currentFirst?other.id:tripId;
-  matches.push({
-   partner:partner(other.id,otherLine,'PID GTFS block_id'),
-   role:currentFirst?'first':'second',blockId:current.blockId,
-   firstId,secondId,
-   reason:'Shodné block_id a ověřená přechodová zastávka z lokálního PID GTFS.'
-  });
-  // Multiple equally plausible continuations are ambiguous, never choose one.
-  if(matches.length>1)return null;
- }
- return matches.length===1?matches[0]:null;
+ const links=await findStaticBlockLinks(tripId,line,date,source);
+ return links.next??links.previous;
 }
