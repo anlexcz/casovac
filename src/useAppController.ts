@@ -203,7 +203,9 @@ export function useAppController(){
  const position=manual??(compatible?(departureDetection.phase==='waiting'?remote.index??pos.confirmedIndex??pos.baseIndex:departureDetection.displayIndex):remote.index);
  const current=position!==null?trip.stops[position]:undefined;
  const departure=current?.departure||current?.arrival||'';
- const seconds=age!==null&&age<50&&position!==null&& (compatible||remote.status!=='stale'&&remote.status!=='off-route')?countdownSeconds(departure,now):null;
+ // The departure countdown is ONLY wall-clock time versus the planned GTFS time.
+ // LIVE freshness decides which stop is selected, never whether this clock runs.
+ const seconds=position!==null&&departure?countdownSeconds(departure,now):null;
  const destination=trip.headsign||'Směr nezjištěn';
  const firstStop=trip.stops[0];
  const firstStopDistance=firstStop&&vehicleCoords&&firstStop.lat!==null&&firstStop.lon!==null?
