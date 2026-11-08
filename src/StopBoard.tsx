@@ -44,11 +44,9 @@ export default function StopBoard({stops,index,tripId,remaining,terminalWaiting,
  const end=expanded?allStops.length:Math.min(allStops.length,currentIndex+7);
  const shown=valid?allStops.slice(currentIndex+1,end):[];
  const clock=terminalWaiting?'clockTerminal':remaining===null?'clockUnknown':remaining>0?'clockEarly':'clockReady';
- const marker=(kind:PlatformMarker|undefined)=>kind===undefined?null:
-  <span className={'stopLinkMark stopLinkMark-'+kind} aria-label={kind==='join'?'Sbíhání linek':kind==='mixed'?'Společná hrana s autobusem nebo trolejbusem':'Společná hrana více linek'}
-   title={kind==='join'?'Připojují se jiné linky':kind==='mixed'?'Společné nástupiště tramvají a silniční MHD':'Společné stanoviště více linek'}>
-   {kind==='join'?'⋈':kind==='mixed'?'◈':'↔'}
-  </span>;
+ const marker=(kind:PlatformMarker|undefined)=>kind==='join'?
+  <span className="stopLinkMark stopLinkMark-join" aria-label="Připojuje se jiná tramvajová linka"
+   title="Zastávka, kde se připojuje další tramvajová linka">●</span>:null;
 
  useLayoutEffect(()=>{
   const root=stack.current,card=activeCard.current;
