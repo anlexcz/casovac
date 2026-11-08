@@ -344,9 +344,8 @@
  .headwayToggle{font-size:11px}
 }
 
-/* Phase 5B: small topological hints, never a live conflict warning. */
-.stopLinkMark{display:inline-block;margin-left:7px;font-size:.72em;line-height:1;
- color:#9daebd;font-weight:650;white-space:nowrap;vertical-align:middle}
-.stopLinkMark-join{color:#d7b17c}
-.stopLinkMark-mixed{color:#a7bcc8}
-.stopLinkMark-shared{color:#899baa}
+/* Minimal fixed timetable marker: a filled dot only at verified tram joins.
+ * Request-stop crosses require verified stop-time metadata (currently unavailable). */
+.stopLinkMark{display:inline-block;margin-left:7px;font-size:.48em;line-height:1;
+ color:#aab8c6;font-weight:600;white-space:nowrap;vertical-align:middle}
+.stopLinkMark-join{color:#aab8c6}
