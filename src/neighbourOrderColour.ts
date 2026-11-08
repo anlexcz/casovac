@@ -12,7 +12,11 @@ export function orderColour(
  previous:OrderColour='neutral',
  hysteresis=10
 ):OrderColour{
- if(relative==='same'||expectedDifference===null||!Number.isFinite(expectedDifference))return 'neutral';
+ if(expectedDifference===null||!Number.isFinite(expectedDifference))return 'neutral';
+ // Equal scheduled times have no fixed order to flip. Flag only an actually
+ // near-simultaneous predicted arrival; never manufacture a green/red ranking.
+ if(relative==='same')return Math.abs(expectedDifference)<=Math.max(0,Math.min(300,tolerance))?
+  'uncertain':'neutral';
  const correctlyOrdered=relative==='before'?-expectedDifference:expectedDifference;
  const margin=Math.max(0,Math.min(300,tolerance));
  const band=Math.max(0,Math.min(60,hysteresis));
