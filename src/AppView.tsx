@@ -45,15 +45,17 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
  const verifiedNeighbourData=neighbourResultMatchesStop(stopNeighbours.result,
   sheetStop&&stopNeighbours.gate.selectedStopId?{...sheetStop,id:stopNeighbours.gate.selectedStopId}:sheetStop)?stopNeighbours.result:null;
  const hasNearby=(verifiedNeighbourData?.rows.length??0)>0;
+ const noConfirmedConflict=!!verifiedNeighbourData&&stopNeighbours.complete&&!hasNearby;
  // The live-data criteria decide WHEN to open, not whether an already
  // opened automatic sheet should stay on screen. Delays and API refreshes
  // must not make it disappear during the same stop.
  const pinnedActive=isAutoStopActive(pinnedAutoNeighbour,tripId,displayedIndex,trip.stops.length);
  const eligibleAuto=neighbourSettings.enabled&&neighbourSettings.mode!=='off'&&
   neighbourIndex===null&&sheetIndex!==null&&sheetStop!==null&&
-  dismissedStop!==sheetKey&&hasNearby&&
+  dismissedStop!==sheetKey&&stopNeighbours.complete&&
   (autoNeighbourIndex===displayedIndex||autoNeighbourReady)&&
-  (neighbourSettings.mode==='all'?!!verifiedNeighbourData?.sharedOutgoing:!!verifiedNeighbourData?.significant);
+  (noConfirmedConflict||(hasNearby&&
+   (neighbourSettings.mode==='all'?!!verifiedNeighbourData?.sharedOutgoing:!!verifiedNeighbourData?.significant)));
  const autoOpen=neighbourIndex===null&&dismissedStop!==sheetKey&&
   (pinnedActive||eligibleAuto);
  const sheetOpen=neighbourSettings.enabled&&!diagnostics&&!settings&&
