@@ -232,7 +232,7 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
                 timetable = stop_times[tid]
                 route_trips[tid] = [service, headsign, direction, block,
                                     shape, short, timetable]
-                locator[tid] = route_names[route_id]
+                locator[tid] = [route_id, route_names[route_id]]
                 if block:
                     blocks[block].append([timetable[0][1], tid, route_id])
                 for stop_id, arrival, departure, sequence, op in timetable:
@@ -286,6 +286,7 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
         "format": {
             "routeHash": "sha256(route_id)[:16]+'.json'",
             "bucket": "sha256(stop_id).digest()[0] % 64, decimal 00..63",
+            "tripLocator": "[routeId,routeFilename] by tripId",
             "time": "seconds since GTFS service-day midnight; values may exceed 86400",
             "trip": "[serviceId,headsign,directionId,blockId,shapeId,shortName,[[stopId,arrival,departure,sequence,operationType],...]]",
             "departure": "[departureSeconds,tripId,routeId,stopSequence]",

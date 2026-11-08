@@ -6,6 +6,7 @@ import {selectTrip,tripIdOf} from './tripSelection';
 import {orderOf,routeOf} from './featureUtils';
 import type {Feature,Obj} from './featureUtils';
 import {parseStops} from './tripData';
+import {pidStatic,comparePidTripStops,pidTripStopRows} from './pidStatic.ts';
 
 type Probe={
  id:string;title:string;url:string;receivedAt:string;elapsedMs:number;
@@ -49,6 +50,8 @@ export default function RawDebug(){
  const [manualTrip,setManualTrip]=useState('');
  const [stopId,setStopId]=useState('');
  const [results,setResults]=useState<Probe[]>([]);
+ const [staticCheck,setStaticCheck]=useState<unknown|null>(null);
+ const [staticBusy,setStaticBusy]=useState(false);
  const [loading,setLoading]=useState(false);
  const [message,setMessage]=useState('');
  const [selected,setSelected]=useState<{tripId:string;vehicle:string;reason:string;ambiguous:boolean;matched:number}|null>(null);
@@ -67,7 +70,7 @@ export default function RawDebug(){
  async function examine(){
   const current=parseOrder(query);
   if(!ready||!current){setMessage('Zadej platné pořadí ve tvaru 10/21 a API klíč.');return;}
-  setLoading(true);setMessage('');setSelected(null);setResults([]);
+  setLoading(true);setMessage('');setSelected(null);setResults([]);setStaticCheck(null);
   const [line,order]=current;
   const outputs:Probe[]=[];
   const append=(probe:Probe)=>{outputs.push(probe);setResults([...outputs]);};
@@ -141,6 +144,29 @@ export default function RawDebug(){
    setResults(current=>[...current,result]);
   }finally{setLoading(false);}
  }
+ async function compareStatic(){
+  const id=manualTrip.trim()||selected?.tripId||'';
+  if(!id){setStaticCheck({error:'Nejdříve načti trip nebo zadej jeho GTFS trip_id.'});return;}
+  setStaticBusy(true);
+  try{
+   const manifest=await pidStatic.getManifest(true);
+   const trip=await pidStatic.getTrip(id,date);
+   if(!trip){setStaticCheck({id,date,manifest:manifest.generatedAt,error:'Trip není v daném provozním dni v offline balíku.'});return;}
+   const local=pidTripStopRows(trip,await pidStatic.getGtfsStops());
+   const remote=results.find(item=>item.ok&&item.id==='lookup')??
+    results.find(item=>item.ok&&item.id==='detail');
+   const verified=remote?parseStops(remote.data):[];
+   setStaticCheck({
+    tripId:id,date,routeId:trip.routeId,blockId:trip.blockId,
+    manifestDate:manifest.referenceDay,manifestGeneratedAt:manifest.generatedAt,
+    staticStops:local.length,staticFirstStop:local[0]?.id,staticLastStop:local.at(-1)?.id,
+    comparisonSource:remote?.title??'Zatím bez online detailu',
+    ...(verified.length?comparePidTripStops(local,verified):{compared:false,message:'Online detail není k dispozici – offline jízdní řád byl načten, ale nelze jej porovnat.'})
+   });
+  }catch(e){
+   setStaticCheck({error:e instanceof Error?e.message:String(e)});
+  }finally{setStaticBusy(false);}
+ }
  const exportAll=()=>jsonExport('casovac-rawdebug-'+date+'.json',{
   exportedAt:new Date().toISOString(),query,date,selected,results,
   note:'API klíč se neexportuje. Výpis může obsahovat veřejné polohy vozidel.'
@@ -172,6 +198,11 @@ export default function RawDebug(){
    <button className="quiet" disabled={!ready||!manualTrip.trim()} onClick={()=>void fetchTrip()}>Načíst detail tripu</button>
    <div className="rawField"><label htmlFor="rawStop">STOP_ID</label><input id="rawStop" value={stopId} onChange={e=>setStopId(e.target.value)} placeholder="ID konečné zastávky"/></div>
    <button className="quiet" disabled={!ready||!stopId.trim()} onClick={()=>void fetchNearby()}>Načíst okolní tripy</button>
+   <h3>Porovnání s offline PID (fáze 1B)</h3>
+   <p className="hint">Ruční kontrola proti datovému balíku Časovače. Neovlivňuje sledování ani provozní dotazy; nespouští se automaticky.</p>
+   <button className="quiet" disabled={staticBusy||!(manualTrip.trim()||selected?.tripId)}
+    onClick={()=>void compareStatic()}>{staticBusy?'Porovnávám…':'Porovnat online detail s offline GTFS'}</button>
+   {staticCheck!==null&&<pre className="rawJson">{stringify(staticCheck)}</pre>}
   </section>
   <section className="panel">
    <div className="rawSectionHead"><h2>Výskyty block_id v odpovědích</h2><strong>{discovered.length}</strong></div>
