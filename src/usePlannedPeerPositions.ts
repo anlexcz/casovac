@@ -1,66 +1,119 @@
-/** Two selected GTFS trips, no nearest-vehicle discovery.
- * Existing own-route snapshots are reused before requesting individual trips.
+/** Monitor two scheduled peers and their verified consecutive GTFS block trips.
+ * The physical vehicle is anchored by an actual observation of the original trip.
+ * A GTFS block alone must never be advertised as confirmed live vehicle identity.
  */
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {golemioJson} from './golemioClient.ts';
-import {routeOf,selectedTripId} from './featureUtils.ts';
+import {routeOf,selectedTripId,vehicleId} from './featureUtils.ts';
 import {tripPositionUrl,exactTripPosition,freshTripPosition} from './plannedPeerPosition.ts';
+import {peerDutyCandidates} from './peerDutyContinuity.ts';
+import type {DutyTrip} from './peerDutyContinuity.ts';
 import type {Feature} from './featureUtils.ts';
 import type {PlannedHeadways,PlannedPeer} from './plannedHeadways.ts';
 
-function existingPeer(features:Feature[],peer:PlannedPeer,now:number):Feature|null{
- const exact=features.filter(f=>selectedTripId(f)===peer.tripId&&routeOf(f)===peer.line&&
+const unique=(features:Feature[],id:string,line:string,now:number)=>{
+ const found=features.filter(f=>selectedTripId(f)===id&&routeOf(f)===line&&
   freshTripPosition(f,now));
- return exact.length===1?exact[0]:null;
-}
+ return found.length===1?found[0]:null;
+};
 export type PeerPositionStatus={ahead:'existing'|'direct'|'unavailable'|'none';
  behind:'existing'|'direct'|'unavailable'|'none'};
+type Side='ahead'|'behind';
+type CandidateSet={key:string;ahead:DutyTrip[];behind:DutyTrip[]};
 export function usePlannedPeerPositions(args:{
  enabled:boolean;planned:PlannedHeadways;features:Feature[];token:string;now:number;
-}):{features:Feature[];status:PeerPositionStatus}{
- const {enabled,planned,features,token,now}=args;
- const ready=enabled&&planned.status==='ready'&&!!token.trim();
+ date:string;
+}):{features:Feature[];status:PeerPositionStatus;tripIds:Record<Side,string>;
+ updatedAt:number;loading:boolean}{
+ const {enabled,planned,features,token,now,date}=args;
+ const ready=enabled&&planned.status==='ready'&&!!token.trim()&&!!date;
  const ahead=ready?planned.ahead:null,behind=ready?planned.behind:null;
- const key=ready?[planned.referenceStopId,ahead?.tripId??'',behind?.tripId??'',
-  ahead?.line??'',behind?.line??''].join('|'):'';
- const interval=Math.floor(now/20000);
- const [remote,setRemote]=useState<{key:string;interval:number;values:Feature[]}>({
-  key:'',interval:-1,values:[]
+ const key=ready?[date,planned.referenceStopId,ahead?.tripId??'',behind?.tripId??''].join('|'):'';
+ const minute=Math.floor(now/60000);
+ const [candidates,setCandidates]=useState<CandidateSet>({key:'',ahead:[],behind:[]});
+ const [remote,setRemote]=useState<{key:string;values:Feature[];updatedAt:number;loading:boolean}>({
+  key:'',values:[],updatedAt:0,loading:false
  });
- const needed=useMemo(()=>{
-  const peers=[ahead,behind].filter((p):p is PlannedPeer=>p!==null);
-  return peers.filter(peer=>!existingPeer(features,peer,now));
-  // Poll on Golemio's 20-second cadence; avoid rerunning for each UI tick.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[key,interval,features]);
- const neededKey=needed.map(p=>p.line+'|'+p.tripId).join(',');
+ // Preserve an observed vehicle for the lifetime of this exact scheduled peer.
+ // Never map an unrelated vehicle solely because it has a successor trip ID.
+ const known=useRef<Map<string,string>>(new Map());
  useEffect(()=>{
-  if(!key){setRemote({key:'',interval:-1,values:[]});return;}
-  if(!needed.length){setRemote({key,interval,values:[]});return;}
+  known.current.clear();
+  if(!key){setCandidates({key:'',ahead:[],behind:[]});return;}
   let alive=true;
-  // Individual trip endpoint, not a scan over adjacent routes or orders.
-  void Promise.all(needed.map(async peer=>{
+  const first=(p:PlannedPeer|null):DutyTrip[]=>
+   p?[{tripId:p.tripId,line:p.line,startSeconds:p.departureSeconds}]:[];
+  setCandidates({key,ahead:first(ahead),behind:first(behind)});
+  void Promise.all([ahead?peerDutyCandidates(ahead,date,now):Promise.resolve([]),
+   behind?peerDutyCandidates(behind,date,now):Promise.resolve([])
+  ]).then(([a,b])=>{
+   if(alive)setCandidates({key,ahead:a.length?a:first(ahead),behind:b.length?b:first(behind)});
+  }).catch(()=>{});
+  return()=>{alive=false;};
+ // Re-evaluate the verified duty only when the chosen peer changes.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[key]);
+ const routes=useMemo(()=>({
+  ahead:candidates.key===key?candidates.ahead:[],
+  behind:candidates.key===key?candidates.behind:[]
+ }),[candidates,key]);
+ const candidateIds=[...new Set([...routes.ahead,...routes.behind].map(p=>p.tripId))];
+ const candidatesKey=candidateIds.join('|');
+ const allLocal=remote.key===key?[...features,...remote.values]:features;
+ const remember=(side:Side,peer:PlannedPeer|null)=>{
+  if(!peer)return;
+  const original=unique(allLocal,peer.tripId,peer.line,now);
+  if(original&&vehicleId(original)!=='—')known.current.set(side+'|'+peer.tripId,vehicleId(original));
+ };
+ remember('ahead',ahead);remember('behind',behind);
+ useEffect(()=>{
+  if(!key||!candidatesKey){setRemote({key:'',values:[],updatedAt:0,loading:false});return;}
+  let alive=true;
+  const jobs=[...routes.ahead,...routes.behind];
+  const distinct=[...new Map(jobs.map(j=>[j.tripId,j])).values()];
+  // Prefer existing line snapshot when it is fresh. Fetch only missing
+  // exact trips, including a successor that crossed a route boundary.
+  const missing=distinct.filter(p=>!unique(features,p.tripId,p.line,Date.now()));
+  setRemote(old=>({...old,key,loading:!!missing.length}));
+  if(!missing.length){
+   setRemote(old=>({...old,key,loading:false,updatedAt:Date.now()}));
+   return;
+  }
+  void Promise.all(missing.map(async p=>{
    try{
-    const result=await golemioJson<unknown>(tripPositionUrl(peer.tripId),token,20000,'low');
-    return exactTripPosition(result,peer);
-   }catch{return null;} // 404, missing trip or throttling => PLAN only
+    const response=await golemioJson<unknown>(tripPositionUrl(p.tripId),token,60000,'low');
+    return exactTripPosition(response,{tripId:p.tripId,line:p.line,
+     order:'',scheduledGap:0,departureSeconds:p.startSeconds,referenceStopId:''});
+   }catch{return null;}
   })).then(values=>{
-   if(alive)setRemote({key,interval,values:values.filter((v):v is Feature=>v!==null)});
+   if(!alive)return;
+   setRemote({key,values:values.filter((v):v is Feature=>v!==null),
+    updatedAt:Date.now(),loading:false});
   });
   return()=>{alive=false;};
- // neededKey changes when the current line snapshot already contains a peer.
+ // One immediate fetch on selection and then at most once per minute.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[key,interval,token,neededKey]);
- const fetched=remote.key===key&&remote.interval===interval?remote.values:[];
- const get=(peer:PlannedPeer|null)=>{
-  if(!peer)return {feature:null,source:'none' as const};
-  const fromSnapshot=existingPeer(features,peer,now);
-  if(fromSnapshot)return {feature:fromSnapshot,source:'existing' as const};
-  const fromDirect=existingPeer(fetched,peer,now);
-  return fromDirect?{feature:fromDirect,source:'direct' as const}:
-   {feature:null,source:'unavailable' as const};
+ },[key,candidatesKey,minute,token]);
+ const current=remote.key===key?[...features,...remote.values]:features;
+ const find=(side:Side,peer:PlannedPeer|null)=>{
+  if(!peer)return {feature:null,tripId:'',source:'none' as const};
+  const available=routes[side];
+  const anchor=known.current.get(side+'|'+peer.tripId);
+  for(const candidate of [...available].reverse()){
+   const exact=unique(current,candidate.tripId,candidate.line,now);
+   if(!exact||vehicleId(exact)==='—')continue;
+   if(candidate.tripId!==peer.tripId&&(!anchor||vehicleId(exact)!==anchor))continue;
+   const own=unique(features,candidate.tripId,candidate.line,now);
+   return {feature:exact,tripId:candidate.tripId,
+    source:own?'existing' as const:'direct' as const};
+  }
+  return {feature:null,tripId:'',source:'unavailable' as const};
  };
- const first=get(ahead),second=get(behind);
- return {features:[...new Set([first.feature,second.feature].filter((v):v is Feature=>v!==null))],
-  status:{ahead:first.source,behind:second.source}};
+ const first=find('ahead',ahead),second=find('behind',behind);
+ return {
+  features:[...new Set([first.feature,second.feature].filter((v):v is Feature=>v!==null))],
+  status:{ahead:first.source,behind:second.source},
+  tripIds:{ahead:first.tripId,behind:second.tripId},
+  updatedAt:remote.updatedAt,loading:remote.loading
+ };
 }
