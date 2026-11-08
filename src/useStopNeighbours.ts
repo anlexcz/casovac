@@ -249,25 +249,50 @@ export function useStopNeighbours(args:{
   return()=>{valid=false;};
  },[enabled,token,key,selectedStopId,date,poll,!!ownFeature,resolved.key,resolved.error]);
 
- // Prefetch four following GTFS boarding edges without repeated API calls.
+ // Static departures and a bounded shared LIVE snapshot for four future stops.
+ // A preview two stops ahead must open from warm data, not a new batch.
  useEffect(()=>{
-  if(!enabled||currentIndex===null||!stops.length)return;
+  if(!enabled||!token||currentIndex===null||!stops.length)return;
   let alive=true;
   const upcoming=stops.slice(currentIndex,currentIndex+5).filter(s=>!!s.id);
   const timer=window.setTimeout(()=>{
-   void Promise.all(upcoming.map(async stop=>{
-    const cacheKey=boardId(date,stop.id);
-    if(boardCache.has(cacheKey))return;
-    const secs=gtfsSeconds(stop.arrival||stop.departure||'');
-    if(secs===null)return;
-    try{
-     const board=await staticNeighbourBoard(stop.id,date,secs);
-     if(alive)boardCache.set(cacheKey,{board,at:Date.now()});
-    }catch{/* GTFS unavailable, later selected stop uses safe fallback. */}
-   }));
+   void (async()=>{
+    const boards=await Promise.all(upcoming.map(async item=>{
+     const cacheKey=boardId(date,item.id);
+     const cachedBoard=boardCache.get(cacheKey);
+     if(cachedBoard)return cachedBoard.board;
+     const secs=gtfsSeconds(item.arrival||item.departure||'');
+     if(secs===null)return null;
+     try{
+      const board=await staticNeighbourBoard(item.id,date,secs);
+      if(alive)boardCache.set(cacheKey,{board,at:Date.now()});
+      return board;
+     }catch{return null;}
+    }));
+    if(!alive)return;
+    const lines=[...new Set(boards.flatMap(board=>(board?.departures??[])
+     .filter(d=>d.route?.type===0).map(d=>d.route?.short_name??'').filter(Boolean)))];
+    const ownLine=ownFeature?routeOf(ownFeature):'';
+    // Bounded and cache-aware: avoid probing the whole fleet or every GTFS trip.
+    const needed=lines.filter(line=>line!==ownLine&&
+     (!vehicleCache.has(line)||Date.now()-vehicleCache.get(line)!.at>=VEHICLE_TTL)).slice(0,8);
+    for(let i=0;i<needed.length&&alive;i+=3){
+     const batch=needed.slice(i,i+3);
+     await Promise.all(batch.map(async line=>{
+      try{
+       const url=new URL('https://api.golemio.cz/v2/vehiclepositions');
+       url.searchParams.set('routeShortName',line);
+       url.searchParams.set('limit','1000');
+       const response=await golemioJson<unknown>(url.toString(),token,60000,'low');
+       if(alive)vehicleCache.set(line,{features:collectFeatures(response),at:Date.now()});
+      }catch{/* Optional ahead-of-time LIVE does not block the timer. */}
+     }));
+    }
+   })();
   },350);
   return()=>{alive=false;window.clearTimeout(timer);};
- },[enabled,ownTripId,date,currentIndex,stops]);
+ // A fresh minute updates the bounded LIVE subset; static boards stay cached.
+ },[enabled,token,ownTripId,date,currentIndex,stops,poll,ownFeature?routeOf(ownFeature):'']);
 
  // Build ONE enrichment snapshot per platform/refresh rather than
  // progressively re-rendering after every route's individual API response.
