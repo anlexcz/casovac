@@ -8,11 +8,11 @@ import type {PlannedHeadways} from './plannedHeadways.ts';
  * stop or another trip after an asynchronous download.
  */
 export function usePlannedHeadways(args:{
- enabled:boolean;tripId:string;date:string;referenceStopId:string;
+ enabled:boolean;tripId:string;date:string;referenceStopId:string;nowMs:number;
 }):{data:PlannedHeadways;loading:boolean}{
- const {enabled,tripId,date,referenceStopId}=args;
- const key=enabled&&tripId&&date&&referenceStopId?
-  [tripId,date,referenceStopId].join('|'):'';
+ const {enabled,tripId,date,referenceStopId,nowMs}=args;
+ const key=enabled&&tripId&&date?
+  [tripId,date,referenceStopId,referenceStopId?'':Math.floor(nowMs/60000)].join('|'):'';
  const [state,setState]=useState<{
   key:string;data:PlannedHeadways;loading:boolean
  }>({key:'',data:EMPTY_PLANNED_HEADWAYS,loading:false});
@@ -20,7 +20,7 @@ export function usePlannedHeadways(args:{
   if(!key){setState({key:'',data:EMPTY_PLANNED_HEADWAYS,loading:false});return;}
   let alive=true;
   setState({key,data:EMPTY_PLANNED_HEADWAYS,loading:true});
-  void findPlannedHeadways({tripId,date,referenceStopId})
+  void findPlannedHeadways({tripId,date,referenceStopId,nowMs})
    .then(data=>{if(alive)setState({key,data,loading:false});})
    .catch(e=>{
     if(alive)setState({key,data:{
