@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {adaptStaticTrip,loadVerifiedStaticTrip} from '../src/staticTripAdapter.ts';
+import {adaptStaticTrip,loadVerifiedStaticTrip,safeStaticServiceDate} from '../src/staticTripAdapter.ts';
 import {decodeRoute} from '../src/departure.ts';
 import {remoteEstimate} from '../src/remoteTracking.ts';
 
@@ -50,4 +50,11 @@ test('missing shape and mismatched stop counts fail closed for Golemio fallback'
   getTrip:async()=>trip,getTripStops:async()=>stops.slice(0,1),getRouteShape:async()=>shape
  };
  await assert.rejects(loadVerifiedStaticTrip(trip.id,'2026-11-08','9',fake),/sekvence/);
+});
+
+test('verified duty does not imply the GTFS service date across midnight',()=>{
+ assert.equal(safeStaticServiceDate('2026-11-08',true,new Date('2026-11-08T11:00:00Z')),'2026-11-08');
+ assert.equal(safeStaticServiceDate('2026-11-08',true,new Date('2026-11-08T00:30:00Z')),'');
+ assert.equal(safeStaticServiceDate('2026-11-07',true,new Date('2026-11-08T11:00:00Z')),'');
+ assert.equal(safeStaticServiceDate('2026-11-08',false,new Date('2026-11-08T11:00:00Z')),'');
 });
