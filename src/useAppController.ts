@@ -321,7 +321,7 @@ export function useAppController(){
  const effectiveAutoNeighbourIndex=effectivePinnedAutoIndex??autoNeighbourIndex;
  const stopNeighbours=useStopNeighbours({
   enabled:neighbourSettings.enabled&&!!active,token:token.trim(),now,
-  ownFeature:chosen,ownTripId:tripId,stops:trip.stops,rawTrip:trip.raw,knownFeatures:features,currentIndex:displayedIndex,
+  ownFeature:chosen,ownTripId:tripId,stops:trip.stops,rawTrip:trip.raw,knownFeatures:features,staticDate:planDate,currentIndex:displayedIndex,
   requestedIndex:neighbourIndex??effectiveAutoNeighbourIndex,settings:neighbourSettings
  });
  const highlightedStop=displayedIndex!==null?trip.stops[displayedIndex]:undefined;
