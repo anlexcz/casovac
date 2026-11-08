@@ -94,3 +94,28 @@ test('no available LIVE positions is not a prerequisite for PLAN',async()=>{
  assert.equal(result.ahead?.scheduledGap,240);
  assert.equal(result.behind?.scheduledGap,300);
 });
+
+test('PLAN uses stored verified trip without a live next-stop ID',async()=>{
+ const {source,map,calls}=data();
+ const shifted=base-43200;
+ for(const [id,trip] of map){
+  map.set(id,{...trip,stopTimes:trip.stopTimes.map(([stop,a,d,seq,edge])=>
+   [stop,a-shifted,d-shifted,seq,edge])});
+ }
+ const nowMs=Date.parse('2026-11-08T11:09:00Z'); // 12:09 Prague
+ const result=await findPlannedHeadways({tripId:'mine',date:day,
+  referenceStopId:'',nowMs,source});
+ assert.equal(result.status,'ready');
+ assert.equal(result.referenceStopId,'A');
+ assert.equal(result.ahead?.tripId,'before');
+ assert.equal(result.behind?.tripId,'after');
+ assert.ok(calls.departures>0);
+});
+
+test('PLAN does not guess a schedule outside the saved service day',async()=>{
+ const {source}=data();
+ const result=await findPlannedHeadways({tripId:'mine',date:day,
+  referenceStopId:'',nowMs:Date.parse('2026-11-09T11:09:00Z'),source});
+ assert.equal(result.status,'unavailable');
+ assert.equal(result.ahead,null);
+});
