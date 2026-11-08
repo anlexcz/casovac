@@ -94,3 +94,22 @@ test('manifest refresh invalidates cached versioned shards',async()=>{
  assert.equal(count.get('routes.json'),2);
  sources['manifest.json']=manifest();
 });
+
+test('default fetch retains browser receiver (Illegal invocation regression)',async()=>{
+ const original=globalThis.fetch;
+ const expected={calls:0,fetch:async function(url){
+  assert.equal(this,expected,'fetch must retain its browser/global receiver');
+  this.calls++;
+  assert.match(String(url),/manifest\\.json$/);
+  return {ok:true,status:200,json:async()=>manifest()};
+ }};
+ try{
+  globalThis.fetch=expected.fetch.bind(expected);
+  // Browser fetch can be a receiver-sensitive method. We additionally check
+  // that the default loader never calls a detached original function.
+  const engine=new PidStaticEngine(base);
+  const data=await engine.getManifest();
+  assert.equal(data.schema,'casovac-pid-v1');
+  assert.equal(expected.calls,1);
+ }finally{globalThis.fetch=original;}
+});
