@@ -178,9 +178,8 @@ export function useStopNeighbours(args:{
  const cached=boardCache.get(boardId(date,selectedStopId));
  const readyBoard=boardState.key===key?boardState.board:
   cached&&Date.now()-cached.at<BOARD_TTL+30000?cached.board:null;
- // A single departureboard request contains all tram routes for this *exact*
- // GTFS platform. No more full-day GTFS trip list or per-route sequential
- // discovery before the first visible row.
+ // Static PID departures now cover all verified GTFS IDs of one physical edge.
+ // Golemio fallback remains scoped to the exact ID on source failure.
  useEffect(()=>{
   if(!enabled||!token||!selectedStopId||!ownFeature){
    const reasons=[
@@ -271,7 +270,7 @@ export function useStopNeighbours(args:{
     }));
     if(!alive)return;
     const lines=[...new Set(boards.flatMap(board=>(board?.departures??[])
-     .filter(d=>d.route?.type===0).map(d=>d.route?.short_name??'').filter(Boolean)))];
+     .filter(d=>[0,3,11].includes(d.route?.type??-1)).map(d=>d.route?.short_name??'').filter(Boolean)))];
     const ownLine=ownFeature?routeOf(ownFeature):'';
     // Bounded and cache-aware: avoid probing the whole fleet or every GTFS trip.
     const needed=lines.filter(line=>line!==ownLine&&
@@ -299,8 +298,9 @@ export function useStopNeighbours(args:{
  // Known live positions are used immediately; cached lines avoid re-querying.
  const routes=useMemo(()=>{
   if(!readyBoard||!selectedStopId)return [];
+  const physical=new Set(readyBoard.physicalStopIds?.includes(selectedStopId)?readyBoard.physicalStopIds:[selectedStopId]);
   return [...new Set((readyBoard.departures??[]).filter(d=>
-   d.stop?.id===selectedStopId&&d.route?.type===0)
+   !!d.stop?.id&&physical.has(d.stop.id)&&[0,3,11].includes(d.route?.type??-1))
    .map(d=>d.route?.short_name??'').filter(Boolean))].slice(0,10);
  },[readyBoard,selectedStopId]);
  const routeKey=routes.join('|');
@@ -372,8 +372,9 @@ export function useStopNeighbours(args:{
   let alive=true;
   const ownSeconds=gtfsSeconds(effectiveStop.arrival||effectiveStop.departure||'')??0;
   const liveIds=new Set(live.features.map(selectedTripId));
+  const physical=new Set(readyBoard.physicalStopIds?.includes(selectedStopId)?readyBoard.physicalStopIds:[selectedStopId]);
   const departures=[...(readyBoard.departures??[])].filter(d=>
-   d.stop?.id===selectedStopId&&d.route?.type===0&&
+   !!d.stop?.id&&physical.has(d.stop.id)&&[0,3,11].includes(d.route?.type??-1)&&
    !!d.trip?.id&&d.trip?.id!==ownTripId);
   const byDistance=(a:typeof departures[number],b:typeof departures[number])=>
    Math.abs((a.scheduledSeconds??ownSeconds)-ownSeconds)-
@@ -383,14 +384,14 @@ export function useStopNeighbours(args:{
   const observed=departures.filter(d=>liveIds.has(d.trip?.id??'')).sort(byDistance);
   const candidateRows=[...new Map([...observed,...scheduled]
    .map(d=>[d.trip!.id!,d])).values()].slice(0,40);
-  const candidates=candidateRows.map(d=>({id:d.trip!.id!,line:d.route!.short_name!}));
+  const candidates=candidateRows.map(d=>({id:d.trip!.id!,line:d.route!.short_name!,stopId:d.stop!.id!}));
   setDetail({key,stops:new Map(),complete:false});
   void (async()=>{
    const found=new Map<string,Stop[]>();
    for(let start=0;start<candidates.length;start+=4){
     const batch=candidates.slice(start,start+4);
     const values=await Promise.all(batch.map(candidate=>
-     tripStops(candidate.id,date,token,selectedStopId,candidate.line).catch(()=>[])));
+     tripStops(candidate.id,date,token,candidate.stopId,candidate.line).catch(()=>[])));
     if(!alive)return;
     batch.forEach((candidate,i)=>{if(values[i].length)found.set(candidate.id,values[i]);});
    }
