@@ -8,7 +8,15 @@
 
 /* Časovač 0.4 / compact everyday screen */
 .appShell{max-width:680px;padding-bottom:100px}
-.topbar{margin-bottom:18px}
+.topbar{margin-bottom:18px;position:relative}
+.refreshTrack{position:absolute;bottom:-8px;left:0;right:0;height:2px;
+ background:#30363f;border-radius:99px;overflow:hidden;pointer-events:none}
+.refreshTrackFill{display:block;height:100%;background:#65c5ba;
+ border-radius:99px;transition:width 1s linear,background-color .25s ease}
+.refreshTrack-loading .refreshTrackFill{background:#75a9bd;opacity:.8}
+.refreshTrack-stale .refreshTrackFill{background:#c59d5e}
+.refreshTrack-error .refreshTrackFill{background:#dc6969}
+
 .headActions{display:flex;gap:8px;align-items:center}
 .headButton{min-width:45px;height:43px;padding:8px 10px;background:#242931;border:1px solid #424952;border-radius:11px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:20px}
 .headButton span{font-size:12px;font-weight:700}
