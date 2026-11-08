@@ -323,7 +323,7 @@ export function useAppController(){
  const autoTravelIndex=manual===null?displayedIndex:null;
  const autoTarget=autoPlan.ready?pickAutoPlatform({
   stops:trip.stops,currentIndex:autoTravelIndex,entries:autoPlan.entries,
-  stopMap:autoPlan.stopMap,evidence,
+  stopMap:autoPlan.stopMap,evidence,mode:neighbourSettings.mode==='all'?'all':'important',
   remainingToCurrent:autoTravelIndex===null?null:remainingTo(autoTravelIndex),
   remainingToTarget:remainingTo,leadSeconds:neighbourSettings.autoOpenSeconds
  }):null;
