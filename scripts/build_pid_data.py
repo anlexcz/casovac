@@ -319,7 +319,7 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
             "departure": "[departureSeconds,tripId,routeId,stopSequence]",
             "platform": "[groupId,platformCode,lat,lon,zone,mode,wheelchair,gtfsIds,alternateName]",
             "group": "[nodeId,name,municipality,lat,lon,physicalPlatformIds]",
-            "platformEncounter": "tripId -> [[stopSequence,physicalPlatformId,kind,peerTripIds],...]; runtime: mixed-platform, mixed-confirmed, tram-route-set from directional line delta, and shape-proven tram-branch-confirmed",
+            "platformEncounter": "tripId -> [[stopSequence,physicalPlatformId,kind,peerTripIds],...]; runtime: shared-platform (all mode only), mixed-platform, mixed-confirmed, tram-route-set from directional line delta, and shape-proven tram-branch-confirmed",
             "platformCandidate": "tripId -> unverified tram-branch-candidate rows, separate diagnostic shard never used for auto opening"
         }
     }
