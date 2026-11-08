@@ -3,9 +3,9 @@ import {pidStatic} from './pidStatic.ts';
 import type {PidTripStop} from './pidStatic.ts';
 import type {PlannedHeadways,PlannedPeer} from './plannedHeadways.ts';
 import type {PlannedLiveHeadways} from './plannedLiveHeadways.ts';
-import {estimatedPeerGap,verifiedPeerDelay} from './plannedLiveHeadways.ts';
+import {estimatedPeerGap} from './plannedLiveHeadways.ts';
 import {formatHeadway} from './lineHeadways.ts';
-import {plannedPeerLocation,livePeerLocation} from './headwayPeerLocation.ts';
+import {plannedPeerStopName,livePeerStopName} from './headwayPeerLocation.ts';
 import {routeOf,selectedTripId,vehicleId} from './featureUtils.ts';
 import type {Feature} from './featureUtils.ts';
 import {freshTripPosition} from './plannedPeerPosition.ts';
@@ -58,10 +58,11 @@ export default function HeadwayDetails({planned,loading,live,features,selected,d
  const buttons=useRef<Record<Side,HTMLButtonElement|null>>({ahead:null,behind:null});
  const [placement,setPlacement]=useState<{left:number;top:number}|null>(null);
  const place=(rect:DOMRect)=>{
-  const width=Math.min(270,window.innerWidth-24);
+  const width=Math.min(280,window.innerWidth-24);
   const left=Math.max(12,Math.min(rect.left,window.innerWidth-width-12));
-  const above=rect.bottom+190>window.innerHeight&&rect.top>192;
-  const top=above?Math.max(12,rect.top-184):Math.min(rect.bottom+7,Math.max(12,window.innerHeight-60));
+  // One-line popup; reserve enough room for wrapped long stop names.
+  const above=rect.bottom+80>window.innerHeight&&rect.top>88;
+  const top=above?Math.max(12,rect.top-75):rect.bottom+6;
   setPlacement({left,top});
  };
  const front=planned.status==='ready'?planned.ahead:null;
@@ -71,9 +72,9 @@ export default function HeadwayDetails({planned,loading,live,features,selected,d
  const currentLive=side==='ahead'?live.ahead:side==='behind'?live.behind:null;
  const isLive=!!current&&currentLive!==null;
  const feature=current&&isLive?matchLive(current,features,now):null;
- const location=isLive&&feature?livePeerLocation(feature,stops.stops):null;
- const liveLocationMissing=isLive&&location===null;
- const estimated=current?plannedPeerLocation(stops.stops,date,now):null;
+ const liveStop=isLive&&feature?livePeerStopName(feature,stops.stops):null;
+ const plannedStop=current?plannedPeerStopName(stops.stops,date,now):null;
+ const stopName=isLive?(liveStop??(plannedStop?'JŘ: '+plannedStop:null)):plannedStop;
  useEffect(()=>{setSide(null);},[tripId]);
  useEffect(()=>{
   if(!side)return;
@@ -112,47 +113,22 @@ export default function HeadwayDetails({planned,loading,live,features,selected,d
    {peer&&<StateIcon verified={verified}/>}
   </button>;
  };
- const currentGap=side==='ahead'?live.ahead?.seconds:side==='behind'?live.behind?.seconds:null;
- const displayGap=current?(currentGap??estimatedPeerGap({
-  planned:current,side:side!,selected,now
- })):null;
- const deviation=feature&&isLive?verifiedPeerDelay(feature,now):null;
  return <div className="headwayDetailsRoot" ref={root}>
   <div className="compactHeadways" aria-label="Rozestupy předchozí a následující tramvaje">
    {renderButton('ahead',front)}
    {renderButton('behind',rear)}
   </div>
-  {side&&current&&<div className="headwayPopover" role="dialog"
+  {side&&current&&<div className="headwayPopover headwayPopoverInline" role="dialog"
    style={placement?{left:placement.left,top:placement.top}:undefined}
    aria-label={'Podrobnosti: spoj '+(side==='ahead'?'přede mnou':'za mnou')}>
-   <div className="headwayPopoverTop">
-    <span className="headwayPopoverTime"><span className="headwayArrow" aria-hidden="true">
-     {side==='ahead'?'↑':'↓'}</span><strong>{formatHeadway(displayGap)}</strong></span>
-    <span className="headwayPopoverActions"><StateIcon verified={isLive}/>
-     <button type="button" className="headwayClose" onClick={()=>setSide(null)}
-      aria-label="Zavřít podrobnosti">×</button>
-    </span>
-   </div>
-   <div className="headwayPopoverIdentity">
-    <strong>{current.line}{isLive&&currentLive?.order?'/'+currentLive.order:''}</strong>
-    {isLive&&feature&&vehicleId(feature)!=='—'&&<span>#{vehicleId(feature)}</span>}
-    {isLive&&deviation!==null&&<span>{deviation>0?'+':''}{Math.round(deviation)} s</span>}
-   </div>
-   <div className="headwayPopoverLocation">
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="headwayPin">
-     <path d="M12 21s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12Z" fill="none"
-      stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="9" r="2.5"
-      fill="none" stroke="currentColor" strokeWidth="1.8"/>
-    </svg>
-    <div className="headwayPopoverLocationText">
-     <strong>{location?.title??(liveLocationMissing&&estimated?'Živá poloha neznámá':null)??
-      estimated?.title??(stops.loading?'Načítám polohu…':'Poloha nedostupná')}</strong>
-     <small>{location?.detail??(liveLocationMissing&&estimated?
-      'JŘ: '+estimated.title+' · '+estimated.detail:null)??
-      (estimated?.detail??(stops.loading?'Podle PID GTFS':'Bez potvrzených zastávek'))}
-      {!isLive&&estimated&&<span className="headwayLocationHint"> · JŘ</span>}</small>
-    </div>
-   </div>
+   <span className="headwayInlineIdentity">
+    {current.line}{isLive&&currentLive?.order?'/'+currentLive.order:''}
+   </span>
+   {isLive&&feature&&vehicleId(feature)!=='—'&&
+    <span className="headwayInlineVehicle">#{vehicleId(feature)}</span>}
+   <span className="headwayInlineStop" title={stopName??undefined}>
+    {stopName??(stops.loading?'Načítám zastávku…':'Zastávka nedostupná')}
+   </span>
   </div>}
   {loading&&<span className="srOnly" role="status">Načítám plánované sousední spoje.</span>}
  </div>;
