@@ -140,7 +140,10 @@ export function useVehicleTracking({active,trackedService,token,recorder,gps,set
      recordApiRef.current({line:active![0],order:active![1],responseStatus:200,
       requestStartedAt,responseAt:Date.now(),matchingCount:matching.length,vehicle:selected,gps:gpsRef.current,
       source:selected?(selected===handoffFallbackRef.current?.feature?'handoff_pending':'unique_order'):'ambiguous_or_missing',candidateVehicles:candidates,queryMode});
-     if(selected&&selected!==handoffFallbackRef.current?.feature){
+     // A retained snapshot must not update lastSeenAt as though Golemio
+     // had just measured the tram again. Only a newly received feature can.
+     if(selected&&(standard.includes(selected)||queryMode==='knownVehicle')&&
+      selected!==handoffFallbackRef.current?.feature){
       const loc=selected.geometry?.coordinates;
       const coords=Array.isArray(loc)&&loc.length>=2?loc:null;
       const p=path(selected,'properties.last_position') as Obj|undefined;
