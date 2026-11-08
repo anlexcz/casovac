@@ -1,5 +1,6 @@
 import {useEffect,useMemo,useState} from 'react';
 import {auditedFetch} from './networkAudit.ts';
+import {loadVerifiedStaticTrip} from './staticTripAdapter.ts';
 
 export type Stop = {id:string;name:string;sequence:number;arrival:string;departure:string;lat:number|null;lon:number|null;platformCode?:string};
 type RecordValue=Record<string,unknown>;
@@ -68,16 +69,33 @@ const remember=(id:string,data:TripContent)=>{
  tripCache.set(id,{data,at:Date.now()});
  if(tripCache.size>60)tripCache.delete(tripCache.keys().next().value!);
 };
-export function useTripData(tripId:string,token:string):TripData{
+export function useTripData(tripId:string,token:string,serviceDate='',routeShortName=''):TripData{
+ const key=tripId+'|'+(serviceDate||'legacy');
  const [state,setState]=useState<{id:string;data:TripContent}>({id:'',data:EMPTY});
  useEffect(()=>{
   if(!tripId||tripId==='—'||!token){setState({id:tripId,data:EMPTY});return;}
-  const cached=getCached(tripId);
-  if(cached){setState({id:tripId,data:cached});return;}
+  const cached=getCached(key);
+  if(cached){setState({id:key,data:cached});return;}
   const abort=new AbortController();
-  setState({id:tripId,data:{...EMPTY,loading:true}});
+  setState({id:key,data:{...EMPTY,loading:true}});
   (async()=>{
    try{
+    // Exact, verified service date only: a calendar date inferred from a trip ID
+    // or today's wall clock is not sufficient, especially after midnight.
+    if(serviceDate&&routeShortName){
+     try{
+      const staticContent=await loadVerifiedStaticTrip(tripId,serviceDate,routeShortName);
+      if(abort.signal.aborted)return;
+      const content:TripContent={...staticContent,loading:false,error:''};
+      remember(key,content);
+      setState({id:key,data:content});
+      return;
+     }catch{
+      if(abort.signal.aborted)return;
+      // Any mismatch, missing asset or unavailable PID day falls back to Golemio.
+      // Never show incomplete static shapes as a usable tracked trip.
+     }
+    }
     const url=new URL('https://api.golemio.cz/v2/public/gtfs/trips/'+encodeURIComponent(tripId));
     url.searchParams.append('scopes[]','info');
     url.searchParams.append('scopes[]','stop_times');
@@ -116,18 +134,18 @@ export function useTripData(tripId:string,token:string):TripData{
       stops,headsign:txt(obj.trip_headsign),route:txt(obj.route_short_name),raw:data,
       source,loading:false,error:stops.length?'':(fallbackError||'Jízdní řád neobsahuje rozpoznané zastávky')
      };
-     remember(tripId,content);
-     setState({id:tripId,data:content});
+     remember(key,content);
+     setState({id:key,data:content});
     }
    }catch(e){
-    if(!abort.signal.aborted)setState({id:tripId,data:{
+    if(!abort.signal.aborted)setState({id:key,data:{
      ...EMPTY,error:e instanceof Error?e.message:String(e)
     }});
    }
   })();
   return()=>abort.abort();
- },[tripId,token]);
- const result=getCached(tripId)??(state.id===tripId?state.data:EMPTY);
+ },[tripId,token,serviceDate,routeShortName,key]);
+ const result=getCached(key)??(state.id===key?state.data:EMPTY);
  return useMemo(()=>({...result,tripId}),[result,tripId]);
 }
 export function formatStopTime(value:string):string{
