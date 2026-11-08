@@ -91,7 +91,7 @@ export class PidStaticEngine{
  private readonly pending=new Map<string,Promise<unknown>>();
  private readonly base:string;
  private readonly loader:typeof fetch;
- constructor(base:string=basePath()+'data/pid/v1/',loader:typeof fetch=fetch){
+ constructor(base:string=basePath()+'data/pid/v1/',loader:typeof fetch=(input,init)=>globalThis.fetch(input,init)){
   this.base=base.endsWith('/')?base:base+'/';
   this.loader=loader;
  }

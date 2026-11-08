@@ -94,3 +94,20 @@ test('manifest refresh invalidates cached versioned shards',async()=>{
  assert.equal(count.get('routes.json'),2);
  sources['manifest.json']=manifest();
 });
+
+test('default fetch retains browser receiver (Illegal invocation regression)',async()=>{
+ const original=globalThis.fetch;
+ let calls=0;
+ try{
+  globalThis.fetch=async function(url){
+   assert.equal(this,globalThis,'default loader must call globalThis.fetch as a method');
+   calls++;
+   assert.ok(String(url).endsWith('manifest.json'));
+   return {ok:true,status:200,json:async()=>manifest()};
+  };
+  const engine=new PidStaticEngine(base);
+  const data=await engine.getManifest();
+  assert.equal(data.schema,'casovac-pid-v1');
+  assert.equal(calls,1);
+ }finally{globalThis.fetch=original;}
+});
