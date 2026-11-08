@@ -39,6 +39,7 @@ export function usePlannedPeerPositions(args:{
  // physical peer must not be forgotten at every stop transition.
  const key=ready?[date,ahead?.tripId??'',behind?.tripId??''].join('|'):'';
  const minute=Math.floor(now/60000);
+ const dutyRefresh=Math.floor(now/300000);
  const [candidates,setCandidates]=useState<CandidateSet>({key:'',ahead:[],behind:[],verified:false});
  const [remote,setRemote]=useState<{key:string;values:Feature[];updatedAt:number;loading:boolean}>({
   key:'',values:[],updatedAt:0,loading:false
@@ -53,16 +54,20 @@ export function usePlannedPeerPositions(args:{
   let alive=true;
   const first=(p:PlannedPeer|null):DutyTrip[]=>
    p?[{tripId:p.tripId,line:p.line,startSeconds:p.departureSeconds}]:[];
-  setCandidates({key,ahead:first(ahead),behind:first(behind),verified:false});
+  // Re-evaluate every five minutes as a far-away successor approaches.
+  // Keep the previous verified duty while the static index is rechecked.
+  setCandidates(old=>old.key===key?old:
+   {key,ahead:first(ahead),behind:first(behind),verified:false});
   void Promise.all([ahead?peerDutyCandidates(ahead,date,now):Promise.resolve([]),
    behind?peerDutyCandidates(behind,date,now):Promise.resolve([])
   ]).then(([a,b])=>{
    if(alive)setCandidates({key,ahead:a.length?a:first(ahead),behind:b.length?b:first(behind),verified:true});
   }).catch(()=>{});
   return()=>{alive=false;};
- // Re-evaluate the verified duty only when the chosen peer changes.
+ // Confirm new block successors at least every five minutes; GTFS is
+ // cached locally, and the old candidates stay visible while refreshing.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[key]);
+ },[key,dutyRefresh]);
  const routes=useMemo(()=>({
   ahead:candidates.key===key?candidates.ahead:[],
   behind:candidates.key===key?candidates.behind:[]
