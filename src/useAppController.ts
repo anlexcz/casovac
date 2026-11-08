@@ -318,10 +318,13 @@ export function useAppController(){
   const planned=scheduled?countdownSeconds(scheduled,now):null;
   return planned===null?null:planned+liveDelaySeconds;
  };
+ // Inspecting a manually selected timetable stop must never masquerade as
+ // real tram progress and trigger an unrelated automatic panel.
+ const autoTravelIndex=manual===null?displayedIndex:null;
  const autoTarget=autoPlan.ready?pickAutoPlatform({
-  stops:trip.stops,currentIndex:displayedIndex,entries:autoPlan.entries,
+  stops:trip.stops,currentIndex:autoTravelIndex,entries:autoPlan.entries,
   stopMap:autoPlan.stopMap,evidence,
-  remainingToCurrent:displayedIndex===null?null:remainingTo(displayedIndex),
+  remainingToCurrent:autoTravelIndex===null?null:remainingTo(autoTravelIndex),
   remainingToTarget:remainingTo,leadSeconds:neighbourSettings.autoOpenSeconds
  }):null;
  const autoNeighbourReady=autoTarget!==null;
