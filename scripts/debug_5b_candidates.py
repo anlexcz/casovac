@@ -36,10 +36,14 @@ def analyze(root, day, limit=1500):
         return signature_cache[key]
     stats=Counter()
     examples=[]
+    seen_platforms=Counter()
     for trip_id,rows in entries.items():
         for sequence,physical,kind,peers in rows:
-            if kind!="tram-branch-candidate":continue
-            for peer_id in peers:
+            if kind!="tram-branch-candidate" or seen_platforms[physical]>=3:
+                continue
+            seen_platforms[physical]+=1
+            stats["platforms-examined"]=len(seen_platforms)
+            for peer_id in peers[:2]:
                 stats["examined"]+=1
                 one=resolve(trip_id,sequence,physical)
                 two=resolve(peer_id,None,physical)
