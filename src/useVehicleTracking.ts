@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import type {Dispatch,MutableRefObject,SetStateAction} from 'react';
 import {golemioJson} from './golemioClient';
+import {OWN_VEHICLE_POLL_MS,OWN_VEHICLE_RETAIN_MS} from './pollingCadence.ts';
 import {filterCoreFeatures} from './coreDutySelection.ts';
 import type {TrackedService} from './trackedService.ts';
 import {selectTrip,stateOf} from './tripSelection';
@@ -15,8 +16,6 @@ import type {useRecorder} from './recorder';
 const API='https://api.golemio.cz/v2/vehiclepositions';
 // Own vehicle is the highest-priority stream. Missed refreshes retain the
 // last confirmed response; stale measurements must not be claimed as fresh.
-export const OWN_VEHICLE_POLL_MS=20000;
-export const OWN_VEHICLE_RETAIN_MS=3*OWN_VEHICLE_POLL_MS;
 export type HandoffFallback={target:string;vehicle:string;feature:Feature;until:number};
 type Props={
  active:[string,string]|null;
