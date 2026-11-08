@@ -82,3 +82,14 @@ test('same trip with a different scheduled stop is not allowed to reuse old LIVE
  assert.equal(state.entries[0].row.delay,null);
  assert.equal(state.entries[0].lastLiveAt,null);
 });
+
+test('validated incoming -> outgoing block handoff removes the previous arrival row even from retained cache',()=>{
+ let state=reconcileNeighbours(emptyStableNeighbours(),[row('incoming',68400,60)],1000,true,1000);
+ const outgoing={...row('outgoing',68400,null),transition:{
+  fromTripId:'incoming',fromLine:'5',fromOrder:'11',arrivalSeconds:68400,
+  fromVehicle:'9272',fromDelay:60,blockId:'B'
+ }};
+ state=reconcileNeighbours(state,[outgoing],61000,true,61000);
+ assert.deepEqual(state.entries.map(e=>e.row.tripId),['outgoing']);
+ assert.equal(state.entries[0].row.transition.fromTripId,'incoming');
+});
