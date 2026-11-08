@@ -296,11 +296,20 @@ def build(zf: zipfile.ZipFile, registry: object, root: Path,
     }
     # A release manifest pins each shard's bytes. Clients reject mixed-generation
     # assets instead of silently combining old and new timetable files.
-    manifest["checksums"] = {
+    checksums = {
         file.relative_to(root).as_posix(): hashlib.sha256(file.read_bytes()).hexdigest()
         for file in sorted(root.rglob("*.json"))
-        if file.name != "manifest.json"
+        if file.name not in ("manifest.json", "checksums.json")
     }
+    # manifest.json is checked frequently by browsers: keep it tiny.
+    # checksums.json is downloaded only when verifying an uncached shard,
+    # and its own bytes are pinned by the small manifest.
+    write_json(root / "checksums.json", checksums)
+    manifest["checksumsFile"] = "checksums.json"
+    manifest["checksumsSha256"] = hashlib.sha256(
+        (root / "checksums.json").read_bytes()
+    ).hexdigest()
+    manifest["checksumsCount"] = len(checksums)
     write_json(root / "manifest.json", manifest)
     return manifest
 
