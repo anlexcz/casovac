@@ -74,6 +74,7 @@ export async function findPlannedHeadways(args:{
   .sort((a,b)=>Math.abs(a.departureSeconds-ownSeconds)-
     Math.abs(b.departureSeconds-ownSeconds)).slice(0,32);
  let ahead:PlannedPeer|null=null,behind:PlannedPeer|null=null,considered=0;
+ let aheadTied=false,behindTied=false;
  const line=routes[own.routeId][0];
  const batches=Array.from({length:Math.ceil(candidates.length/6)},(_,i)=>
   candidates.slice(i*6,(i+1)*6));
@@ -100,11 +101,19 @@ export async function findPlannedHeadways(args:{
     scheduledGap:Math.abs(diff),departureSeconds:d.departureSeconds,
     referenceStopId};
    // Equal-gap ambiguous candidates must not be broken by arbitrary API order.
-   if(diff<0&&(!ahead||peer.scheduledGap<ahead.scheduledGap))ahead=peer;
-   if(diff>0&&(!behind||peer.scheduledGap<behind.scheduledGap))behind=peer;
+   if(diff<0){
+    if(!ahead||peer.scheduledGap<ahead.scheduledGap){ahead=peer;aheadTied=false;}
+    else if(peer.scheduledGap===ahead.scheduledGap)aheadTied=true;
+   }
+   if(diff>0){
+    if(!behind||peer.scheduledGap<behind.scheduledGap){behind=peer;behindTied=false;}
+    else if(peer.scheduledGap===behind.scheduledGap)behindTied=true;
+   }
   }
  }
- return {ahead,behind,considered,status:'ready',referenceStopId,
-  reason:considered?'Plánované sousedství ověřeno z PID GTFS.':
+ return {ahead:aheadTied?null:ahead,behind:behindTied?null:behind,
+  considered,status:'ready',referenceStopId,
+  reason:aheadTied||behindTied?'Shodné časy dvou sousedů: strana je nejednoznačná.':
+  considered?'Plánované sousedství ověřeno z PID GTFS.':
    'Na ověřeném směrovém úseku není blízký plánovaný spoj.'};
 }
