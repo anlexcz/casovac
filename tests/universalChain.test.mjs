@@ -91,10 +91,5 @@ test('a missing adjacent trip does not permit linking to the following trip',asy
 test('one GTFS block is not permission to link across different service days',async()=>{
  const {source}=createBlock(['7','13']);
  assert.deepEqual(await findStaticBlockLinks('trip-0','7','2026-11-09',source),
-  // Fake source supplies same rows; production PID Engine checks service day itself.
-  {previous:null,next:{
-   partner:{line:'13',order:'',tripId:'trip-1',vehicle:'',state:'before_track',start:null,lastStop:null,nextStop:null,rawTrip:null,source:'PID GTFS block_id'},
-   role:'first',blockId:'B',firstId:'trip-0',secondId:'trip-1',
-   reason:'Shodné block_id, sousední tripy a ověřená přechodová zastávka v PID GTFS.'
-  }});
+  {previous:null,next:null});
 });
