@@ -33,5 +33,5 @@ export async function staticNeighbourBoard(stopId:string,date:string,ownSeconds:
   stop:{id:d.stopId},
   scheduledSeconds:d.departureSeconds,stopSequence:d.stopSequence
  }));
- return {departures};
+ return {departures,physicalStopIds:confirmed};
 }
