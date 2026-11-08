@@ -1,4 +1,4 @@
-import {recordNetworkEvent} from './networkAudit';
+import {recordNetworkEvent} from './networkAudit.ts';
 
 /**
  * Browser-side Golemio coordinator. Interactive vehicle lists and the running
