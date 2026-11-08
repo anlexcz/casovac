@@ -4,7 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '17 3 * * *'
+    - cron: '47 5 * * *'
 permissions:
   contents: read
   pages: write
@@ -33,11 +33,13 @@ jobs:
         with:
           path: public/data
           key: casovac-gtfs-v1-${{ steps.gtfs-day.outputs.day }}
-          restore-keys: |
-            casovac-gtfs-v1-
       - name: Build PID GTFS lookup when today's cache is unavailable
         if: steps.gtfs-cache.outputs.cache-hit != 'true'
         run: python scripts/build_gtfs_lookup.py
+      - name: Test PID builder with synthetic GTFS
+        run: python -m unittest discover -s tests -p 'test_pid_builder.py' -v
+      - name: Build static PID data for Prague service days -1/0/+1
+        run: python scripts/build_pid_data.py
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
       - name: Run regression tests
@@ -50,6 +52,22 @@ jobs:
           test -d dist/assets
           test -s dist/data/stops.json
           test -s dist/data/tram-trip-first-stops.json
+          test -s dist/data/pid/v1/manifest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          base = Path('dist/data/pid/v1')
+          manifest = json.loads((base/'manifest.json').read_text())
+          today = datetime.now(ZoneInfo('Europe/Prague')).date().isoformat()
+          assert manifest['schema'] == 'casovac-pid-v1'
+          assert manifest['referenceDay'] == today, (manifest['referenceDay'], today)
+          assert manifest['days'][today]['trips'] > 100
+          assert (base/'days'/today/'trips.json').stat().st_size > 1000
+          assert (base/'stops/gtfs-map.json').stat().st_size > 1000
+          print('Validated PID manifest for', today)
+          PY
       - uses: actions/configure-pages@v5
         with:
           enablement: true
