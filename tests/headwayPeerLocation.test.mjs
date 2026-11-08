@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {plannedPeerLocation,livePeerLocation,serviceSeconds} from '../src/headwayPeerLocation.ts';
+import {plannedPeerLocation,livePeerLocation,plannedPeerStopName,livePeerStopName,serviceSeconds} from '../src/headwayPeerLocation.ts';
 import {estimatedPeerGap} from '../src/plannedLiveHeadways.ts';
 const day='2026-11-08';
 const now=Date.parse('2026-11-08T13:12:00Z'); // 14:12 Prague
@@ -62,4 +62,30 @@ test('without own trustworthy delay, use plain timetable; keep nonnegative gaps'
  const late=structuredClone(own);late.properties.last_position.delay.actual=500;
  assert.equal(estimatedPeerGap({planned:peer,side:'behind',selected:late,now}),0);
  assert.equal(estimatedPeerGap({planned:null,side:'ahead',selected:own,now}),null);
+});
+
+test('compact JŘ shows the exact stop during a planned dwell',()=>{
+ assert.equal(plannedPeerStopName(stops,day,Date.parse('2026-11-08T13:11:15Z')),'Geologická');
+});
+test('compact JŘ shows last departed stop between successive stop times',()=>{
+ assert.equal(plannedPeerStopName(stops,day,now),'Geologická');
+ assert.equal(plannedPeerStopName(stops,day,Date.parse('2026-11-08T13:10:00Z')),'Hlubočepy');
+});
+test('compact JŘ chooses first before departure, last after arrival, and handles 24:xx',()=>{
+ assert.equal(plannedPeerStopName(stops,day,Date.parse('2026-11-08T12:00:00Z')),'Hlubočepy');
+ assert.equal(plannedPeerStopName(stops,day,Date.parse('2026-11-08T13:20:00Z')),'K Barrandovu');
+ const night=[{...stops[0],arrival:'24:10:00',departure:'24:11:00'},
+  {...stops[1],arrival:'24:15:00',departure:'24:16:00'}];
+ assert.equal(plannedPeerStopName(night,day,Date.parse('2026-11-08T23:13:00Z')),'Hlubočepy');
+});
+test('compact JŘ never invents a stop when data or chronology are invalid',()=>{
+ assert.equal(plannedPeerStopName(null,day,now),null);
+ assert.equal(plannedPeerStopName(stops,'invalid',now),null);
+ assert.equal(plannedPeerStopName([{...stops[0],arrival:'oops'}],day,now),null);
+ assert.equal(plannedPeerStopName([stops[1],stops[0]],day,now),null);
+});
+test('compact LIVE returns last verified stop and does not replace it with next stop',()=>{
+ assert.equal(livePeerStopName(f('on_track',2,3),stops),'Geologická');
+ assert.equal(livePeerStopName(f('at_stop',2,3),stops),'Geologická');
+ assert.equal(livePeerStopName(f('on_track',40,3),stops),null);
 });
