@@ -9,10 +9,11 @@ import {chooserStop} from './chooserStops';
 import {useAppController,vehicleId} from './useAppController';
 import {OWN_VEHICLE_POLL_MS,OWN_VEHICLE_RETAIN_MS} from './pollingCadence.ts';
 import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopIdentity';
+import {onlyPreviouslySharedPeers} from './autoNeighbourNovelty.ts';
 import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit.ts';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,autoTargetIndex,autoPlatformMarkers,autoTransfer,pinnedStillActive,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,submitLookup,resetLookup,lookupConfirmed,plannedHeadways,plannedLiveHeadways,peerFeatures,peerTripIds,peerPositionLoading,planDate,now,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,autoTargetIndex,autoPlatformMarkers,autoPhysicalStopMap,autoTransfer,pinnedStillActive,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,submitLookup,resetLookup,lookupConfirmed,plannedHeadways,plannedLiveHeadways,peerFeatures,peerTripIds,peerPositionLoading,planDate,now,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
  const refreshAge=lastFetch===null?null:Math.max(0,now-lastFetch);
  const refreshPercent=refreshAge===null?4:Math.max(4,Math.min(100,refreshAge/OWN_VEHICLE_POLL_MS*100));
@@ -47,10 +48,20 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
  // Open only on precomputed, verified physical boarding edges. An empty
  // completed board is informative; no near-by departure is NOT a trigger
  // on an ordinary (unmarked) stop. LIVE losses never unpin an open sheet.
+ // The automatic mode should not repeat peers already encountered on the
+ // preceding boarding edge. Wait for a complete, stop-matched board so a
+ // transient partial refresh never opens a panel that should stay closed.
+ // Manual tapping bypasses this filter entirely.
+ const repeatedOnly=onlyPreviouslySharedPeers(
+  verifiedNeighbourData,
+  autoTargetIndex===null?undefined:trip.stops[autoTargetIndex-1]?.id,
+  autoPhysicalStopMap
+ );
  const pinnedActive=!!pinnedAutoNeighbour&&pinnedStillActive;
  const eligibleAuto=neighbourSettings.enabled&&neighbourSettings.mode!=='off'&&
   neighbourIndex===null&&autoNeighbourReady&&autoTargetIndex!==null&&
-  sheetIndex===autoTargetIndex&&sheetStop!==null&&dismissedStop!==sheetKey;
+  sheetIndex===autoTargetIndex&&sheetStop!==null&&dismissedStop!==sheetKey&&
+  stopNeighbours.complete&&!!verifiedNeighbourData&&!repeatedOnly;
  const autoOpen=neighbourIndex===null&&dismissedStop!==sheetKey&&
   (pinnedActive||eligibleAuto);
  const sheetOpen=neighbourSettings.enabled&&!diagnostics&&!settings&&
