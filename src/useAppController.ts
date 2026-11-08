@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState,useMemo} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {selectTrip,isBeforeTrip,stateOf,terminalTrip} from './tripSelection';
 import {useTripData,countdownSeconds} from './tripData';
 import {safeStaticServiceDate} from './staticTripAdapter.ts';
