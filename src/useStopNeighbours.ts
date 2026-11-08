@@ -11,6 +11,7 @@ import type {NeighbourSettings} from './stopNeighbours.ts';
 import {departureBoardUrl,parseNeighbourBoard} from './stopNeighbourBoard.ts';
 import {staticNeighbourBoard} from './staticNeighbourBoard.ts';
 import {pidStatic} from './pidStatic.ts';
+import {vehicleObservations} from './vehicleObservationStore.ts';
 import {findBoardContinuations} from './boardBlockContinuity.ts';
 import type {BoardContinuation} from './boardBlockContinuity.ts';
 import type {DepartureBoard} from './stopNeighbourBoard.ts';
@@ -462,6 +463,13 @@ export function useStopNeighbours(args:{
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[enabled,token,key,readyBoard,date,live.key,live.complete,live.features]);
 
+ // Same timestamped vehicle observations are shared with the planned
+ // headway panel. A later empty route response cannot erase per-trip history.
+ useEffect(()=>{
+  if(!enabled)return;
+  vehicleObservations.observeMany(date,knownFeatures);
+  if(live.key===key)vehicleObservations.observeMany(date,live.features);
+ },[enabled,date,knownFeatures,live,key]);
  const ownDelayRaw=path(ownFeature,'properties.last_position.delay.actual');
  const ownObserved=path(ownFeature,'properties.last_position.origin_timestamp');
  const ownStamp=typeof ownObserved==='string'?Date.parse(ownObserved):NaN;
@@ -475,7 +483,16 @@ export function useStopNeighbours(args:{
   return parseNeighbourBoard({
    board:readyBoard,stop:effectiveStop,ownTripId,ownStops:stops,ownIndex:index,ownDelay,
    settings,distance:currentIndex===null?0:Math.max(0,index-currentIndex),
-   features:live.key===key?[...knownFeatures,...live.features]:knownFeatures,
+   features:(()=>{
+    const snapshots=live.key===key?[...knownFeatures,...live.features]:knownFeatures;
+    const freshIds=new Set(snapshots.map(selectedTripId));
+    const remembered=(readyBoard.departures??[]).slice(0,160)
+     .map(item=>item.trip?.id??'').filter(Boolean)
+     .filter(id=>!freshIds.has(id))
+     .map(id=>vehicleObservations.retained(date,id,now))
+     .filter((item):item is Feature=>item!==null);
+    return [...snapshots,...remembered];
+   })(),
    candidateStops:detail.key===key?detail.stops:undefined,
    continuations:transition.key===transitionKey?transition.data:undefined,now
   });
