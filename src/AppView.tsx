@@ -12,8 +12,12 @@ import {neighbourStopIdentity,neighbourResultMatchesStop} from './neighbourStopI
 import {downloadNetworkAudit,clearNetworkAudit,getNetworkAuditScenario,setNetworkAuditScenario} from './networkAudit.ts';
 
 type Props=ReturnType<typeof useAppController>;
-export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,plannedHeadways,plannedLiveHeadways,peerFeatures,planDate,now,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
+export default function AppView({trackedService,coreTracking,neighbourSettings,updateNeighbourSettings,neighbourIndex,setNeighbourIndex,autoNeighbourIndex,autoNeighbourReady,pinnedAutoNeighbour,setPinnedAutoNeighbour,stopNeighbours,showHeadways,setShowHeadways,plannedHeadways,plannedLiveHeadways,peerFeatures,peerTripIds,peerPositionLoading,planDate,now,peerPositionStatus,visualLine,visualOrder,visualDestination,atChainBoundary,token,setToken,rememberToken,setRememberToken,tokenVisible,setTokenVisible,settings,setSettings,query,setQuery,active,diagnostics,setDiagnostics,selectedTrip,manual,setManual,expanded,setExpanded,editing,setEditing,features,lookup,lastFetch,queryMode,lastSeen,relatedVehicle,lastHandoff,terminalCandidates,loading,error,setError,gpsWanted,setGpsWanted,gps,gpsError,gpsAge,pos,toggleGPS,lookupLine,lookupOrder,queryKind,queryVehicle,results,lookupReady,searchingAcrossRoutes,stopNames,start,forget,chooseTrip,matches,chosen,trip,tripId,nextTrip,previousTrip,previousPartner,plannedHandoff,continuity,age,nextStopId,departureDetection,remote,onboard,compatible,position,terminalWaiting,terminalName,displayedIndex,highlightedStop,highlightedRemaining,statusColor,statusDescription,chainDiagnostic,departureEvidence,remoteProgress,recorder}:Props){
  const [dismissedStop,setDismissedStop]=useState('');
+ const refreshAge=lastFetch===null?null:Math.max(0,now-lastFetch);
+ const refreshPercent=refreshAge===null?4:Math.max(4,Math.min(100,refreshAge/60000*100));
+ const refreshState=error||refreshAge!==null&&refreshAge>100000?'error':
+  loading||peerPositionLoading?'loading':refreshAge!==null&&refreshAge>75000?'stale':'ok';
  const plannedReady=plannedHeadways.data.status==='ready';
  const front=plannedReady?plannedHeadways.data.ahead:null;
  const rear=plannedReady?plannedHeadways.data.behind:null;
@@ -84,6 +88,11 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
     <a className="headButton rawDebugLink" href={import.meta.env.BASE_URL+'rawdebug/'} title="Syrová online data Golemia" aria-label="Otevřít RAWDEBUG">RAW</a>
     <button className="headButton" onClick={()=>setSettings(true)} aria-label="Nastavení">⚙</button>
    </div>
+   {active&&<div className={'refreshTrack refreshTrack-'+refreshState}
+    title="Obnova živých dat" role="progressbar" aria-label="Průběh obnovy živých dat"
+    aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(refreshPercent)}>
+    <span className="refreshTrackFill" style={{width:refreshPercent+'%'}}/>
+   </div>}
   </header>
 
   {!active&&!editing&&<section className="panel searchPanel compactSearch"><button className="primary full" onClick={()=>setEditing(true)}>Vybrat sledovaný spoj</button></section>}
@@ -140,7 +149,7 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
        {showHeadways&&<HeadwayDetails planned={plannedHeadways.data}
         loading={plannedHeadways.loading} live={plannedLiveHeadways}
         features={peerFeatures} selected={chosen??null}
-        date={planDate} now={now} tripId={tripId}/>}
+        date={planDate} now={now} tripId={tripId} peerTripIds={peerTripIds}/>}
 
       </div>
       <button className={'vehicleStatus '+statusColor} type="button" onClick={()=>setDiagnostics(true)}
