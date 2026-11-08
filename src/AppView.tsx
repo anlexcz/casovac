@@ -175,6 +175,7 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
    colourOrder={neighbourSettings.colourOrder} tolerance={neighbourSettings.orderToleranceSeconds}
    hysteresis={neighbourSettings.orderHysteresisSeconds}
    loading={stopNeighbours.loading||autoOpen&&!verifiedNeighbourData} error={stopNeighbours.error}
+   liveIncomplete={stopNeighbours.liveIncomplete}
    ownLine={visualLine} ownOrder={visualOrder}
    ownVehicle={chosen?vehicleId(chosen):lastSeen?.vehicle??''}
    remainingSeconds={manualSheet?manualIdle.remaining:null}
