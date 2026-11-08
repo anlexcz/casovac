@@ -54,7 +54,7 @@ export default function AppView({trackedService,coreTracking,neighbourSettings,u
  // Manual tapping bypasses this filter entirely.
  const repeatedOnly=onlyPreviouslySharedPeers(
   verifiedNeighbourData,
-  autoTargetIndex===null?undefined:trip.stops[autoTargetIndex-1]?.id,
+  autoTargetIndex===null?undefined:trip.stops[autoTargetIndex-1],
   autoPhysicalStopMap
  );
  const pinnedActive=!!pinnedAutoNeighbour&&pinnedStillActive;
